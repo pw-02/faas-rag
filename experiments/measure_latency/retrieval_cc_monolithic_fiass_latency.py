@@ -9,8 +9,8 @@ import json
 import sqlite3
 from typing import List, Optional, Dict
 
-from memory_monitor import MemoryMonitor, bytes_to_gb
-from cpu_monitor import CPUMonitor
+from experiments.memory_monitor import MemoryMonitor, bytes_to_gb
+from experiments.cpu_monitor import CPUMonitor
 
 
 def parse_arguments():
