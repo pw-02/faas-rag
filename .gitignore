@@ -1,4 +1,10 @@
-data/
+*.index*
+*.csv*
+*.db*
+*.jsonl*
+*.faiss*
+*.gz*
+*.npy*
 results/
 figures/
 *pycache*/
