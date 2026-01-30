@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import List, Dict, Optional, Union, Any
 import json
 import time
@@ -10,10 +11,11 @@ from contextlib import contextmanager
 import torch
 import faiss
 
-from embedders import load_embedder
-from generators import load_generator, GenerationConfig
-from docstores import load_docstore, BaseDocStore, Doc
-
+from core.embedders import load_embedder
+from core.generators import load_generator, GenerationConfig
+from core.docstores import load_docstore, BaseDocStore, Doc
+from typing import Iterable
+from tqdm import tqdm  # pip install tqdm
 
 # -----------------------------
 # Data models
@@ -23,7 +25,6 @@ class RetrievedDoc:
     doc_id: str
     text: str
     score: float
-
 
 # -----------------------------
 # Tiny timing helper
@@ -40,7 +41,7 @@ def timer(timings: Dict[str, float], key: str):
 # -----------------------------
 # RAG Pipeline
 # -----------------------------
-class RagPipeline:
+class RagPipelineSingleNode:
     """
     Minimal RAG:
       1) embed query
@@ -63,16 +64,22 @@ class RagPipeline:
         docstore_path: str = "",
         docstore_type: str = "jsonl",
         docstore: Optional[BaseDocStore] = None,
-        top_k: int = 5,
-        max_context_docs: int = 5,
+        top_k: int = 5, #number of docs to retrieve per query
+        max_context_docs: int = None,  #number of docs to include in prompt
         max_new_tokens: int = 256,
         embedder_max_length: int = 512,
         do_sample: bool = False,
         sleep_seconds: float = 0.0,  # for synthetic generator only
+        n_probe: Optional[int] = None,  # for IVF indexes
+        show_progress: bool = True,
+        batch_size: int = 16
     ):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.top_k = top_k
-        self.max_context_docs = max_context_docs
+        self.max_context_docs = max_context_docs if max_context_docs is not None else top_k
+        self.show_progress = show_progress
+        self.batch_size = max(1, int(batch_size))
+
 
         # --- Embedder (for vectors) ---
         self.embedder = load_embedder(
@@ -96,6 +103,9 @@ class RagPipeline:
         if not vector_index_path:
             raise ValueError("vector_index_path is required")
         self.index = faiss.read_index(vector_index_path)
+
+        if n_probe is not None and hasattr(self.index, "nprobe"):
+            self.index.nprobe = n_probe
 
         # --- Docstore ---
         if docstore is not None:
@@ -123,33 +133,7 @@ class RagPipeline:
                 f"Embedding dim ({d_model}) != FAISS index dim ({d_index}). "
                 f"Your index was built with a different embedder (or different settings)."
             )
-
-    # def search(self, query: str, top_k: Optional[int] = None) -> List[RetrievedDoc]:
-    #     """
-    #     Retrieval only: embed query -> FAISS -> docstore fetch.
-    #     """
-    #     k = top_k or self.top_k
-
-    #     # IMPORTANT:
-    #     # - For BGE: embed_queries will apply "query:" prefix internally.
-    #     # - For generic encoders: it just embeds the raw query.
-    #     q_vec = self.embedder.embed_queries([query])  # (1, D) float32 on CPU
-
-    #     distances, indices = self.index.search(q_vec, k)
-
-    #     docs: List[RetrievedDoc] = []
-    #     for rank, idx in enumerate(indices[0].tolist()):
-    #         doc = self.docstore.get(idx)  # Doc(id, text, meta)
-    #         docs.append(
-    #             RetrievedDoc(
-    #                 doc_id=str(doc.id),
-    #                 text=str(doc.text),
-    #                 score=float(distances[0][rank]),
-    #             )
-    #         )
-
-    #     return docs[: self.max_context_docs]
-
+        
     # -----------------------------
     # Prompting + Generation
     # -----------------------------
@@ -171,179 +155,79 @@ class RagPipeline:
         raw = self.generator.generate(prompt)
         return raw.split("Answer:", 1)[1].strip() if "Answer:" in raw else raw.strip()
 
-    # -----------------------------
-    # Profiling + CSV export
-    # -----------------------------
-    def _save_results_csv(self, results: List[Dict[str, Any]], path: str) -> None:
-        """
-        Save flattened results + stage timings to CSV.
-        Lists (doc ids/scores) are stored as JSON strings.
-        """
-        rows: List[Dict[str, Any]] = []
-        for r in results:
-            t = r.get("timings", {})
-            rows.append(
-                {
-                    # "query": r.get("query", ""),
-                    # "answer": r.get("answer", ""),
-                    "n_retrieved": r.get("n_retrieved", 0),
-                    "embed_s": t.get("embed_s", 0.0),
-                    "faiss_s": t.get("faiss_s", 0.0),
-                    "docstore_s": t.get("docstore_s", 0.0),
-                    "prompt_s": t.get("prompt_s", 0.0),
-                    "generate_s": t.get("generate_s", 0.0),
-                    "total_s": t.get("total_s", 0.0),
-                    "top_doc_ids": json.dumps(r.get("top_doc_ids", [])),
-                    "top_scores": json.dumps(r.get("top_scores", [])),
-                }
-            )
-
-        fieldnames = list(rows[0].keys()) if rows else [
-            # "query",
-            # "answer",
-            
-            "num_retrieved_docs",
-            "query_embed_time_s",
-            "index_search_time_s",
-            "docstore_fetch_time_s",
-            "prompt_build_time_s",
-            "generation_time_s",
-            "end_to_end_time_s",
-
-            "retrieved_doc_ids",
-            "retrieved_doc_scores",
-        ]
-
-
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=fieldnames)
-            w.writeheader()
-            w.writerows(rows)
-
-    # -----------------------------
-    # Public API
-    # -----------------------------
-    def run(
-        self,
-        queries: Union[str, List[str]],
-        *,
-        csv_path: Optional[str] = None,
-        return_prompt: bool = False,
-        return_contexts: bool = True,
-        top_k: Optional[int] = None,
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
-        """
-        Run RAG for one query or a batch, with per-stage profiling.
-
-        Args:
-            queries: str or list[str]
-            csv_path: if provided, saves results to CSV
-            return_prompt: include final prompt in each result (debug)
-            return_contexts: include retrieved docs in each result
-            top_k: override retrieval top_k for this run
-
-        Returns:
-            dict for single query, list[dict] for batch
-        """
+    
+    def run(self,queries: Union[str, List[str]],*,
+            return_prompt: bool = False,      # kept for compatibility (unused)
+            return_contexts: bool = True,     # kept for compatibility (unused)
+            ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        
         single = isinstance(queries, str)
         queries_list = [queries] if single else list(queries)
+        limit = len(queries_list)
+        if limit == 0:
+            return {} if single else []
 
-        results: List[Dict[str, Any]] = []
+        k = self.top_k
+        starts = range(0, limit, self.batch_size)
+        if self.show_progress:
+            starts = tqdm(starts,total=math.ceil(limit / self.batch_size),desc="RAG batches",)
 
-        for q in queries_list:
-            timings: Dict[str, float] = {}
+        batch_results: List[Dict[str, Any]] = []
+        for start in starts:
+            batch = queries_list[start : start + self.batch_size]
+            if not batch:
+                continue
 
-            # ---- Retrieval staged timing ----
-            with timer(timings, "embed_s"):
-                q_vec = self.embedder.embed_queries([q])  # (1, D)
+            timings_batch: Dict[str, float] = {}
 
-            with timer(timings, "faiss_s"):
-                k = top_k or self.top_k
-                distances, indices = self.index.search(q_vec, k)
+            # ---- Embed (batch) ----
+            t0 = time.perf_counter()
+            q_vecs = self.embedder.embed_queries(batch)
+            timings_batch["embed_s"] = time.perf_counter() - t0
 
-            with timer(timings, "docstore_s"):
-                retrieved_docs: List[RetrievedDoc] = []
-                for rank, idx in enumerate(indices[0].tolist()):
-                    doc = self.docstore.get(idx)
-                    retrieved_docs.append(
-                        RetrievedDoc(
-                            doc_id=str(doc.id),
-                            text=str(doc.text),
-                            score=float(distances[0][rank]),
-                        )
-                    )
-                retrieved_docs = retrieved_docs[: self.max_context_docs]
+            # ---- FAISS (batch) ----
+            t0 = time.perf_counter()
+            distances, indices = self.index.search(q_vecs, k)
+            timings_batch["faiss_s"] = time.perf_counter() - t0
 
-            # ---- Prompt + generation ----
-            with timer(timings, "prompt_s"):
-                prompt = self.build_prompt(q, retrieved_docs)
+            # ---- Docstore + prompt + generate (summed per batch) ----
+            docstore_s = 0.0
+            prompt_s = 0.0
+            generate_s = 0.0
 
-            with timer(timings, "generate_s"):
-                answer = self.generate(prompt)
+            keep = min(self.max_context_docs, k)
+            
+            for i, q in enumerate(batch):
+                # docstore
+                t0 = time.perf_counter()
+                for idx in indices[i][:keep]:
+                    _ = self.docstore.get(int(idx))
+                docstore_s += time.perf_counter() - t0
 
-            timings["total_s"] = sum(
-                timings.get(k, 0.0)
-                for k in ("embed_s", "faiss_s", "docstore_s", "prompt_s", "generate_s")
+                # prompt
+                t0 = time.perf_counter()
+                _ = self.build_prompt(q, [])
+                prompt_s += time.perf_counter() - t0
+
+                # generate
+                t0 = time.perf_counter()
+                _ = self.generate("")
+                generate_s += time.perf_counter() - t0
+
+            timings_batch["docstore_s"] = docstore_s
+            timings_batch["prompt_s"] = prompt_s
+            timings_batch["generate_s"] = generate_s
+            timings_batch["total_s"] = sum(
+                timings_batch[x]
+                for x in ("embed_s", "faiss_s", "docstore_s", "prompt_s", "generate_s")
             )
 
-            item: Dict[str, Any] = {
-                "query": q,
-                "answer": answer,
-                "n_retrieved": len(retrieved_docs),
-                "timings": timings,
-                "top_doc_ids": [d.doc_id for d in retrieved_docs],
-                "top_scores": [d.score for d in retrieved_docs],
-            }
+            batch_results.append({
+                "batch_start": start,
+                "batch_size": len(batch),
+                "top_k": k,
+                "max_context_docs": self.max_context_docs,
+                "timings": timings_batch,
+            })
 
-            if return_contexts:
-                item["contexts"] = [
-                    {"doc_id": d.doc_id, "score": d.score, "text": d.text}
-                    for d in retrieved_docs
-                ]
-
-            if return_prompt:
-                item["prompt"] = prompt
-
-            results.append(item)
-
-        if csv_path:
-            self._save_results_csv(results, csv_path)
-
-        return results[0] if single else results
-
-    
-
-if __name__ == "__main__":
-    #example usage
-  if __name__ == "__main__":
-    # -----------------------------
-    # Example usage: synthetic generator
-    # -----------------------------
-    pipeline = RagPipeline(
-        generator_name="synthetic",                 # uses SyntheticAnswerGenerator
-        embedder_name="BAAI/bge-base-en-v1.5",
-        vector_index_path="data/indexes/synthetic/flat_ip_d768_n100000_norm1.index",
-        docstore_path="data/indexes/sphere/cc_docs_100k.jsonl",
-        docstore_type="jsonl",
-        top_k=5,
-        max_context_docs=3,
-        max_new_tokens=128,
-        sleep_seconds=0.1,                           # simulate LLM latency
-    )
-    queries = [
-        "What is retrieval-augmented generation?",
-        "What is FAISS used for?",
-    ]
-
-    results = pipeline.run(
-        queries,
-        csv_path="rag_profile_single_node.csv",                  # saves timings + outputs
-        return_prompt=False,
-        return_contexts=True,
-    )
-    # Pretty-print one result
-    for r in results:
-        print("=" * 80)
-        print("QUERY:", r["query"])
-        print("ANSWER:", r["answer"])
-        print("TIMINGS:", r["timings"])
+        return batch_results[0] if single else batch_results
