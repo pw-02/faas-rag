@@ -93,7 +93,7 @@ def write_docs_sqlite_by_row(dataset, out_path: str, text_field: str):
 def main():
     parser = argparse.ArgumentParser(description="Build FAISS index + row-aligned doc artifacts from HF dataset")
     parser.add_argument("--index-size", type=str, default="100k", help="100k, 100m, 899m")
-    parser.add_argument("--output-dir", type=str, default="data/indices/monolithic_indices")
+    parser.add_argument("--output-dir", type=str, default="data/indexes/sphere")
     parser.add_argument("--dim", type=int, default=768)
 
     # IMPORTANT: this builder loads vectors into RAM; streaming not supported in this script.
