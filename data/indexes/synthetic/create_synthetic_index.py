@@ -51,6 +51,7 @@ class IndexConfig:
     d: int
     n: int
     normalize: bool
+    filename_token: Optional[str] = None
 
     # HNSW params (optional)
     hnsw_m: Optional[int] = None
@@ -127,7 +128,7 @@ def build_index(vectors: np.ndarray, cfg: IndexConfig):
 
 
 def index_filename(cfg: IndexConfig) -> str:
-    base = f"{cfg.index_type}_{cfg.metric}_d{cfg.d}_n{cfg.n}_norm{int(cfg.normalize)}"
+    base = f"{cfg.index_type}_{cfg.metric}_d{cfg.d}_n{cfg.filename_token or cfg.n}_norm{int(cfg.normalize)}"
     if cfg.index_type == "hnsw":
         base += f"_m{cfg.hnsw_m}_efc{cfg.ef_construction}_efs{cfg.ef_search}"
     if cfg.index_type == "ivf":
@@ -182,6 +183,16 @@ def append_manifest_row(csv_path: str, row: Dict[str, Any]) -> None:
             writer.writeheader()
         writer.writerow({k: row.get(k, None) for k in MANIFEST_FIELDS})
 
+def number_to_filename_token(n: int) -> str:
+    if n % 1_000_000_000 == 0:
+        return f"{n // 1_000_000_000}B"
+    if n % 1_000_000 == 0:
+        return f"{n // 1_000_000}M"
+    if n % 1_000 == 0:
+        return f"{n // 1_000}K"
+    return str(n)
+
+
 
 # -------------------------
 # Main driver
@@ -222,12 +233,17 @@ def build_indexes_and_manifest(
 
         configs: List[IndexConfig] = []
         if build_flat:
-            configs.append(IndexConfig(index_type="flat", metric=metric, d=d, n=n, normalize=normalize))
+            configs.append(IndexConfig(index_type="flat", 
+                                       metric=metric, 
+                                       d=d, n=n, 
+                                       normalize=normalize,
+                                       filename_token=number_to_filename_token(n)))
 
         if build_hnsw:
             configs.append(IndexConfig(
                 index_type="hnsw", metric=metric, d=d, n=n, normalize=normalize,
-                hnsw_m=hnsw_m, ef_construction=ef_construction, ef_search=ef_search
+                hnsw_m=hnsw_m, ef_construction=ef_construction, ef_search=ef_search,
+                filename_token=number_to_filename_token(n)
             ))
 
         if build_ivf:
@@ -235,7 +251,8 @@ def build_indexes_and_manifest(
             train_sz = ivf_train_size if ivf_train_size is not None else min(n, max(10_000, nlist * 50))
             configs.append(IndexConfig(
                 index_type="ivf", metric=metric, d=d, n=n, normalize=normalize,
-                ivf_nlist=nlist, ivf_nprobe=ivf_nprobe, ivf_train_size=train_sz
+                ivf_nlist=nlist, ivf_nprobe=ivf_nprobe, ivf_train_size=train_sz,
+                filename_token=number_to_filename_token(n)
             ))
 
         for cfg in configs:
@@ -299,6 +316,9 @@ if __name__ == "__main__":
         100_000,
         500_000,
         1_000_000,
+        2_000_000,
+        5_000_000,
+        10_000_000,
     ]
 
     BUILD_FLAT = True
