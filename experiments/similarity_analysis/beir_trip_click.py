@@ -27,7 +27,7 @@ from sentence_transformers import SentenceTransformer
 
 
 CONFIG = {
-    "irds_name": "tripclick/test",        # <-- use this (no /test)
+    "irds_name": "tripclick",        # <-- use this (no /test)
     "max_queries": None,           # e.g., 50_000 for speed
 
     "embed_model": "sentence-transformers/all-MiniLM-L6-v2",

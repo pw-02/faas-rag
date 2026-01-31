@@ -2,7 +2,7 @@ import csv
 from pathlib import Path
 from typing import Any, Optional
 import pandas as pd
-from core.rag_pipeline_single_node import RagPipelineSingleNode as RagPipeline
+from core.run_rag_single_node import RagPipelineSingleNode as RagPipeline
 
 
 def save_batch_results_csv(results: list[dict[str, Any]], path: str) -> None:

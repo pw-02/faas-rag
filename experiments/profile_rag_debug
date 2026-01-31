@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+from experiments.profile_rag import main
+
+def debug_args():
+    """
+    Debug-only arguments for profiling.
+    This file should NEVER be used for real experiments.
+    """
+    return SimpleNamespace(
+        # choose pipeline
+        pipeline="single",  # "single" or "proximity"
+        
+        # inputs
+        queries_file="data/triviaqa/triviaqa_train_qa.csv",
+        queries_column="question",
+        docstore_path="data/indexes/sphere/cc_docs_100k.jsonl",
+        docstore_type="jsonl",
+        index=["data/indexes/synthetic/flat_ip_d768_n100000_norm1.index"],
+        out_dir="results/debug",
+
+        # runtime limits (KEEP SMALL)
+        batch_size=4,
+        max_batches=1,
+
+        # retrieval / generation
+        top_k=5,
+        max_context_docs=3,
+        max_new_tokens=128,
+        generator="synthetic",
+        embedder="synthetic",
+
+        # perf / faiss
+        sleep_seconds=0.01,
+        n_probe=None,
+        show_progress=False,
+
+        # proximity cache (ignored if pipeline="single")
+        cache_policy="lsh_fifo",
+        cache_size=100,
+        lsh_cache_num_hash=64,
+        lsh_cache_expected_dim=0,  # 0 = infer from index.d
+        lsh_cache_bucket_capacity=10,
+        seed=42,
+    )
+
+
+if __name__ == "__main__":
+    # Call main() with debug args instead of argparse
+    main(debug_args())

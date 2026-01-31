@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from core.rag_pipeline_single_node import RagPipelineSingleNode
+from core.rag_pipeline_proximity import RagPipelineProximity
+from core.rag_profile_utils import (
+    load_queries_from_file,
+    save_batch_results_csv,
+    create_summary_from_csvs,
+)
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Profile RAG pipeline over one or more FAISS indexes.")
+
+    # inputs
+    p.add_argument("--queries-file", required=True, help="CSV file containing questions.")
+    p.add_argument("--queries-column", default="question", help="Column name in queries CSV.")
+    p.add_argument("--docstore-path", required=True, help="Path to docstore (jsonl, etc.).")
+    p.add_argument("--docstore-type", default="jsonl")
+    p.add_argument("--index", action="append", required=True,
+                   help="FAISS index path. Repeat --index for multiple.")
+    p.add_argument("--out-dir", default="results/rag_profile")
+
+    # choose pipeline
+    p.add_argument("--pipeline", choices=["single", "proximity"], default="single",
+                   help="Which pipeline implementation to profile.")
+
+    # workload sizing
+    p.add_argument("--batch-size", type=int, default=32)
+    p.add_argument("--max-batches", type=int, default=10)
+
+    # retrieval/generation config
+    p.add_argument("--top-k", type=int, default=5)
+    p.add_argument("--max-context-docs", type=int, default=3)
+    p.add_argument("--max-new-tokens", type=int, default=128)
+
+    p.add_argument("--generator", default="synthetic")
+    p.add_argument("--embedder", default="synthetic")
+
+    # perf / faiss
+    p.add_argument("--sleep-seconds", type=float, default=0.05)
+    p.add_argument("--n-probe", type=int, default=None,
+                   help="FAISS IVF nprobe. If omitted, script will set 256 when index path contains 'ivf'.")
+    p.add_argument("--show-progress", action="store_true", default=False)
+
+    # proximity cache knobs (only used if --pipeline proximity)
+    p.add_argument("--cache-policy", default=None, help="None|fifo|lru|lsh_fifo|lsh_lru")
+    p.add_argument("--cache-size", type=int, default=100)
+    p.add_argument("--lsh-cache-num-hash", type=int, default=128)
+    p.add_argument("--lsh-cache-expected-dim", type=int, default=0,
+                   help="0 means infer from FAISS index dimension.")
+    p.add_argument("--lsh-cache-bucket-capacity", type=int, default=10)
+    p.add_argument("--seed", type=int, default=42)
+
+    return p.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    queries = load_queries_from_file(
+        args.queries_file,
+        column=args.queries_column,
+        batch_size=args.batch_size,
+        max_batches=args.max_batches,
+    )
+
+    PipelineCls = RagPipelineSingleNode if args.pipeline == "single" else RagPipelineProximity
+
+    csv_results: list[str] = []
+
+    for index_path in args.index:
+        index_p = Path(index_path)
+        index_id = index_p.stem
+        csv_path = str(out_dir / f"{args.pipeline}__{index_id}.csv")
+
+        # auto nprobe only for IVF (optional)
+        n_probe = args.n_probe
+        if n_probe is None and "ivf" in index_path.lower():
+            n_probe = 256
+
+        print(f"\n--- Running {args.pipeline} pipeline with index: {index_path} ---")
+
+        pipeline_kwargs = dict(
+            generator_name=args.generator,
+            embedder_name=args.embedder,
+            vector_index_path=index_path,
+            docstore_path=args.docstore_path,
+            docstore_type=args.docstore_type,
+            top_k=args.top_k,
+            max_context_docs=args.max_context_docs,
+            max_new_tokens=args.max_new_tokens,
+            sleep_seconds=args.sleep_seconds,
+            n_probe=n_probe,
+            batch_size=args.batch_size,
+            show_progress=args.show_progress,
+        )
+
+        if args.pipeline == "proximity":
+            pipeline_kwargs.update(
+                cache_policy=args.cache_policy,
+                cache_size=args.cache_size,
+                lsh_cache_num_hash=args.lsh_cache_num_hash,
+                lsh_cache_expected_dim=args.lsh_cache_expected_dim,
+                lsh_cache_bucket_capacity=args.lsh_cache_bucket_capacity,
+                seed=args.seed,
+            )
+
+        pipeline = PipelineCls(**pipeline_kwargs)
+
+        batch_results = pipeline.run(queries, return_prompt=False, return_contexts=False)
+
+        # run() returns dict for a single query; ensure list
+        if isinstance(batch_results, dict):
+            batch_results = [batch_results]
+
+        save_batch_results_csv(batch_results, csv_path)
+        csv_results.append(csv_path)
+
+    summary_df = create_summary_from_csvs(csv_results, str(out_dir / f"summary__{args.pipeline}.csv"))
+    print("\n=== Summary ===")
+    print(summary_df.to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()
