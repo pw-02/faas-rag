@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 # from core.rag_pipeline_single_node import RagPipelineSingleNode
@@ -119,6 +120,9 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # exp_date_time_now = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # print(f"Experiment date: {date.today().isoformat()}, time: {exp_date_time_now}")
+
     queries = load_questions_from_jsonl(
         args.queries_file,
         column=args.queries_column,
@@ -127,13 +131,26 @@ def main() -> None:
     )
     num_runs = 2
 
+    if args.cache == "proximity":
+        cache = ProximityCache(
+            cache_policy=args.cache_policy,
+            tolerance=args.tolerance,
+            cache_size=args.cache_size,
+            lsh_num_hash=args.lsh_cache_num_hash,
+            lsh_bucket_capacity=args.lsh_cache_bucket_capacity,
+            seed=args.seed,
+        )
+    else:
+        cache = None
+
+
     for _ in range(num_runs):
         csv_results: list[str] = []
-
+        run_date_time_now = datetime.now().strftime("%Y%m%d_%H%M%S")
         for index_path in args.index:
             index_p = Path(index_path)
             index_id = index_p.stem
-            csv_path = str(out_dir / f"{args.cache}__{index_id}.csv")
+            csv_path = str(out_dir / f"{args.cache}__{index_id}_{run_date_time_now}.csv")
 
             # auto nprobe only for IVF (optional)
             n_probe = args.n_probe
@@ -142,18 +159,7 @@ def main() -> None:
 
             print(f"\n--- Running {args.cache} pipeline with index: {index_path} ---")
 
-            if args.cache == "proximity":
-                cache = ProximityCache(
-                    cache_policy=args.cache_policy,
-                    tolerance=args.tolerance,
-                    cache_size=args.cache_size,
-                    lsh_num_hash=args.lsh_cache_num_hash,
-                    lsh_bucket_capacity=args.lsh_cache_bucket_capacity,
-                    seed=args.seed,
-                )
-            else:
-                cache = None
-
+      
             pipeline = RagPipelineBase(
                 generator_name=args.generator,
                 embedder_name=args.embedder,
@@ -188,7 +194,7 @@ def main() -> None:
             save_batch_results_csv(batch_results, cache_stats, csv_path)
             csv_results.append(csv_path)
 
-        summary_df = create_summary_from_csvs(csv_results, str(out_dir / f"summary__{args.cache}.csv"))
+        summary_df = create_summary_from_csvs(csv_results, str(out_dir / f"summary__{args.cache}_{run_date_time_now}.csv"))
         # print("\n=== Summary ===")
         # print(summary_df.to_string(index=False))
 
