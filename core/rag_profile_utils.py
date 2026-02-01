@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import csv
 import os
+import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Any, Optional, Dict
+from typing import Any, Optional
 
 import pandas as pd
 import torch
@@ -32,6 +33,41 @@ except Exception:
 
 
 # -----------------------------
+# NVML lifecycle (refcounted)
+# -----------------------------
+_NVML_REFCOUNT = 0
+
+
+def _nvml_init() -> bool:
+    """Initialize NVML once per process (refcounted)."""
+    global _NVML_REFCOUNT
+    if not _NVML_OK:
+        return False
+    try:
+        if _NVML_REFCOUNT == 0:
+            pynvml.nvmlInit()
+        _NVML_REFCOUNT += 1
+        return True
+    except Exception:
+        return False
+
+
+def _nvml_shutdown() -> None:
+    """Shutdown NVML when last user releases it (refcounted)."""
+    global _NVML_REFCOUNT
+    if not _NVML_OK:
+        return
+    try:
+        if _NVML_REFCOUNT > 0:
+            _NVML_REFCOUNT -= 1
+            if _NVML_REFCOUNT == 0:
+                pynvml.nvmlShutdown()
+    except Exception:
+        # If shutdown fails, don't crash; leave refcount as-is.
+        pass
+
+
+# -----------------------------
 # Resource stats
 # -----------------------------
 @dataclass
@@ -40,14 +76,12 @@ class ResourceSnapshot:
     rss_gb: Optional[float] = None
     peak_rss_gb: Optional[float] = None
     cpu_percent: Optional[float] = None
-    # num_threads: Optional[int] = None
 
-    #system cpu
-
+    # system CPU
     system_cpu_percent: Optional[float] = None
     system_num_cpus: Optional[int] = None
 
-    # ✅ system RAM
+    # system RAM
     system_mem_total_gb: Optional[float] = None
     system_mem_available_gb: Optional[float] = None
     system_mem_used_gb: Optional[float] = None
@@ -68,48 +102,67 @@ class ResourceMonitor:
     """
     Per-run resource monitor.
     - Tracks a best-effort peak RSS by taking the max of observed RSS samples.
-    - Optionally uses Unix `resource` for a truer ru_maxrss.
-    - Optionally uses NVML for GPU utilization and total VRAM (all processes).
+    - Uses Unix `resource` (ru_maxrss) when available for a truer peak.
+    - Uses NVML for GPU utilization and total VRAM if available.
     """
-    def __init__(self, device: str, gpu_index: int = 0):
-        self.device = str(device)
+
+    def __init__(self, device: str | torch.device, gpu_index: int = 0):
+        self.device = str(device).strip().lower()
+        self.gpu_index = int(gpu_index)
         self.peak_rss_gb_seen: float = 0.0
 
         self._nvml_inited = False
         self._nvml_handle = None
 
-        # (Optional) prime psutil cpu_percent so next calls are more meaningful
+        # Prime psutil cpu_percent so first snapshot isn't always 0.0
         if psutil is not None:
             try:
-                psutil.Process(os.getpid()).cpu_percent(interval=None)
-
+                p = psutil.Process(os.getpid())
+                p.cpu_percent(interval=None)
+                psutil.cpu_percent(interval=None)
             except Exception:
                 pass
 
+        # Initialize NVML once (refcounted) if CUDA requested
         if self.device.startswith("cuda") and _NVML_OK:
-            try:
-                pynvml.nvmlInit()
-                self._nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(int(gpu_index))
-                self._nvml_inited = True
-            except Exception:
-                self._nvml_inited = False
-                self._nvml_handle = None
+            if _nvml_init():
+                try:
+                    self._nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(self.gpu_index)
+                    self._nvml_inited = True
+                except Exception:
+                    self._nvml_handle = None
+                    self._nvml_inited = False
+                    _nvml_shutdown()
 
     def close(self) -> None:
-        if self._nvml_inited and _NVML_OK:
-            try:
-                pynvml.nvmlShutdown()
-            except Exception:
-                pass
-        self._nvml_inited = False
-        self._nvml_handle = None
+        if self._nvml_inited:
+            self._nvml_inited = False
+            self._nvml_handle = None
+            _nvml_shutdown()
 
     def reset_torch_gpu_peak(self) -> None:
-        """Reset torch CUDA peak counters so 'gpu_peak_allocated_gb' becomes per-batch peak."""
+        """Reset torch CUDA peak counters so gpu_peak_allocated_gb is per-interval peak."""
         if self.device.startswith("cuda") and torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats()
+            try:
+                torch.cuda.reset_peak_memory_stats()
+            except Exception:
+                pass
 
-    def snapshot(self) -> Dict[str, Any]:
+    @staticmethod
+    def _ru_maxrss_to_gb(ru_maxrss: float) -> float:
+        """
+        Convert ru_maxrss to GB.
+        Common behavior:
+        - Linux: kilobytes
+        - macOS: bytes
+        """
+        if sys.platform == "darwin":
+            # bytes -> GB
+            return float(ru_maxrss) / (1024**3)
+        # Assume kilobytes -> GB
+        return (float(ru_maxrss) * 1024.0) / (1024**3)
+
+    def snapshot(self) -> dict[str, Any]:
         snap = ResourceSnapshot()
 
         # ----- CPU / RAM (process + system) -----
@@ -119,33 +172,32 @@ class ResourceMonitor:
 
                 rss_gb = p.memory_info().rss / (1024**3)
                 snap.rss_gb = rss_gb
-                # snap.num_threads = p.num_threads()
-                snap.cpu_percent = p.cpu_percent(interval=0.0)
+
+                # NOTE: cpu_percent is since last call; primed in __init__
+                snap.cpu_percent = p.cpu_percent(interval=None)
 
                 # portable peak by tracking max observed
                 self.peak_rss_gb_seen = max(self.peak_rss_gb_seen, rss_gb)
                 snap.peak_rss_gb = self.peak_rss_gb_seen
 
-                # ✅ system-wide memory
+                # system-wide memory
                 vm = psutil.virtual_memory()
                 snap.system_mem_total_gb = vm.total / (1024**3)
                 snap.system_mem_available_gb = vm.available / (1024**3)
                 snap.system_mem_used_gb = vm.used / (1024**3)
                 snap.system_mem_percent = float(vm.percent)
 
-                snap.system_cpu_percent = psutil.cpu_percent(interval=0.0)
+                snap.system_cpu_percent = psutil.cpu_percent(interval=None)
                 snap.system_num_cpus = psutil.cpu_count(logical=True)
 
             except Exception:
                 pass
 
-        # more "true" peak RSS on Unix: ru_maxrss (units differ by OS)
+        # More "true" peak RSS on Unix: ru_maxrss
         if _RESOURCE_OK:
             try:
                 ru = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-                # Linux: KB, macOS: bytes (heuristic)
-                peak_mb = ru / (1024 * 1024) if ru > 10_000_000 else ru / 1024.0
-                peak_gb = peak_mb / 1024.0
+                peak_gb = self._ru_maxrss_to_gb(ru)
                 snap.peak_rss_gb = max(snap.peak_rss_gb or 0.0, peak_gb)
             except Exception:
                 pass
@@ -212,20 +264,23 @@ def save_batch_results_csv(results: list[dict[str, Any]], path: str) -> None:
             "rss_gb": float(resources.get("rss_gb") or 0.0),
             "peak_rss_gb": float(resources.get("peak_rss_gb") or 0.0),
             "cpu_percent": float(resources.get("cpu_percent") or 0.0),
-            # "num_threads": int(resources.get("num_threads") or 0),
 
-            # ✅ system RAM
+            # system RAM
             "system_mem_total_gb": float(resources.get("system_mem_total_gb") or 0.0),
             "system_mem_available_gb": float(resources.get("system_mem_available_gb") or 0.0),
             "system_mem_used_gb": float(resources.get("system_mem_used_gb") or 0.0),
             "system_mem_percent": float(resources.get("system_mem_percent") or 0.0),
+
+            # system CPU
             "system_cpu_percent": float(resources.get("system_cpu_percent") or 0.0),
             "system_num_cpus": int(resources.get("system_num_cpus") or 0),
 
+            # GPU
             "gpu_allocated_gb": float(resources.get("gpu_allocated_gb") or 0.0),
             "gpu_reserved_gb": float(resources.get("gpu_reserved_gb") or 0.0),
             "gpu_peak_allocated_gb": float(resources.get("gpu_peak_allocated_gb") or 0.0),
 
+            # NVML
             "gpu_util_percent": float(resources.get("gpu_util_percent") or 0.0),
             "gpu_mem_used_gb": float(resources.get("gpu_mem_used_gb") or 0.0),
             "gpu_mem_total_gb": float(resources.get("gpu_mem_total_gb") or 0.0),
@@ -234,8 +289,11 @@ def save_batch_results_csv(results: list[dict[str, Any]], path: str) -> None:
     if not rows:
         return
 
+    # Future-proof: union of keys across rows so we don't silently drop later keys
+    fieldnames: list[str] = sorted({k for row in rows for k in row.keys()})
+
     with path_obj.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -250,18 +308,31 @@ def create_summary_from_csvs(csv_paths: list[str], summary_csv_output_path: str)
         if df.empty:
             continue
 
-        total_queries = int(df["batch_size"].sum())
-        total_time = float(df["total_time_s"].sum())
+        # Batch size stats (don't assume constant)
+        if "batch_size" in df.columns and not df["batch_size"].empty:
+            bs = df["batch_size"].astype(int)
+            batch_size_mode = int(bs.mode().iloc[0]) if not bs.mode().empty else int(bs.iloc[0])
+            min_batch_size = int(bs.min())
+            max_batch_size = int(bs.max())
+        else:
+            batch_size_mode = 0
+            min_batch_size = 0
+            max_batch_size = 0
+
+        total_queries = int(df["batch_size"].sum()) if "batch_size" in df.columns else 0
+        total_time = float(df["total_time_s"].sum()) if "total_time_s" in df.columns else 0.0
         overall_qps = (total_queries / total_time) if total_time > 0 else 0.0
 
         summary_rows.append({
             "index": p.stem,
-            "batch_size": int(df["batch_size"].iloc[0]),
+            "batch_size_mode": batch_size_mode,
+            "min_batch_size": min_batch_size,
+            "max_batch_size": max_batch_size,
             "num_batches": int(len(df)),
             "total_queries": total_queries,
 
-            "avg_total_time_s": float(df["total_time_s"].mean()),
-            "p95_total_time_s": float(df["total_time_s"].quantile(0.95)),
+            "avg_total_time_s": float(df["total_time_s"].mean()) if "total_time_s" in df.columns else 0.0,
+            "p95_total_time_s": float(df["total_time_s"].quantile(0.95)) if "total_time_s" in df.columns else 0.0,
             "overall_qps": overall_qps,
 
             # resource aggregates (if present)
@@ -296,6 +367,7 @@ def load_questions_from_jsonl(
         raise KeyError(f"Column {column!r} not found in {path}")
 
     questions = df[column].dropna().astype(str).str.strip()
+    questions = questions[questions != ""]  # drop empties after strip
 
     if max_batches is not None:
         max_queries = max_batches * batch_size
