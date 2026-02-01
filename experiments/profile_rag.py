@@ -3,8 +3,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from types import SimpleNamespace
-from core.rag_pipeline_single_node import RagPipelineSingleNode
-from core.rag_pipeline_proximity import RagPipelineProximity
+# from core.rag_pipeline_single_node import RagPipelineSingleNode
+from core.rag_pipeline import RagPipelineBase
+from core.proximity_cache import ProximityCache
 from core.rag_profile_utils import (
     load_questions_from_jsonl,
     save_batch_results_csv,
@@ -20,7 +21,7 @@ def debug_args():
     """
     return SimpleNamespace(
         # choose pipeline
-        pipeline="single",  # "single" or "proximity"
+        cache = "proximity",  # "none" or "proximity"
 
         # inputs
         queries_file="data/datasets/qa/triviaqa/triviaqa_dev.jsonl",
@@ -31,7 +32,7 @@ def debug_args():
 
         # runtime limits (KEEP SMALL)
         batch_size=1,
-        max_batches=20,
+        max_batches=1000,
         show_progress=True,
 
         # retrieval / generation
@@ -50,8 +51,9 @@ def debug_args():
         n_probe=None,
 
         # proximity cache (ignored if pipeline="single")
-        cache_policy="lsh_fifo",
-        cache_size=100,
+        cache_policy="fifo",
+        tolerance=0.2,
+        cache_size=1000,
         lsh_cache_num_hash=64,
         lsh_cache_expected_dim=0,  # 0 = infer from index.d
         lsh_cache_bucket_capacity=10,
@@ -71,7 +73,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out-dir", default="results/rag_profile")
 
     # choose pipeline
-    p.add_argument("--pipeline", choices=["single", "proximity"], default="single",
+    p.add_argument("--cache", choices=["None", "proximity"], default="None",
                    help="Which pipeline implementation to profile.")
 
     # workload sizing
@@ -98,6 +100,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--cache-policy", default=None, help="None|fifo|lru|lsh_fifo|lsh_lru")
     p.add_argument("--cache-size", type=int, default=100)
     p.add_argument("--lsh-cache-num-hash", type=int, default=128)
+    p.add_argument("--tolerance", type=float, default=0.7)
     p.add_argument("--lsh-cache-expected-dim", type=int, default=0,
                    help="0 means infer from FAISS index dimension.")
     p.add_argument("--lsh-cache-bucket-capacity", type=int, default=10)
@@ -122,64 +125,72 @@ def main() -> None:
         batch_size=args.batch_size,
         max_batches=args.max_batches,
     )
+    num_runs = 2
 
-    PipelineCls = RagPipelineSingleNode if args.pipeline == "single" else RagPipelineProximity
+    for _ in range(num_runs):
+        csv_results: list[str] = []
 
-    csv_results: list[str] = []
+        for index_path in args.index:
+            index_p = Path(index_path)
+            index_id = index_p.stem
+            csv_path = str(out_dir / f"{args.cache}__{index_id}.csv")
 
-    for index_path in args.index:
-        index_p = Path(index_path)
-        index_id = index_p.stem
-        csv_path = str(out_dir / f"{args.pipeline}__{index_id}.csv")
+            # auto nprobe only for IVF (optional)
+            n_probe = args.n_probe
+            if n_probe is None and "ivf" in index_path.lower():
+                n_probe = 256
 
-        # auto nprobe only for IVF (optional)
-        n_probe = args.n_probe
-        if n_probe is None and "ivf" in index_path.lower():
-            n_probe = 256
+            print(f"\n--- Running {args.cache} pipeline with index: {index_path} ---")
 
-        print(f"\n--- Running {args.pipeline} pipeline with index: {index_path} ---")
+            if args.cache == "proximity":
+                cache = ProximityCache(
+                    cache_policy=args.cache_policy,
+                    tolerance=args.tolerance,
+                    cache_size=args.cache_size,
+                    lsh_num_hash=args.lsh_cache_num_hash,
+                    lsh_bucket_capacity=args.lsh_cache_bucket_capacity,
+                    seed=args.seed,
+                )
+            else:
+                cache = None
 
-        pipeline_kwargs = dict(
-            generator_name=args.generator,
-            embedder_name=args.embedder,
-            vector_index_path=index_path,
-            docstore_path=args.docstore_path,
-            top_k=args.top_k,
-            max_context_docs=args.max_context_docs,
-            max_new_tokens=args.max_new_tokens,
-            simulated_generation_delay_s=args.sim_generation_delay_s,
-            n_probe=n_probe,
-            batch_size=args.batch_size,
-            show_progress=args.show_progress,
-            num_faiss_threads=args.num_faiss_threads,
-            embedder_max_length=args.embedder_max_length,
-            do_sample=args.do_sample,
-        )
-
-        if args.pipeline == "proximity":
-            pipeline_kwargs.update(
-                cache_policy=args.cache_policy,
-                cache_size=args.cache_size,
-                lsh_cache_num_hash=args.lsh_cache_num_hash,
-                lsh_cache_expected_dim=args.lsh_cache_expected_dim,
-                lsh_cache_bucket_capacity=args.lsh_cache_bucket_capacity,
-                seed=args.seed,
+            pipeline = RagPipelineBase(
+                generator_name=args.generator,
+                embedder_name=args.embedder,
+                vector_index_path=index_path,
+                docstore_path=args.docstore_path,
+                device=None,
+                top_k=args.top_k,
+                show_progress=args.show_progress,
+                n_probe=n_probe,
+                num_faiss_threads=args.num_faiss_threads,
+                batch_size=args.batch_size,
+                max_context_docs=args.max_context_docs,
+                max_new_tokens=args.max_new_tokens,
+                embedder_max_length=args.embedder_max_length,
+                do_sample=args.do_sample,
+                simulated_generation_delay_s=args.sim_generation_delay_s,
+                cache=cache,
             )
 
-        pipeline = PipelineCls(**pipeline_kwargs)
+            batch_results = pipeline.run(queries, return_prompt=False, return_contexts=False)
 
-        batch_results = pipeline.run(queries, return_prompt=False, return_contexts=False)
+            # run() returns dict for a single query; ensure list
+            if isinstance(batch_results, dict):
+                batch_results = [batch_results]
 
-        # run() returns dict for a single query; ensure list
-        if isinstance(batch_results, dict):
-            batch_results = [batch_results]
+            if cache is not None:
+                print(f"Cache stats: hits={cache.cache_hit_count}, misses={cache.cache_miss_count}")
+                cache_stats = cache.get_stats()
+            else:
+                cache_stats = None
 
-        save_batch_results_csv(batch_results, csv_path)
-        csv_results.append(csv_path)
+            save_batch_results_csv(batch_results, cache_stats, csv_path)
+            csv_results.append(csv_path)
 
-    summary_df = create_summary_from_csvs(csv_results, str(out_dir / f"summary__{args.pipeline}.csv"))
-    # print("\n=== Summary ===")
-    # print(summary_df.to_string(index=False))
+        summary_df = create_summary_from_csvs(csv_results, str(out_dir / f"summary__{args.cache}.csv"))
+        # print("\n=== Summary ===")
+        # print(summary_df.to_string(index=False))
 
 
 if __name__ == "__main__":

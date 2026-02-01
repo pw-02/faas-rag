@@ -5,6 +5,7 @@ from typing import List, Dict, Optional, Union, Any
 import math
 import time
 from contextlib import contextmanager
+import numpy as np
 
 import torch
 import faiss
@@ -14,7 +15,7 @@ from core.embedders import load_embedder
 from core.generators import load_generator, GenerationConfig
 from core.docstores import load_docstore
 from core.rag_profile_utils import ResourceMonitor  # or core.resource_stats if you split it
-
+from core.proximity_cache import ProximityCache
 
 @dataclass
 class RetrievedDoc:
@@ -58,6 +59,7 @@ class RagPipelineBase:
         embedder_max_length: int,
         do_sample: bool,
         simulated_generation_delay_s: float = 0.0,
+        cache : Optional[ProximityCache] = None
       
     ):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -66,6 +68,7 @@ class RagPipelineBase:
         self.show_progress = bool(show_progress)
         self.batch_size = max(1, int(batch_size))
         self.num_faiss_threads = num_faiss_threads
+        self.cache = cache
 
         # --- Embedder ---
         self.embedder = load_embedder(
@@ -84,6 +87,7 @@ class RagPipelineBase:
             ),
             simulated_generation_delay_s=simulated_generation_delay_s,
         )
+        
 
         # --- FAISS index ---
         if not vector_index_path:
@@ -96,8 +100,10 @@ class RagPipelineBase:
         
         if n_probe is not None and hasattr(self.index, "nprobe"):
             self.index.nprobe = n_probe
-    
 
+        if isinstance(self.cache, ProximityCache):
+            self.cache.dim = self.index.d  # set dim for proximity cache
+    
         # --- Docstore ---
         self.docstore = load_docstore(docstore_path=docstore_path)
 
@@ -127,14 +133,7 @@ class RagPipelineBase:
     def generate(self, prompt: str) -> str:
         raw = self.generator.generate(prompt)
         return raw.split("Answer:", 1)[1].strip() if "Answer:" in raw else raw.strip()
-
-    # ---- hooks: subclasses can override these to add caching etc. ----
-    def post_embed_hook(self, q_vecs, batch: List[str]) -> None:
-        return None
-
-    def pre_faiss_hook(self, q_vecs, batch: List[str]):
-        return q_vecs
-
+    
     def run(
         self,
         queries: Union[str, List[str]],
@@ -180,12 +179,20 @@ class RagPipelineBase:
                 q_vecs = self.embedder.embed_queries(batch)
                 timings_batch["embed_s"] = time.perf_counter() - t0
 
-                self.post_embed_hook(q_vecs, batch)
-                q_vecs = self.pre_faiss_hook(q_vecs, batch)
-
-                # ---- faiss ----
+                # ---- cache + faiss ----
                 t0 = time.perf_counter()
-                distances, indices = self.index.search(q_vecs, k)
+
+                if self.cache is not None:
+                    # optional per-batch cache stats
+                    distances, indices = self.cache.cached_search(
+                        q_vecs,
+                        k=k,
+                        backend_index=self.index,  # FAISS backend
+                    )
+
+                else:
+                    distances, indices = self.index.search(q_vecs, k)
+
                 timings_batch["search_s"] = time.perf_counter() - t0
 
                 # ---- docstore/prompt/generate ----
@@ -193,7 +200,7 @@ class RagPipelineBase:
                 prompt_s = 0.0
                 generate_s = 0.0
                 keep = min(self.max_context_docs, k)
-
+                
                 for i, q in enumerate(batch):
                     t0 = time.perf_counter()
                     for idx in indices[i][:keep]:

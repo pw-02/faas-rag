@@ -228,7 +228,7 @@ class ResourceMonitor:
 # -----------------------------
 # CSV outputs
 # -----------------------------
-def save_batch_results_csv(results: list[dict[str, Any]], path: str) -> None:
+def save_batch_results_csv(results: list[dict[str, Any]], cache_stats: dict[str, Any] | None, path: str) -> None:
     """Save batch-level results (one row per batch)."""
     path_obj = Path(path)
     path_obj.parent.mkdir(parents=True, exist_ok=True)
@@ -284,6 +284,9 @@ def save_batch_results_csv(results: list[dict[str, Any]], path: str) -> None:
             "gpu_util_percent": float(resources.get("gpu_util_percent") or 0.0),
             "gpu_mem_used_gb": float(resources.get("gpu_mem_used_gb") or 0.0),
             "gpu_mem_total_gb": float(resources.get("gpu_mem_total_gb") or 0.0),
+
+            # cache stats (if any)
+            **(cache_stats or {}),
         })
 
     if not rows:
