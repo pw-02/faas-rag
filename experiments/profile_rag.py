@@ -2,24 +2,69 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-
+from types import SimpleNamespace
 from core.rag_pipeline_single_node import RagPipelineSingleNode
 from core.rag_pipeline_proximity import RagPipelineProximity
 from core.rag_profile_utils import (
-    load_queries_from_file,
+    load_questions_from_jsonl,
     save_batch_results_csv,
     create_summary_from_csvs,
 )
+
+DEBUG_MODE = True
+
+def debug_args():
+    """
+    Debug-only arguments for profiling.
+    This file should NEVER be used for real experiments.
+    """
+    return SimpleNamespace(
+        # choose pipeline
+        pipeline="single",  # "single" or "proximity"
+
+        # inputs
+        queries_file="data/datasets/qa/triviaqa/triviaqa_dev.jsonl",
+        queries_column="question",
+        docstore_path="data/indexes/sphere/cc_docs_100k.jsonl",
+        index=["data/indexes/synthetic/flat_ip_d768_n100000_norm1.index"],
+        out_dir="results/debug",
+
+        # runtime limits (KEEP SMALL)
+        batch_size=1,
+        max_batches=20,
+        show_progress=True,
+
+        # retrieval / generation
+        top_k=5,
+        max_context_docs=3,
+        max_new_tokens=128,
+        
+        generator="simulated", #Options: simulated, tiny-gpt2, gpt2
+        sim_generation_delay_s=0.01,
+        embedder="BAAI/bge-base-en-v1.5", #Optionns: synthetic, BAAI/bge-base-en-v1.5
+
+        # perf / faiss
+        n_probe=None,
+
+        # proximity cache (ignored if pipeline="single")
+        cache_policy="lsh_fifo",
+        cache_size=100,
+        lsh_cache_num_hash=64,
+        lsh_cache_expected_dim=0,  # 0 = infer from index.d
+        lsh_cache_bucket_capacity=10,
+        seed=42,
+    )
+
+
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Profile RAG pipeline over one or more FAISS indexes.")
 
     # inputs
-    p.add_argument("--queries-file", required=True, help="CSV file containing questions.")
-    p.add_argument("--queries-column", default="question", help="Column name in queries CSV.")
+    p.add_argument("--queries-file", required=True, help="JSONL file containing questions.")
+    p.add_argument("--queries-column", default="question", help="Column name in queries JSONL.")
     p.add_argument("--docstore-path", required=True, help="Path to docstore (jsonl, etc.).")
-    p.add_argument("--docstore-type", default="jsonl")
     p.add_argument("--index", action="append", required=True,
                    help="FAISS index path. Repeat --index for multiple.")
     p.add_argument("--out-dir", default="results/rag_profile")
@@ -41,7 +86,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--embedder", default="synthetic")
 
     # perf / faiss
-    p.add_argument("--sleep-seconds", type=float, default=0.05)
+    p.add_argument("--sim-generation-delay-s", type=float, default=0.05)
     p.add_argument("--n-probe", type=int, default=None,
                    help="FAISS IVF nprobe. If omitted, script will set 256 when index path contains 'ivf'.")
     p.add_argument("--show-progress", action="store_true", default=False)
@@ -59,17 +104,22 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    args = parse_args()
+
+    if DEBUG_MODE:
+        args = debug_args()
+    else:
+        args = parse_args()
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    queries = load_queries_from_file(
+    queries = load_questions_from_jsonl(
         args.queries_file,
         column=args.queries_column,
         batch_size=args.batch_size,
         max_batches=args.max_batches,
     )
+
 
     PipelineCls = RagPipelineSingleNode if args.pipeline == "single" else RagPipelineProximity
 
@@ -92,11 +142,10 @@ def main() -> None:
             embedder_name=args.embedder,
             vector_index_path=index_path,
             docstore_path=args.docstore_path,
-            docstore_type=args.docstore_type,
             top_k=args.top_k,
             max_context_docs=args.max_context_docs,
             max_new_tokens=args.max_new_tokens,
-            sleep_seconds=args.sleep_seconds,
+            simulated_generation_delay_s=args.sim_generation_delay_s,
             n_probe=n_probe,
             batch_size=args.batch_size,
             show_progress=args.show_progress,
@@ -124,8 +173,8 @@ def main() -> None:
         csv_results.append(csv_path)
 
     summary_df = create_summary_from_csvs(csv_results, str(out_dir / f"summary__{args.pipeline}.csv"))
-    print("\n=== Summary ===")
-    print(summary_df.to_string(index=False))
+    # print("\n=== Summary ===")
+    # print(summary_df.to_string(index=False))
 
 
 if __name__ == "__main__":

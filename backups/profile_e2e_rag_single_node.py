@@ -2,7 +2,8 @@ import csv
 from pathlib import Path
 from typing import Any, Optional
 import pandas as pd
-from core.run_rag_single_node import RagPipelineSingleNode as RagPipeline
+from core.rag_pipeline_single_node import RagPipelineSingleNode
+from core.rag_pipeline_proximity import RagPipelineProximity
 
 
 def save_batch_results_csv(results: list[dict[str, Any]], path: str) -> None:
@@ -96,6 +97,9 @@ def create_summary_from_csvs(csv_paths: list[str], summary_csv_output_path: str)
     out = Path(summary_csv_output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     summary_df.to_csv(out, index=False)
+
+
+
 
 
 def load_queries_from_file(

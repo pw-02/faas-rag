@@ -13,6 +13,7 @@ from tqdm import tqdm
 from core.embedders import load_embedder
 from core.generators import load_generator, GenerationConfig
 from core.docstores import load_docstore, BaseDocStore
+from core.rag_profile_utils import ResourceMonitor  # or core.resource_stats if you split it
 
 
 @dataclass
@@ -43,18 +44,16 @@ class RagPipelineBase:
         self,
         *,
         generator_name: str,
-        embedder_name: str = "BAAI/bge-base-en-v1.5",
-        device: Optional[str] = None,
+        embedder_name: str,
         vector_index_path: str,
-        docstore_path: str = "",
-        docstore_type: str = "jsonl",
-        docstore: Optional[BaseDocStore] = None,
+        docstore_path: str,
+        device: Optional[str] = None,
         top_k: int = 5,
         max_context_docs: Optional[int] = None,
         max_new_tokens: int = 256,
         embedder_max_length: int = 512,
         do_sample: bool = False,
-        sleep_seconds: float = 0.0,
+        simulated_generation_delay_s: float = 0.0,
         n_probe: Optional[int] = None,
         show_progress: bool = True,
         batch_size: int = 16,
@@ -80,7 +79,7 @@ class RagPipelineBase:
                 max_new_tokens=max_new_tokens,
                 do_sample=do_sample,
             ),
-            sleep_seconds_for_synthetic=sleep_seconds,
+            simulated_generation_delay_s=simulated_generation_delay_s,
         )
 
         # --- FAISS index ---
@@ -91,12 +90,7 @@ class RagPipelineBase:
             self.index.nprobe = n_probe
 
         # --- Docstore ---
-        if docstore is not None:
-            self.docstore = docstore
-        else:
-            if not docstore_path:
-                raise ValueError("docstore_path is required when docstore is not provided")
-            self.docstore = load_docstore(docstore_path=docstore_path, docstore_type=docstore_type)
+        self.docstore = load_docstore(docstore_path=docstore_path)
 
         self._check_faiss_dim()
 
@@ -138,7 +132,9 @@ class RagPipelineBase:
         *,
         return_prompt: bool = False,
         return_contexts: bool = True,
+        report_resources: bool = True,   # ✅ optional switch
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+
         single = isinstance(queries, str)
         queries_list = [queries] if single else list(queries)
         limit = len(queries_list)
@@ -152,61 +148,86 @@ class RagPipelineBase:
 
         batch_results: List[Dict[str, Any]] = []
 
-        for start in starts:
-            batch = queries_list[start : start + self.batch_size]
-            if not batch:
-                continue
+        # ✅ Create monitor once per run
+        monitor = ResourceMonitor(self.device) if report_resources else None
 
-            timings_batch: Dict[str, float] = {}
+        try:
+            for start in starts:
+                batch = queries_list[start : start + self.batch_size]
+                if not batch:
+                    continue
 
-            # embed
-            t0 = time.perf_counter()
-            q_vecs = self.embedder.embed_queries(batch)
-            timings_batch["embed_s"] = time.perf_counter() - t0
+                # ✅ reset GPU peak so gpu_peak_allocated_mb becomes “per-batch peak”
+                if monitor is not None:
+                    monitor.reset_torch_gpu_peak()
 
-            self.post_embed_hook(q_vecs, batch)
-            q_vecs = self.pre_faiss_hook(q_vecs, batch)
+                timings_batch: Dict[str, float] = {}
 
-            # faiss
-            t0 = time.perf_counter()
-            distances, indices = self.index.search(q_vecs, k)
-            timings_batch["faiss_s"] = time.perf_counter() - t0
+                # ✅ optional “before” snapshot
+                resources_before = monitor.snapshot() if monitor is not None else None
 
-            # docstore + prompt + generate timings (as you had)
-            docstore_s = 0.0
-            prompt_s = 0.0
-            generate_s = 0.0
-            keep = min(self.max_context_docs, k)
-
-            for i, q in enumerate(batch):
+                # ---- embed ----
                 t0 = time.perf_counter()
-                for idx in indices[i][:keep]:
-                    _ = self.docstore.get(int(idx))
-                docstore_s += time.perf_counter() - t0
+                q_vecs = self.embedder.embed_queries(batch)
+                timings_batch["embed_s"] = time.perf_counter() - t0
 
+                self.post_embed_hook(q_vecs, batch)
+                q_vecs = self.pre_faiss_hook(q_vecs, batch)
+
+                # ---- faiss ----
                 t0 = time.perf_counter()
-                _ = self.build_prompt(q, [])
-                prompt_s += time.perf_counter() - t0
+                distances, indices = self.index.search(q_vecs, k)
+                timings_batch["search_s"] = time.perf_counter() - t0
 
-                t0 = time.perf_counter()
-                _ = self.generate("")
-                generate_s += time.perf_counter() - t0
+                # ---- docstore/prompt/generate ----
+                docstore_s = 0.0
+                prompt_s = 0.0
+                generate_s = 0.0
+                keep = min(self.max_context_docs, k)
 
-            timings_batch["docstore_s"] = docstore_s
-            timings_batch["prompt_s"] = prompt_s
-            timings_batch["generate_s"] = generate_s
-            timings_batch["total_s"] = sum(
-                timings_batch[x] for x in ("embed_s", "faiss_s", "docstore_s", "prompt_s", "generate_s")
-            )
+                for i, q in enumerate(batch):
+                    t0 = time.perf_counter()
+                    for idx in indices[i][:keep]:
+                        _ = self.docstore.get(int(idx))
+                    docstore_s += time.perf_counter() - t0
 
-            batch_results.append(
-                {
+                    t0 = time.perf_counter()
+                    prompt = self.build_prompt(q, [])
+                    prompt_s += time.perf_counter() - t0
+
+                    t0 = time.perf_counter()
+                    _ = self.generate(prompt=prompt)
+                    generate_s += time.perf_counter() - t0
+
+                timings_batch["docstore_s"] = docstore_s
+                timings_batch["prompt_s"] = prompt_s
+                timings_batch["generate_s"] = generate_s
+                timings_batch["total_s"] = sum(
+                    timings_batch[x]
+                    for x in ("embed_s", "search_s", "docstore_s", "prompt_s", "generate_s")
+                )
+
+                # ✅ optional “after” snapshot (this includes per-batch torch peak + NVML util at end)
+                resources_after = monitor.snapshot() if monitor is not None else None
+
+                out: Dict[str, Any] = {
                     "batch_start": start,
                     "batch_size": len(batch),
                     "top_k": k,
                     "max_context_docs": self.max_context_docs,
                     "timings": timings_batch,
                 }
-            )
+
+                # Attach resource stats so CSV writer can include them
+                if resources_before is not None:
+                    out["resources_before"] = resources_before
+                if resources_after is not None:
+                    out["resources_after"] = resources_after
+
+                batch_results.append(out)
+
+        finally:
+            if monitor is not None:
+                monitor.close()
 
         return batch_results[0] if single else batch_results

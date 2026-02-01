@@ -100,7 +100,7 @@ class EchoGenerator(BaseGenerator):
         return prompt
 
 
-class SyntheticAnswerGenerator(BaseGenerator):
+class SimulatedAnswerGenerator(BaseGenerator):
     """
     Deterministic fake generator.
     Purpose:
@@ -109,21 +109,20 @@ class SyntheticAnswerGenerator(BaseGenerator):
       - Verify retrieval + prompt wiring
     This version simulates a fixed generation delay.
     """
-    def __init__(self, sleep_seconds: float = 0.2):
+    def __init__(self, simulated_generation_delay_s: float = 0.2):
         # Total fake latency (seconds)
-        self.sleep_seconds = sleep_seconds
+        self.simulated_generation_delay_s = simulated_generation_delay_s
 
     def generate(self, prompt: str) -> str:
         # Simulate model latency (blocking)
-        time.sleep(self.sleep_seconds)
-
+        time.sleep(self.simulated_generation_delay_s)
         # Extract retrieved context from the prompt
         match = re.search(r"Context:\n(.+?)\n\nAnswer:", prompt, re.S)
         context = match.group(1).strip() if match else "(no context)"
         return (
             "SYNTHETIC ANSWER\n"
             "----------------\n"
-            f"(simulated latency: {self.sleep_seconds:.2f}s)\n\n"
+            f"(simulated latency: {self.simulated_generation_delay_s:.2f}s)\n\n"
             f"Retrieved context:\n{context}"
         )
     
@@ -134,7 +133,7 @@ def load_generator(
     generator_name: str,
     device: str,
     gen_config: Optional[GenerationConfig] = None,
-    sleep_seconds_for_synthetic: float = 0,
+    simulated_generation_delay_s: float = 0,
 ) -> BaseGenerator:
     cfg = gen_config or GenerationConfig()
     name = generator_name.lower()
@@ -143,10 +142,28 @@ def load_generator(
     if name == "echo":
         return EchoGenerator()
 
-    if name in {"synthetic", "simulated"}:
-        return SyntheticAnswerGenerator(
-            sleep_seconds=sleep_seconds_for_synthetic
+    if name in {"simulated"}:
+        return SimulatedAnswerGenerator(
+            simulated_generation_delay_s=simulated_generation_delay_s
         )
 
     # Default: causal LM
     return HFCausalGenerator(generator_name, device=device, gen_config=cfg)
+
+def supported_generators() -> list[str]:
+    return [
+        "echo",
+        "simulated",
+        "gpt2",
+        "gpt-neo",
+        "gpt-j",
+        "llama-7b",
+        "mistral-7b",
+        "meta-llama-2-7b",
+        "meta-llama-2-13b",
+        "google-flan-t5-base",
+        "google-flan-t5-large",
+        "google-flan-t5-xl",
+        "google-flan-t5-xxl",
+        # Add more model names as needed
+    ]

@@ -62,8 +62,7 @@ class JSONLInMemoryDocStore(BaseDocStore):
         return self.docs[idx]
 
 
-def load_docstore(docstore_path: str, docstore_type: str = "jsonl") -> BaseDocStore:
-    t = docstore_type.lower()
-    if t == "jsonl":
-        return JSONLInMemoryDocStore(docstore_path)
-    raise ValueError(f"Unknown docstore_type: {docstore_type}")
+def load_docstore(docstore_path: str) -> BaseDocStore:
+    if "jsonl" in docstore_path.lower():
+            return JSONLInMemoryDocStore(docstore_path)
+    raise ValueError(f"Unknown docstore_type: {docstore_path}")
