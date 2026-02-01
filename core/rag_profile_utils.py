@@ -40,7 +40,12 @@ class ResourceSnapshot:
     rss_gb: Optional[float] = None
     peak_rss_gb: Optional[float] = None
     cpu_percent: Optional[float] = None
-    num_threads: Optional[int] = None
+    # num_threads: Optional[int] = None
+
+    #system cpu
+
+    system_cpu_percent: Optional[float] = None
+    system_num_cpus: Optional[int] = None
 
     # ✅ system RAM
     system_mem_total_gb: Optional[float] = None
@@ -114,7 +119,7 @@ class ResourceMonitor:
 
                 rss_gb = p.memory_info().rss / (1024**3)
                 snap.rss_gb = rss_gb
-                snap.num_threads = p.num_threads()
+                # snap.num_threads = p.num_threads()
                 snap.cpu_percent = p.cpu_percent(interval=0.0)
 
                 # portable peak by tracking max observed
@@ -127,6 +132,9 @@ class ResourceMonitor:
                 snap.system_mem_available_gb = vm.available / (1024**3)
                 snap.system_mem_used_gb = vm.used / (1024**3)
                 snap.system_mem_percent = float(vm.percent)
+
+                snap.system_cpu_percent = psutil.cpu_percent(interval=0.0)
+                snap.system_num_cpus = psutil.cpu_count(logical=True)
 
             except Exception:
                 pass
@@ -204,13 +212,15 @@ def save_batch_results_csv(results: list[dict[str, Any]], path: str) -> None:
             "rss_gb": float(resources.get("rss_gb") or 0.0),
             "peak_rss_gb": float(resources.get("peak_rss_gb") or 0.0),
             "cpu_percent": float(resources.get("cpu_percent") or 0.0),
-            "num_threads": int(resources.get("num_threads") or 0),
+            # "num_threads": int(resources.get("num_threads") or 0),
 
             # ✅ system RAM
             "system_mem_total_gb": float(resources.get("system_mem_total_gb") or 0.0),
             "system_mem_available_gb": float(resources.get("system_mem_available_gb") or 0.0),
             "system_mem_used_gb": float(resources.get("system_mem_used_gb") or 0.0),
             "system_mem_percent": float(resources.get("system_mem_percent") or 0.0),
+            "system_cpu_percent": float(resources.get("system_cpu_percent") or 0.0),
+            "system_num_cpus": int(resources.get("system_num_cpus") or 0),
 
             "gpu_allocated_gb": float(resources.get("gpu_allocated_gb") or 0.0),
             "gpu_reserved_gb": float(resources.get("gpu_reserved_gb") or 0.0),

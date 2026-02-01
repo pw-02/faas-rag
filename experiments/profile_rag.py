@@ -42,8 +42,11 @@ def debug_args():
         generator="simulated", #Options: simulated, tiny-gpt2, gpt2
         sim_generation_delay_s=0.01,
         embedder="BAAI/bge-base-en-v1.5", #Optionns: synthetic, BAAI/bge-base-en-v1.5
+        embedder_max_length=512,
+        do_sample=True,
 
         # perf / faiss
+        num_faiss_threads=4,
         n_probe=None,
 
         # proximity cache (ignored if pipeline="single")
@@ -80,16 +83,18 @@ def parse_args() -> argparse.Namespace:
     # retrieval/generation config
     p.add_argument("--top-k", type=int, default=5)
     p.add_argument("--max-context-docs", type=int, default=3)
-    p.add_argument("--max-new-tokens", type=int, default=128)
-
     p.add_argument("--generator", default="synthetic")
+    p.add_argument("--max-new-tokens", type=int, default=128)
+    p.add_argument("--do-sample", action="store_true", default=False)
     p.add_argument("--embedder", default="synthetic")
+    p.add_argument("--embedder-max-length", type=int, default=512)
 
     # perf / faiss
     p.add_argument("--sim-generation-delay-s", type=float, default=0.05)
     p.add_argument("--n-probe", type=int, default=None,
                    help="FAISS IVF nprobe. If omitted, script will set 256 when index path contains 'ivf'.")
     p.add_argument("--show-progress", action="store_true", default=False)
+    p.add_argument("--num-faiss-threads", type=int, default=None, help="If set, configures FAISS to use this many threads.")
 
     # proximity cache knobs (only used if --pipeline proximity)
     p.add_argument("--cache-policy", default=None, help="None|fifo|lru|lsh_fifo|lsh_lru")
@@ -149,6 +154,9 @@ def main() -> None:
             n_probe=n_probe,
             batch_size=args.batch_size,
             show_progress=args.show_progress,
+            num_faiss_threads=args.num_faiss_threads,
+            embedder_max_length=args.embedder_max_length,
+            do_sample=args.do_sample,
         )
 
         if args.pipeline == "proximity":

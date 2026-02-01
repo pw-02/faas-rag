@@ -74,7 +74,10 @@ class HuggingFaceEmbedder(BaseEmbedder):
     """
     Generic HF encoder embedder with masked mean pooling.
     """
-    def __init__(self, model_name: str, device: str, max_length: int = 512, normalize: bool = True):
+    def __init__(self, model_name: str,
+                  device: str, 
+                  max_length: int = 512,
+                    normalize: bool = True):
         self.device = device
         self.max_length = max_length
         self.normalize = normalize

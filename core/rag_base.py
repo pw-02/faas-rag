@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from core.embedders import load_embedder
 from core.generators import load_generator, GenerationConfig
-from core.docstores import load_docstore, BaseDocStore
+from core.docstores import load_docstore
 from core.rag_profile_utils import ResourceMonitor  # or core.resource_stats if you split it
 
 
@@ -49,20 +49,23 @@ class RagPipelineBase:
         docstore_path: str,
         device: Optional[str] = None,
         top_k: int = 5,
-        max_context_docs: Optional[int] = None,
-        max_new_tokens: int = 256,
-        embedder_max_length: int = 512,
-        do_sample: bool = False,
-        simulated_generation_delay_s: float = 0.0,
-        n_probe: Optional[int] = None,
         show_progress: bool = True,
+        n_probe: Optional[int] = None,
+        num_faiss_threads: Optional[int] = None,
         batch_size: int = 16,
+        max_context_docs: Optional[int] = None,
+        max_new_tokens: int,
+        embedder_max_length: int,
+        do_sample: bool,
+        simulated_generation_delay_s: float = 0.0,
+      
     ):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.top_k = int(top_k)
         self.max_context_docs = int(max_context_docs) if max_context_docs is not None else int(top_k)
         self.show_progress = bool(show_progress)
         self.batch_size = max(1, int(batch_size))
+        self.num_faiss_threads = num_faiss_threads
 
         # --- Embedder ---
         self.embedder = load_embedder(
@@ -85,9 +88,15 @@ class RagPipelineBase:
         # --- FAISS index ---
         if not vector_index_path:
             raise ValueError("vector_index_path is required")
+
+        if self.num_faiss_threads:
+            faiss.omp_set_num_threads(self.num_faiss_threads)
+
         self.index = faiss.read_index(vector_index_path)
+        
         if n_probe is not None and hasattr(self.index, "nprobe"):
             self.index.nprobe = n_probe
+    
 
         # --- Docstore ---
         self.docstore = load_docstore(docstore_path=docstore_path)
