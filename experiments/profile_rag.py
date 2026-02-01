@@ -59,8 +59,6 @@ def debug_args():
     )
 
 
-
-
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Profile RAG pipeline over one or more FAISS indexes.")
 
@@ -124,7 +122,6 @@ def main() -> None:
         batch_size=args.batch_size,
         max_batches=args.max_batches,
     )
-
 
     PipelineCls = RagPipelineSingleNode if args.pipeline == "single" else RagPipelineProximity
 
