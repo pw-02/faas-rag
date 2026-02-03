@@ -8,3 +8,4 @@
 results/
 figures/
 *pycache*/
+faiss_wiki_dpr/

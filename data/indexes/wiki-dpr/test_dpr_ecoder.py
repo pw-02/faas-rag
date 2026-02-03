@@ -13,7 +13,7 @@ def l2(a, b):
 def show_pair(name, a, b):
     return f"{name:28s} cosine={cosine(a,b):.6f}  l2={l2(a,b):.6f}"
 
-USE_MULTISET = True
+USE_MULTISET = False
 DATASET_NAME = "psgs_w100.multiset.no_index" if USE_MULTISET else "psgs_w100.nq.no_index"
 ST_MODEL_NAME = "facebook-dpr-ctx_encoder-multiset-base" if USE_MULTISET else "facebook-dpr-ctx_encoder-single-nq-base"
 T_MODEL_NAME = "facebook/dpr-ctx_encoder-multiset-base" if USE_MULTISET else "facebook/dpr-ctx_encoder-single-nq-base"

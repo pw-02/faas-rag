@@ -11,7 +11,7 @@ STREAMING = True
 
 N_VECTORS = 100_000          # <-- how many passages/vectors to index
 OUT_DIR = "faiss_wiki_subset"
-INDEX_TYPE = "flat_ip"       # "flat_ip" or "ivf_ip"
+INDEX_TYPE = "flat_ip"       # "flat_ip", "ivf_ip" or "hnsw"
 N_LISTS = 4096               # used only for IVF
 BATCH_SIZE = 8192            # how many vectors to buffer before adding
 STORE_TEXT = False           # set True if you want text saved (big!)
