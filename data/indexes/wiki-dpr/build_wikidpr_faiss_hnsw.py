@@ -19,7 +19,7 @@ from datasets import load_dataset
 from transformers import DPRContextEncoder, DPRContextEncoderTokenizerFast
 
 from datasets import load_dataset
-ds = load_dataset("facebook/wiki_dpr", "psgs_w100", split="train")
+ds = load_dataset("facebook/wiki_dpr", split="psgs_w100")
 print(ds[0])
 
 def parse_args() -> argparse.Namespace:
