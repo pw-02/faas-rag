@@ -33,11 +33,11 @@ def parse_args():
     p.add_argument("--ef_search", type=int, default=64)
 
     p.add_argument("--out_dir", default="faiss_wiki_dpr")
-    p.add_argument("--store_text", action="store_true", default=True)
+    p.add_argument("--store_text", action="store_true", default=False)
     p.add_argument("--snippet_chars", type=int, default=0)
 
     # NEW: meta-only mode (skip FAISS index creation/training/writing)
-    p.add_argument("--no_index", action="store_true", default=True,
+    p.add_argument("--no_index", action="store_true", default=False,
                    help="If set, do not build/write FAISS index; only write meta jsonl.")
 
     return p.parse_args()

@@ -125,7 +125,6 @@ class EmbedderConfig:
 # -------------------------
 @dataclass
 class LlamaGeneratorConfig:
-    name: str
     model_name: str
     temperature: float
     top_p: float
@@ -156,7 +155,6 @@ class LlamaGeneratorConfig:
 class RagServiceConfig:
     generator: LlamaGeneratorConfig
     embedder: EmbedderConfig
-    cache: Optional[ProximityCacheConfig] = None
     vector_index_path: str
     docstore_path: str
     top_k: int = 5

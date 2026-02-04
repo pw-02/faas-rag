@@ -3,6 +3,9 @@ from __future__ import annotations
 from faasrag.core.args import (LlamaGeneratorConfig,)
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+import os
+HF_TOKEN = os.getenv("HF_TOKEN")
+print(HF_TOKEN)
 
 class LlamaGenerator:
     def __init__(
@@ -61,3 +64,18 @@ def build_generator(cfg: LlamaGeneratorConfig, *, device: str):
         do_sample=cfg.do_sample,
         max_new_tokens=cfg.max_new_tokens,
     )
+
+if __name__ == "__main__":
+    # Example usage
+    gen_cfg = LlamaGeneratorConfig(
+        model_name="meta-llama/Meta-Llama-3-8B-Instruct",
+        temperature=0.7,
+        top_p=0.9,
+        top_k=50,
+        do_sample=True,
+        max_new_tokens=64,
+    )
+    generator = build_generator(gen_cfg, device="cuda")
+    prompt = "What is the capital of France?"
+    response = generator.generate(prompt)
+    print(response)
