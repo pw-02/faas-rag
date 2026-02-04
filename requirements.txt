@@ -1,3 +1,4 @@
 datasets==3.6.0
 faiss-cpu
 transformers
+psutil
