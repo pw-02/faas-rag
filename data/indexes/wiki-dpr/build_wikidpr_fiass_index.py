@@ -10,6 +10,8 @@ def parse_args():
     p = argparse.ArgumentParser(description="Build a FAISS index from facebook/wiki_dpr precomputed embeddings.")
     p.add_argument("--dataset", default="facebook/wiki_dpr")
     p.add_argument("--split", default="train")
+
+    # default False (download/cache locally)
     p.add_argument("--streaming", action="store_true", default=False)
     p.add_argument("--no-streaming", dest="streaming", action="store_false")
 
@@ -23,7 +25,7 @@ def parse_args():
     # IVF
     p.add_argument("--n_lists", type=int, default=4096)
     p.add_argument("--train_size", type=int, default=50_000)
-    p.add_argument("--nprobe", type=int, default=16, help="IVF: number of lists to probe at search time")
+    p.add_argument("--nprobe", type=int, default=16)
 
     # HNSW
     p.add_argument("--n_neighbors", type=int, default=32)
@@ -31,12 +33,16 @@ def parse_args():
     p.add_argument("--ef_search", type=int, default=64)
 
     p.add_argument("--out_dir", default="faiss_wiki_dpr")
-    p.add_argument("--store_text", action="store_true", default=False,
-                   help="Store full passage text in meta.jsonl")
-    p.add_argument("--snippet_chars", type=int, default=0,
-                   help="Store a snippet of text of this length (0 disables)")
+    p.add_argument("--store_text", action="store_true", default=False)
+    p.add_argument("--snippet_chars", type=int, default=0)
 
     return p.parse_args()
+
+def get_first_row(ds, streaming: bool):
+    if streaming:
+        return next(iter(ds))
+    else:
+        return ds[0]
 
 def main():
     args = parse_args()
@@ -67,18 +73,14 @@ def main():
         print("efSearch     :", args.ef_search)
     print("==============\n")
 
-    # Load streaming dataset
+    # Load dataset
     ds = load_dataset(args.dataset, name=args.dataset_name, split=args.split, streaming=args.streaming)
-    
-    first = next(iter(ds))
+
+    first = get_first_row(ds, args.streaming)
     if "embeddings" not in first:
         raise KeyError(f"Expected 'embeddings' field but got keys: {list(first.keys())}")
     dim = len(first["embeddings"])
-    
     print("Embedding dim:", dim)
-
-    # Re-create iterator
-    ds = load_dataset(args.dataset, name=args.dataset_name, split=args.split, streaming=args.streaming)
 
     # Build FAISS index
     if args.index_type == "flat_ip":
@@ -87,6 +89,7 @@ def main():
     elif args.index_type == "ivf_ip":
         quantizer = faiss.IndexFlatIP(dim)
         index = faiss.IndexIVFFlat(quantizer, dim, args.n_lists, faiss.METRIC_INNER_PRODUCT)
+        index.nprobe = args.nprobe
 
     elif args.index_type == "hnsw_ip":
         index = faiss.IndexHNSWFlat(dim, args.n_neighbors, faiss.METRIC_INNER_PRODUCT)
@@ -96,14 +99,33 @@ def main():
     else:
         raise ValueError("Unexpected index_type")
 
-    if args.index_type == "ivf_ip":
-        index.nprobe = args.nprobe
+    # ---------- IVF training pass (optional but safer) ----------
+    if args.index_type == "ivf_ip" and not index.is_trained:
+        print(f"Collecting {args.train_size} vectors for IVF training...")
+        train_vecs = []
 
+        if args.streaming:
+            it = iter(ds)
+            for _ in tqdm(range(min(args.train_size, args.n_vectors)), desc="Train vectors"):
+                row = next(it)
+                train_vecs.append(np.asarray(row["embeddings"], dtype=np.float32))
+        else:
+            # non-streaming: can index directly
+            for i in tqdm(range(min(args.train_size, args.n_vectors)), desc="Train vectors"):
+                row = ds[i]
+                train_vecs.append(np.asarray(row["embeddings"], dtype=np.float32))
+
+        T = np.vstack(train_vecs).astype(np.float32)
+        print("Training IVF...")
+        index.train(T)
+
+        # Re-load dataset for the actual indexing pass if streaming (because we consumed rows)
+        if args.streaming:
+            ds = load_dataset(args.dataset, name=args.dataset_name, split=args.split, streaming=args.streaming)
+
+    # ---------- Indexing pass ----------
     buf_vecs, buf_meta = [], []
     added = 0
-
-    train_vecs = []
-    need_train = (args.index_type == "ivf_ip")
 
     with open(meta_path, "w", encoding="utf-8") as mf:
         for row in tqdm(ds, total=args.n_vectors, desc=f"Indexing {args.dataset_name}"):
@@ -115,9 +137,6 @@ def main():
                 raise ValueError(f"Dim mismatch: got {v.shape[0]} expected {dim}")
 
             # DPR NOTE: do NOT normalize
-
-            if need_train and len(train_vecs) < args.train_size:
-                train_vecs.append(v)
 
             faiss_id = added + len(buf_vecs)
             buf_vecs.append(v)
@@ -135,12 +154,6 @@ def main():
 
             if len(buf_vecs) >= args.batch_size:
                 X = np.vstack(buf_vecs).astype(np.float32)
-
-                if need_train and not index.is_trained:
-                    T = np.vstack(train_vecs).astype(np.float32)
-                    print(f"\nTraining IVF with {T.shape[0]} vectors...")
-                    index.train(T)
-
                 index.add(X)
 
                 for m in buf_meta:
@@ -153,17 +166,9 @@ def main():
         # Flush remainder
         if buf_vecs:
             X = np.vstack(buf_vecs).astype(np.float32)
-
-            if need_train and not index.is_trained:
-                T = np.vstack(train_vecs).astype(np.float32)
-                print(f"\nTraining IVF with {T.shape[0]} vectors...")
-                index.train(T)
-
             index.add(X)
-
             for m in buf_meta:
                 mf.write(json.dumps(m, ensure_ascii=False) + "\n")
-
             added += len(buf_vecs)
 
     faiss.write_index(index, index_path)
