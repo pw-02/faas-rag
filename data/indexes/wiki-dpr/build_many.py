@@ -13,7 +13,7 @@ PY = sys.executable
 SCRIPT = "build_wikidpr_fiass_index.py"
 
 ROOT_OUT_DIR = Path("faiss_wiki_dpr")
-MANIFEST_PATH = ROOT_OUT_DIR / "manifestivf.csv"
+MANIFEST_PATH = ROOT_OUT_DIR / "manifest.csv"
 
 DATASET_NAME = "psgs_w100.nq.no_index"
 # DATASET_NAME = "psgs_w100.multiset.no_index"
@@ -37,9 +37,9 @@ SIZES = [
 JOBS: list[tuple[str, list[str]]] = []
 
 # Optional Flat baseline (small sizes only)
-# for tag, n in SIZES:
-#     if n <= 1_000_000:
-#         JOBS.append((f"flat_{tag}", ["--index_type", "flat_ip", "--n_vectors", str(n)]))
+for tag, n in SIZES:
+    if n <= 1_000_000:
+        JOBS.append((f"flat_{tag}", ["--index_type", "flat_ip", "--n_vectors", str(n)]))
 
 # HNSW for all sizes
 def hnsw_params(n: int) -> tuple[str, str]:
@@ -57,19 +57,19 @@ def hnsw_params(n: int) -> tuple[str, str]:
         return "32768", "256"
     return "32768", "320"
 
-# for tag, n in SIZES:
-#     batch, ef_search = hnsw_params(n)
-#     JOBS.append((
-#         f"hnsw_{tag}",
-#         [
-#             "--index_type", "hnsw_ip",
-#             "--n_vectors", str(n),
-#             "--batch_size", batch,
-#             "--n_neighbors", "32",
-#             "--ef_construction", "200",
-#             "--ef_search", ef_search,
-#         ],
-#     ))
+for tag, n in SIZES:
+    batch, ef_search = hnsw_params(n)
+    JOBS.append((
+        f"hnsw_{tag}",
+        [
+            "--index_type", "hnsw_ip",
+            "--n_vectors", str(n),
+            "--batch_size", batch,
+            "--n_neighbors", "32",
+            "--ef_construction", "200",
+            "--ef_search", ef_search,
+        ],
+    ))
 
 # IVF for all sizes
 def ivf_params(n: int) -> tuple[str, str, str, str]:
