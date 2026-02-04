@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 PY = sys.executable  # uses the same python env you're running this with
-SCRIPT = "data/indexes/wiki-dpr/build_wiki_dpr_index.py"
+SCRIPT = "build_wiki_dpr_index.py"
 
 OUT_DIR = "faiss_wiki_dpr"
 DATASET_NAME = "psgs_w100.nq.no_index"
