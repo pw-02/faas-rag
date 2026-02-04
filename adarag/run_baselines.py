@@ -309,7 +309,7 @@ def prompt_no_retrieval(question: str) -> str:
     ]
 
 def prompt_with_context(question: str, passages: List[Passage], max_ctx_chars: int) -> str:
-    ctx = format_context(passages, max_ctx_chars)
+    context = format_context(passages, max_ctx_chars)
     return [
         {"role": "system", "content": "You answer questions using the provided context. Output a short answer only."},
         {"role": "user", "content": f'Use ONLY this context. Answer with ONLY the answer. If unsure, say "I don\'t know".\n\nContext:\n{context}\n\nQuestion: {question}'},
