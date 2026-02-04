@@ -552,9 +552,13 @@ def main():
         )
 
     # Save
+    if not args.save_dir:
+        args.save_dir = f"adarag/results"
+
     if args.save_dir:
         os.makedirs(args.save_dir, exist_ok=True)
-        summary_path = os.path.join(args.save_dir, "summary.json")
+        file_name = f"baselines_{os.path.basename(args.queries).rsplit('.',1)[0]}_results.json"
+        summary_path = os.path.join(args.save_dir, file_name)
         with open(summary_path, "w", encoding="utf-8") as f:
             json.dump(all_results, f, ensure_ascii=False, indent=2)
         print(f"\nSaved full results to: {summary_path}")
@@ -570,7 +574,7 @@ def main():
             }
             for r in all_results
         ]
-        compact_path = os.path.join(args.save_dir, "compact.json")
+        compact_path = os.path.join(args.save_dir, f"compact_{os.path.basename(args.queries).rsplit('.',1)[0]}.json")
         with open(compact_path, "w", encoding="utf-8") as f:
             json.dump(compact, f, ensure_ascii=False, indent=2)
         print(f"Saved compact summary to: {compact_path}")
