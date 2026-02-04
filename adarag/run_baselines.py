@@ -220,6 +220,9 @@ class STRetriever:
         device: str = "cuda",
     ):
         self.index = faiss.read_index(faiss_index_path)
+        # After loading the index
+        if hasattr(self.index, "hnsw"):
+            self.index.hnsw.efSearch = 128  # try 128 or 256 for better recall
 
         # ---- load JSONL passage store into dict keyed by str(pid) ----
         self.passages: Dict[str, Any] = {}
@@ -506,7 +509,7 @@ def main():
             "faiss_wiki_dpr/hnsw_1m",
             "faiss_wiki_dpr/ivf_1m",
         ],
-        default="faiss_wiki_dpr/flat_1m",
+        default="faiss_wiki_dpr/hnsw_100k",
     )
 
     # Make passage_store optional; default=None means "infer it"
