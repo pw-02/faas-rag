@@ -369,7 +369,7 @@ class LocalGenerator:
 
         out = self.model.generate(
             **inputs,
-            max_new_tokens=16,              # keep answers short
+            max_new_tokens=min(self.max_new_tokens, 16),  # short answers for QA eval
             do_sample=False,
             temperature=0.0,
             repetition_penalty=1.15,        # prevents looping
@@ -471,6 +471,7 @@ def run_setting(
     }
 
 def main():
+    run_date_time_now = torch.datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     ap = argparse.ArgumentParser()
 
     ap.add_argument("--s3_bucket", required=False, default="vectorindexes")
@@ -583,11 +584,12 @@ def main():
 
     # Save
     if not args.save_dir:
-        args.save_dir = f"adarag/results"
+        #make save dir named ofter index, generator, and query file
+        args.save_dir = f"adarag/results/{os.path.basename(args.faiss_index).rsplit('.',1)[0]}_{os.path.basename(args.generator).rsplit('.',1)[0]}_{os.path.basename(args.queries).rsplit('.',1)[0]}"
 
     if args.save_dir:
         os.makedirs(args.save_dir, exist_ok=True)
-        file_name = f"baselines_{os.path.basename(args.queries).rsplit('.',1)[0]}_results.json"
+        file_name = f"baseline_results_{os.path.basename(args.queries).rsplit('.',1)[0]}_{run_date_time_now}.json"
         summary_path = os.path.join(args.save_dir, file_name)
         with open(summary_path, "w", encoding="utf-8") as f:
             json.dump(all_results, f, ensure_ascii=False, indent=2)
@@ -604,7 +606,7 @@ def main():
             }
             for r in all_results
         ]
-        compact_path = os.path.join(args.save_dir, f"compact_{os.path.basename(args.queries).rsplit('.',1)[0]}.json")
+        compact_path = os.path.join(args.save_dir, f"compact_{os.path.basename(args.queries).rsplit('.',1)[0]}_{run_date_time_now}.json")
         with open(compact_path, "w", encoding="utf-8") as f:
             json.dump(compact, f, ensure_ascii=False, indent=2)
         print(f"Saved compact summary to: {compact_path}")
