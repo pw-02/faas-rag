@@ -33,8 +33,12 @@ def parse_args():
     p.add_argument("--ef_search", type=int, default=64)
 
     p.add_argument("--out_dir", default="faiss_wiki_dpr")
-    p.add_argument("--store_text", action="store_true", default=False)
+    p.add_argument("--store_text", action="store_true", default=True)
     p.add_argument("--snippet_chars", type=int, default=0)
+
+    # NEW: meta-only mode (skip FAISS index creation/training/writing)
+    p.add_argument("--no_index", action="store_true", default=True,
+                   help="If set, do not build/write FAISS index; only write meta jsonl.")
 
     return p.parse_args()
 
@@ -50,7 +54,10 @@ def main():
 
     safe_cfg = args.dataset_name.replace(".", "_")
     index_path = os.path.join(args.out_dir, f"index_{safe_cfg}_{args.index_type}_{args.n_vectors}.faiss")
-    meta_path  = os.path.join(args.out_dir, f"meta_{safe_cfg}_{args.n_vectors}.jsonl")
+    if args.store_text:
+        meta_path  = os.path.join(args.out_dir, f"meta_{safe_cfg}_{args.n_vectors}_text.jsonl")
+    else:
+        meta_path  = os.path.join(args.out_dir, f"meta_{safe_cfg}_{args.n_vectors}.jsonl")
 
     print("=== Config ===")
     print("dataset      :", args.dataset)
@@ -63,6 +70,7 @@ def main():
     print("out_dir      :", args.out_dir)
     print("store_text   :", args.store_text)
     print("snippet_chars:", args.snippet_chars)
+    print("no_index     :", args.no_index)
     if args.index_type == "ivf_ip":
         print("n_lists      :", args.n_lists)
         print("train_size   :", args.train_size)
@@ -76,70 +84,78 @@ def main():
     # Load dataset
     ds = load_dataset(args.dataset, name=args.dataset_name, split=args.split, streaming=args.streaming)
 
-    first = get_first_row(ds, args.streaming)
-    if "embeddings" not in first:
-        raise KeyError(f"Expected 'embeddings' field but got keys: {list(first.keys())}")
-    dim = len(first["embeddings"])
-    print("Embedding dim:", dim)
-
-    # Build FAISS index
-    if args.index_type == "flat_ip":
-        index = faiss.IndexFlatIP(dim)
-
-    elif args.index_type == "ivf_ip":
-        quantizer = faiss.IndexFlatIP(dim)
-        index = faiss.IndexIVFFlat(quantizer, dim, args.n_lists, faiss.METRIC_INNER_PRODUCT)
-        index.nprobe = args.nprobe
-
-    elif args.index_type == "hnsw_ip":
-        index = faiss.IndexHNSWFlat(dim, args.n_neighbors, faiss.METRIC_INNER_PRODUCT)
-        index.hnsw.efConstruction = args.ef_construction
-        index.hnsw.efSearch = args.ef_search
-
+    # Only touch embeddings if we're actually indexing
+    if not args.no_index:
+        first = get_first_row(ds, args.streaming)
+        if "embeddings" not in first:
+            raise KeyError(f"Expected 'embeddings' field but got keys: {list(first.keys())}")
+        dim = len(first["embeddings"])
+        print("Embedding dim:", dim)
     else:
-        raise ValueError("Unexpected index_type")
+        dim = None
+        print("No-index mode: will only write meta jsonl (no embeddings/index).")
 
-    # ---------- IVF training pass (optional but safer) ----------
-    if args.index_type == "ivf_ip" and not index.is_trained:
-        print(f"Collecting {args.train_size} vectors for IVF training...")
-        train_vecs = []
+    # Build FAISS index (only if indexing enabled)
+    index = None
+    if not args.no_index:
+        if args.index_type == "flat_ip":
+            index = faiss.IndexFlatIP(dim)
 
-        if args.streaming:
-            it = iter(ds)
-            for _ in tqdm(range(min(args.train_size, args.n_vectors)), desc="Train vectors"):
-                row = next(it)
-                train_vecs.append(np.asarray(row["embeddings"], dtype=np.float32))
+        elif args.index_type == "ivf_ip":
+            quantizer = faiss.IndexFlatIP(dim)
+            index = faiss.IndexIVFFlat(quantizer, dim, args.n_lists, faiss.METRIC_INNER_PRODUCT)
+            index.nprobe = args.nprobe
+
+        elif args.index_type == "hnsw_ip":
+            index = faiss.IndexHNSWFlat(dim, args.n_neighbors, faiss.METRIC_INNER_PRODUCT)
+            index.hnsw.efConstruction = args.ef_construction
+            index.hnsw.efSearch = args.ef_search
+
         else:
-            # non-streaming: can index directly
-            for i in tqdm(range(min(args.train_size, args.n_vectors)), desc="Train vectors"):
-                row = ds[i]
-                train_vecs.append(np.asarray(row["embeddings"], dtype=np.float32))
+            raise ValueError("Unexpected index_type")
 
-        T = np.vstack(train_vecs).astype(np.float32)
-        print("Training IVF...")
-        index.train(T)
+        # ---------- IVF training pass ----------
+        if args.index_type == "ivf_ip" and not index.is_trained:
+            print(f"Collecting {args.train_size} vectors for IVF training...")
+            train_vecs = []
 
-        # Re-load dataset for the actual indexing pass if streaming (because we consumed rows)
-        if args.streaming:
-            ds = load_dataset(args.dataset, name=args.dataset_name, split=args.split, streaming=args.streaming)
+            if args.streaming:
+                it = iter(ds)
+                for _ in tqdm(range(min(args.train_size, args.n_vectors)), desc="Train vectors"):
+                    row = next(it)
+                    train_vecs.append(np.asarray(row["embeddings"], dtype=np.float32))
+            else:
+                for i in tqdm(range(min(args.train_size, args.n_vectors)), desc="Train vectors"):
+                    row = ds[i]
+                    train_vecs.append(np.asarray(row["embeddings"], dtype=np.float32))
 
-    # ---------- Indexing pass ----------
+            T = np.vstack(train_vecs).astype(np.float32)
+            print("Training IVF...")
+            index.train(T)
+
+            # Re-load dataset for the actual pass if streaming (because we consumed rows)
+            if args.streaming:
+                ds = load_dataset(args.dataset, name=args.dataset_name, split=args.split, streaming=args.streaming)
+
+    # ---------- Main pass ----------
     buf_vecs, buf_meta = [], []
     added = 0
 
     with open(meta_path, "w", encoding="utf-8") as mf:
-        for row in tqdm(ds, total=args.n_vectors, desc=f"Indexing {args.dataset_name}"):
+        for row in tqdm(ds, total=args.n_vectors, desc=f"{'Meta-only' if args.no_index else 'Indexing'} {args.dataset_name}"):
             if added >= args.n_vectors:
                 break
 
-            v = np.asarray(row["embeddings"], dtype=np.float32)
-            if v.shape[0] != dim:
-                raise ValueError(f"Dim mismatch: got {v.shape[0]} expected {dim}")
+            # Assign ID (even in meta-only mode)
+            faiss_id = added + len(buf_meta)
 
-            # DPR NOTE: do NOT normalize
-
-            faiss_id = added + len(buf_vecs)
-            buf_vecs.append(v)
+            # If indexing, validate vector and buffer it
+            if not args.no_index:
+                v = np.asarray(row["embeddings"], dtype=np.float32)
+                if v.shape[0] != dim:
+                    raise ValueError(f"Dim mismatch: got {v.shape[0]} expected {dim}")
+                # DPR NOTE: do NOT normalize
+                buf_vecs.append(v)
 
             meta = {
                 "faiss_id": faiss_id,
@@ -150,32 +166,42 @@ def main():
                 meta["snippet"] = (row.get("text", "") or "")[: args.snippet_chars]
             if args.store_text:
                 meta["text"] = row.get("text", "") or ""
+
             buf_meta.append(meta)
 
-            if len(buf_vecs) >= args.batch_size:
-                X = np.vstack(buf_vecs).astype(np.float32)
-                index.add(X)
+            # Flush by batch size for consistent memory use
+            if len(buf_meta) >= args.batch_size:
+                if not args.no_index:
+                    X = np.vstack(buf_vecs).astype(np.float32)
+                    index.add(X)
 
                 for m in buf_meta:
                     mf.write(json.dumps(m, ensure_ascii=False) + "\n")
 
-                added += len(buf_vecs)
-                buf_vecs.clear()
+                added += len(buf_meta)
                 buf_meta.clear()
+                buf_vecs.clear()
 
         # Flush remainder
-        if buf_vecs:
-            X = np.vstack(buf_vecs).astype(np.float32)
-            index.add(X)
+        if buf_meta:
+            if not args.no_index and buf_vecs:
+                X = np.vstack(buf_vecs).astype(np.float32)
+                index.add(X)
             for m in buf_meta:
                 mf.write(json.dumps(m, ensure_ascii=False) + "\n")
-            added += len(buf_vecs)
+            added += len(buf_meta)
 
-    faiss.write_index(index, index_path)
+    # Save index only if indexing enabled
+    if not args.no_index:
+        faiss.write_index(index, index_path)
 
     print("\nDone.")
-    print("Vectors indexed:", index.ntotal)
-    print("Index saved to :", index_path)
+    print("Rows processed:", added)
+    if not args.no_index:
+        print("Vectors indexed:", index.ntotal)
+        print("Index saved to :", index_path)
+    else:
+        print("Index skipped (no_index=True)")
     print("Meta saved to  :", meta_path)
 
 if __name__ == "__main__":
