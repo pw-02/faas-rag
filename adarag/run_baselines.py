@@ -472,6 +472,9 @@ def run_setting(
     }
 
 def main():
+
+
+
     run_date_time_now  = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     ap = argparse.ArgumentParser()
 
@@ -490,14 +493,14 @@ def main():
             "faiss_wiki_dpr/hnsw_500k",
             "faiss_wiki_dpr/ivf_500k",
         ],
-        default="faiss_wiki_dpr/flat_100k",
+        default="faiss_wiki_dpr/flat_500k",
     )
 
     ap.add_argument(
         "--passage_store",
         required=False,
         choices=["wiki-passages/100k", "wiki-passages/500k"],
-        default="wiki-passages/100k",
+        default="wiki-passages/500k",
     )
 
     # local_dir is the root under which we mirror S3 keys
