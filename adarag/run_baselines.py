@@ -472,13 +472,14 @@ def run_setting(
     }
 
 def infer_passage_store_from_index(faiss_index: str) -> str:
-    # examples: "faiss_wiki_dpr/flat_100k", "faiss_wiki_dpr/ivf_500k"
-    m = re.search(r'_(\d+k)\b', faiss_index)
-    if not m:
-        raise ValueError(f"Could not infer size from faiss_index: {faiss_index}")
-    size = m.group(1)  # "100k" or "500k"
-    print(f"Inferred passage_store=wiki-passages/{size} from faiss_index={faiss_index}")
-    return f"wiki-passages/{size}"
+    if faiss_index.endswith("_100k"):
+        return "wiki-passages/100k"
+    if faiss_index.endswith("_500k"):
+        return "wiki-passages/500k"
+    if faiss_index.endswith("_1m"):
+        return "wiki-passages/1m"
+    raise ValueError(f"Unknown index size in faiss_index: {faiss_index}")
+
 
 def main():
 
