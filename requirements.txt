@@ -1,8 +1,11 @@
 datasets==3.6.0
 faiss-cpu
 transformers
+sentence_transformers
 psutil
 hydra-core==1.1.2
 grpcio
 grpcio-tools
 pandas
+accelerate
+torch>=1.13.0

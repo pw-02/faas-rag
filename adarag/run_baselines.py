@@ -295,7 +295,7 @@ def prompt_with_context(question: str, passages: List[Passage], max_ctx_chars: i
 
 class LocalGenerator:
     def __init__(self, model_name_or_path: str, 
-                 device: str = "cpu", 
+                 device: str = None,
                  max_new_tokens: int = 64):
         
         self.device = device
@@ -451,12 +451,14 @@ def main():
     ap.add_argument("--limit", type=int, default=200)
     ap.add_argument("--max_ctx_chars", type=int, default=4000)
     ap.add_argument("--max_new_tokens", type=int, default=64)
-    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--device", default=None, help="e.g., cpu, cuda")
     ap.add_argument("--show_examples", type=int, default=5)
     ap.add_argument("--save_dir", default=None)
     ap.add_argument("--seed", type=int, default=0)
 
     args = ap.parse_args()
+    args.device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
+
 
     # Decide whether we even need retrieval
     need_retrieval = any(k > 0 for k in args.ks)

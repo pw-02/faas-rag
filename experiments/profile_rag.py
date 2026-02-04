@@ -12,6 +12,7 @@ from core.rag_profile_utils import (
     save_batch_results_csv,
     create_summary_from_csvs,
 )
+from faasrag.core.rag import RagPipeline
 
 DEBUG_MODE = True
 
@@ -156,7 +157,7 @@ def main() -> None:
         print(f"\n--- Running {args.cache} pipeline with index: {index_path} ---")
 
     
-        pipeline = RagPipelineBase(
+        pipeline = RagPipeline(
             generator_name=args.generator,
             embedder_name=args.embedder,
             vector_index_path=index_path,
