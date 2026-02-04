@@ -34,7 +34,7 @@ import os
 import random
 import re
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 
 import numpy as np
 import faiss
@@ -54,25 +54,53 @@ def normalize_text(s: str) -> str:
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
-def exact_match(pred: str, gold: str) -> float:
-    return 1.0 if normalize_text(pred) == normalize_text(gold) else 0.0
+def exact_match(pred: str, golds: Union[str, List[str]]) -> float:
+    """
+    pred: model prediction string
+    golds: either a string or list of acceptable gold answers
+    """
+    if isinstance(golds, str):
+        golds = [golds]
 
-def token_f1(pred: str, gold: str) -> float:
-    p = normalize_text(pred).split()
-    g = normalize_text(gold).split()
-    if len(p) == 0 and len(g) == 0:
-        return 1.0
-    if len(p) == 0 or len(g) == 0:
+    pred_n = normalize_text(pred)
+    for g in golds:
+        if pred_n == normalize_text(g):
+            return 1.0
+    return 0.0
+
+def token_f1(pred: str, golds: Union[str, List[str]]) -> float:
+    """
+    Returns max token-F1 over gold answers.
+    """
+    if isinstance(golds, str):
+        golds = [golds]
+
+    pred_tokens = normalize_text(pred).split()
+    if len(pred_tokens) == 0:
         return 0.0
 
     from collections import Counter
-    pc, gc = Counter(p), Counter(g)
-    common = sum((pc & gc).values())
-    if common == 0:
-        return 0.0
-    precision = common / len(p)
-    recall = common / len(g)
-    return 2 * precision * recall / (precision + recall)
+    pred_cnt = Counter(pred_tokens)
+
+    best_f1 = 0.0
+
+    for g in golds:
+        gold_tokens = normalize_text(g).split()
+        if len(gold_tokens) == 0:
+            continue
+
+        gold_cnt = Counter(gold_tokens)
+        common = sum((pred_cnt & gold_cnt).values())
+
+        if common == 0:
+            continue
+
+        precision = common / len(pred_tokens)
+        recall = common / len(gold_tokens)
+        f1 = 2 * precision * recall / (precision + recall)
+        best_f1 = max(best_f1, f1)
+
+    return best_f1
 
 # -------------------------
 # Data

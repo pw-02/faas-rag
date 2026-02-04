@@ -2,24 +2,4 @@ $env:PYTHONPATH=".;$env:PYTHONPATH"
 
 
 export PYTHONPATH=".:$PYTHONPATH"
-
-python -m scripts.profile_rag \
-  --pipeline single \
-  --queries-file data/triviaqa/triviaqa_train_qa.csv \
-  --queries-column question \
-  --docstore-path data/indexes/sphere/cc_docs_100k.jsonl \
-  --docstore-type jsonl \
-  --index data/indexes/synthetic/flat_ip_d768_n100000_norm1.index \
-  --batch-size 32 --max-batches 10
-
-python -m scripts.profile_rag \
-  --pipeline proximity \
-  --cache-policy lsh_fifo \
-  --cache-size 1000 \
-  --lsh-cache-num-hash 128 \
-  --lsh-cache-expected-dim 0 \
-  --lsh-cache-bucket-capacity 10 \
-  --queries-file data/triviaqa/triviaqa_train_qa.csv \
-  --docstore-path data/indexes/sphere/cc_docs_100k.jsonl \
-  --index data/indexes/synthetic/flat_ip_d768_n100000_norm1.index \
-  --batch-size 32 --max-batches 10
+python data/datasets/download.py
