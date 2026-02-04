@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import time
 from typing import Optional
 import re
+from distro import name
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 
@@ -27,8 +28,6 @@ class BaseGenerator(ABC):
     @abstractmethod
     def generate(self, prompt: str) -> str:
         ...
-
-
 # -----------------------------
 # REAL MODELS
 # -----------------------------
@@ -94,11 +93,9 @@ class HFCausalGenerator(BaseGenerator):
 class EchoGenerator(BaseGenerator):
     """
     Returns the retrieved context verbatim.
-    Perfect for debugging retrieval.
     """
     def generate(self, prompt: str) -> str:
         return prompt
-
 
 class SimulatedAnswerGenerator(BaseGenerator):
     """
@@ -126,6 +123,77 @@ class SimulatedAnswerGenerator(BaseGenerator):
             f"Retrieved context:\n{context}"
         )
     
+
+class LLaMA31InstructModel(BaseGenerator):
+    """
+    Assumes `prompt` is what your RAG pipeline already builds:
+      e.g. "Context:\n...\n\nQuestion: ...\n\nAnswer:"
+    We wrap that as a chat "user" message.
+    """
+    def __init__(self, device: str, 
+                 gen_config: GenerationConfig,
+                 model_id: str = "meta-llama/Meta-Llama-3.1-8B-Instruct"):
+        self.device = device
+        self.cfg = gen_config
+        self.model_id = model_id
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
+        # You can switch to torch_dtype=torch.float16 or bfloat16 if you have GPU support
+        self.model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
+        self.model.eval()
+
+        self.system_prompt = (
+            "You are a helpful, accurate assistant. "
+            "Use the provided context to answer. "
+            "If the context is insufficient, say you don't know."
+        )
+
+    def _to_chat_prompt(self, user_prompt: str) -> str:
+        # Use the model's chat template if available
+        if hasattr(self.tokenizer, "apply_chat_template"):
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+            return self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+
+        # Fallback if no chat template exists
+        return f"SYSTEM: {self.system_prompt}\nUSER: {user_prompt}\nASSISTANT:"
+
+    @torch.no_grad()
+    def generate(self, prompt: str) -> str:
+        chat_text = self._to_chat_prompt(prompt)
+
+        inputs = self.tokenizer(
+            chat_text,
+            return_tensors="pt",
+            truncation=True,
+            padding=True
+        )
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+        out = self.model.generate(
+            **inputs,
+            max_new_tokens=self.cfg.max_new_tokens,
+            do_sample=self.cfg.do_sample,
+            temperature=self.cfg.temperature if self.cfg.do_sample else None,
+            top_p=self.cfg.top_p if self.cfg.do_sample else None,
+            top_k=self.cfg.top_k if self.cfg.do_sample else None,
+            eos_token_id=self.tokenizer.eos_token_id,
+            pad_token_id=self.tokenizer.pad_token_id,
+        )
+
+        # Decode only newly generated tokens (prevents echoing prompt)
+        new_tokens = out[0, inputs["input_ids"].shape[1]:]
+        return self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+
 # -----------------------------
 # Factory
 # -----------------------------
@@ -138,14 +206,23 @@ def load_generator(
     cfg = gen_config or GenerationConfig()
     name = generator_name.lower()
 
+
+    if "llama" in name:
+        return LLaMA31InstructModel(
+            device=device,
+            gen_config=cfg,
+            model_id="meta-llama/Meta-Llama-3.1-8B-Instruct"
+        )
+    
     # Synthetic / debug generators
     if name == "echo":
         return EchoGenerator()
 
     if name in {"simulated"}:
         return SimulatedAnswerGenerator(
-            simulated_generation_delay_s=simulated_generation_delay_s
-        )
+            simulated_generation_delay_s=simulated_generation_delay_s)
+    
+  
 
     # Default: causal LM
     return HFCausalGenerator(generator_name, device=device, gen_config=cfg)

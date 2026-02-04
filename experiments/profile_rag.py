@@ -28,8 +28,8 @@ def debug_args():
         queries_file="data/datasets/qa/triviaqa/triviaqa_dev.jsonl",
         queries_column="question",
         docstore_path="data/indexes/sphere/cc_docs_100k.jsonl",
-        index=["data/indexes/synthetic/flat_ip_d768_n100000_norm1.index"],
-        out_dir="results/debug",
+        index=["data/indexes/wiki-dpr/index_psgs_w100_nq_no_index_flat_ip_100000.faiss"],
+        out_dir="experiments/results",
 
         # runtime limits (KEEP SMALL)
         batch_size=1,
@@ -41,9 +41,9 @@ def debug_args():
         max_context_docs=3,
         max_new_tokens=128,
         
-        generator="simulated", #Options: simulated, tiny-gpt2, gpt2
+        generator="simulated", #Options: simulated, tiny-gpt2, gpt2, llama_31_8b
         sim_generation_delay_s=0.01,
-        embedder="BAAI/bge-base-en-v1.5", #Optionns: synthetic, BAAI/bge-base-en-v1.5
+        embedder="dpr_qa", #Optionns: synthetic, dpr, BAAI/bge-base-en-v1.5
         embedder_max_length=512,
         do_sample=True,
 
