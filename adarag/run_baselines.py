@@ -303,19 +303,31 @@ def format_context(passages: List[Passage], max_chars: int) -> str:
     return ctx.strip()
 
 def prompt_no_retrieval(question: str) -> str:
-    return (
-        'Answer the question with ONLY the answer.. If you are not sure, say "I don\'t know".Do not explain.\n\n'
-        f"Question: {question}\nAnswer:"
-    )
+    return [
+        {"role": "system", "content": "You answer questions with a short answer only."},
+        {"role": "user", "content": f'Answer with ONLY the answer. If unsure, say "I don\'t know".\n\nQuestion: {question}'},
+    ]
 
 def prompt_with_context(question: str, passages: List[Passage], max_ctx_chars: int) -> str:
     ctx = format_context(passages, max_ctx_chars)
-    return (
-        'Use ONLY the provided context to answer the question. '
-        'If the answer is not in the context, say "I don\'t know".\n\n'
-        f"Context:\n{ctx}\n\n"
-        f"Question: {question}\nAnswer:"
-    )
+    return [
+        {"role": "system", "content": "You answer questions using the provided context. Output a short answer only."},
+        {"role": "user", "content": f'Use ONLY this context. Answer with ONLY the answer. If unsure, say "I don\'t know".\n\nContext:\n{context}\n\nQuestion: {question}'},
+    ]
+
+def extract_short_answer(text: str) -> str:
+    t = text.strip()
+
+    # take first line
+    t = t.split("\n")[0].strip()
+
+    # take first sentence
+    t = t.split(".")[0].strip()
+
+    # clean quotes
+    t = t.strip('"').strip("'").strip()
+
+    return t
 
 # -------------------------
 # Generator
@@ -341,19 +353,37 @@ class LocalGenerator:
         self.model.eval()
 
     @torch.no_grad()
-    def generate(self, prompt: str) -> Tuple[str, int]:
-        inputs = self.tok(prompt, return_tensors="pt", truncation=True).to(self.device)
+    def generate(self, messages) -> Tuple[str, int]:
+        # Build chat-formatted prompt
+        prompt = self.tok.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
+        inputs = self.tok(
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+        ).to(self.device)
+
         out = self.model.generate(
             **inputs,
-            max_new_tokens=self.max_new_tokens,
+            max_new_tokens=16,              # keep answers short
             do_sample=False,
             temperature=0.0,
-            pad_token_id=self.tok.eos_token_id,
+            repetition_penalty=1.15,        # prevents looping
+            no_repeat_ngram_size=3,          # extra safety
             eos_token_id=self.tok.eos_token_id,
+            pad_token_id=self.tok.eos_token_id,
         )
-        gen_ids = out[0][inputs["input_ids"].shape[-1] :]
-        text = self.tok.decode(gen_ids, skip_special_tokens=True).strip()
+
+        gen_ids = out[0][inputs["input_ids"].shape[-1]:]
+        raw_text = self.tok.decode(gen_ids, skip_special_tokens=True)
+
+        text = extract_short_answer(raw_text)
         return text, int(gen_ids.shape[-1])
+
 
 # -------------------------
 # Baseline runner
