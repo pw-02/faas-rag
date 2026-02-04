@@ -471,6 +471,15 @@ def run_setting(
         "outputs": outputs,
     }
 
+def infer_passage_store_from_index(faiss_index: str) -> str:
+    # examples: "faiss_wiki_dpr/flat_100k", "faiss_wiki_dpr/ivf_500k"
+    m = re.search(r'_(\d+k)\b', faiss_index)
+    if not m:
+        raise ValueError(f"Could not infer size from faiss_index: {faiss_index}")
+    size = m.group(1)  # "100k" or "500k"
+    print(f"Inferred passage_store=wiki-passages/{size} from faiss_index={faiss_index}")
+    return f"wiki-passages/{size}"
+
 def main():
 
 
@@ -492,17 +501,20 @@ def main():
             "faiss_wiki_dpr/flat_500k",
             "faiss_wiki_dpr/hnsw_500k",
             "faiss_wiki_dpr/ivf_500k",
+            "faiss_wiki_dpr/flat_1m",
+            "faiss_wiki_dpr/hnsw_1m",
+            "faiss_wiki_dpr/ivf_1m",
         ],
-        default="faiss_wiki_dpr/flat_500k",
+        default="faiss_wiki_dpr/flat_1m",
     )
 
+    # Make passage_store optional; default=None means "infer it"
     ap.add_argument(
         "--passage_store",
         required=False,
-        choices=["wiki-passages/100k", "wiki-passages/500k"],
-        default="wiki-passages/500k",
+        default=None,
+        help="If omitted, inferred from --faiss_index (e.g. *_500k -> wiki-passages/500k).",
     )
-
     # local_dir is the root under which we mirror S3 keys
     ap.add_argument("--local_dir", required=False, default="data/indexes")
     ap.add_argument("--queries", required=False, default="data/datasets/qa/nq/nq_dev.jsonl")
@@ -521,7 +533,9 @@ def main():
 
     args = ap.parse_args()
     args.device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
-
+    
+    if args.passage_store is None:
+        args.passage_store = infer_passage_store_from_index(args.faiss_index)
 
     # Decide whether we even need retrieval
     need_retrieval = any(k > 0 for k in args.ks)
