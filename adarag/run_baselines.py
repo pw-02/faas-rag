@@ -473,7 +473,7 @@ def main():
     ap.add_argument("--queries", required=False, default="data/datasets/qa/nq/nq_dev.jsonl")
 
     ap.add_argument("--encoder", required=False, default="facebook-dpr-question_encoder-single-nq-base")
-    ap.add_argument("--generator", required=False, default="Qwen/Qwen2.5-3B-Instruct") #meta-llama/Llama-3.1-8B-Instruct
+    ap.add_argument("--generator", required=False, default="meta-llama/Llama-3.1-8B-Instruct", help="e.g., Qwen/Qwen2.5-3B-Instruct, meta-llama/Llama-3.1-8B-Instruct")
 
     ap.add_argument("--ks", nargs="+", type=int, default=[0, 1, 5, 20])
     ap.add_argument("--limit", type=int, default=200)
