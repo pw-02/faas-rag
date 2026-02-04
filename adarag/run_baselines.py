@@ -43,6 +43,7 @@ from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import boto3
+import datetime
 
 # -------------------------
 # Metrics
@@ -471,7 +472,7 @@ def run_setting(
     }
 
 def main():
-    run_date_time_now = torch.datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_date_time_now  = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     ap = argparse.ArgumentParser()
 
     ap.add_argument("--s3_bucket", required=False, default="vectorindexes")
