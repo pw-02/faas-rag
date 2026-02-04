@@ -1,0 +1,19 @@
+generator:
+  name: llama3_8b_instruct
+  model_name: meta-llama/Meta-Llama-3.1-8B-Instruct
+  temperature: 0.0
+  top_p: 0.95
+  top_k: 50
+  do_sample: false
+  max_new_tokens: 256
+embedder:
+  name: dpr_nq
+  passage_encoder: sentence-transformers/facebook-dpr-ctx_encoder-single-nq-base
+  question_encoder: sentence-transformers/facebook-dpr-question_encoder-single-nq-base
+  metric: ip
+  normalize: false
+  dim: 768
+vector_index_path: index.faiss
+docstore_path: meta.jsonl
+top_k: 5
+device: auto

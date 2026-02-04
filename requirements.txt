@@ -2,3 +2,7 @@ datasets==3.6.0
 faiss-cpu
 transformers
 psutil
+hydra-core==1.1.2
+grpcio
+grpcio-tools
+pandas

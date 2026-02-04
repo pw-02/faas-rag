@@ -1,0 +1,9 @@
+defaults:
+  - generator: llama3_8b_instruct
+  - embedder: dpr_nq
+  - _self_
+
+vector_index_path: index.faiss
+docstore_path: meta.jsonl
+top_k: 5
+device: auto
