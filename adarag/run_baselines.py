@@ -304,7 +304,7 @@ def format_context(passages: List[Passage], max_chars: int) -> str:
 
 def prompt_no_retrieval(question: str) -> str:
     return (
-        'Answer the question. If you are not sure, say "I don\'t know".\n\n'
+        'Answer the question with ONLY the answer.. If you are not sure, say "I don\'t know".Do not explain.\n\n'
         f"Question: {question}\nAnswer:"
     )
 
