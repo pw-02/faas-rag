@@ -1,0 +1,1 @@
+import faasrag.protos.rag_pb2 as rag__pb2

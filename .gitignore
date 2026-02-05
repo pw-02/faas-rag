@@ -12,3 +12,5 @@ faiss_wiki_dpr/
 data/datasets
 data/indexes/wiki-dpr/hnsw_100k
 data/indexes/wiki-dpr/wiki-passages
+artifacts/
+ragservice.log

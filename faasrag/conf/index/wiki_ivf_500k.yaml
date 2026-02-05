@@ -1,0 +1,5 @@
+type: ivf
+path: /data/faiss/ivf_500k.faiss
+use_gpu: false
+metric: ip
+nprobe: 16

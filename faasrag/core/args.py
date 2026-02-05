@@ -1,6 +1,30 @@
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Literal, Optional, Union
+from dataclasses import dataclass, field
+from typing import Dict, Literal, Optional, Union
+
+
+IndexType = Literal["flat", "ivf", "hnsw"]
+Metric = Literal["ip", "l2"]
+    
+@dataclass
+class IndexConfig:
+    type: IndexType
+    path: str
+    metric: Metric = "ip"
+    use_gpu: bool = False
+    # IVF search-time
+    nprobe: int = 16
+    # HNSW search-time
+    ef_search: int = 64
+
+    # Reference to a docstore config (Hydra will select it)
+    docstore: Optional[str] = None  # e.g. "wiki_dpr_100k"
+
+
+
+
+
+
 
 # -------------------------
 # Cache
@@ -30,39 +54,23 @@ class ProximityCacheConfig:
 # -------------------------
 # Embedders
 # -------------------------
-Metric = Literal["ip", "l2"]
-
 @dataclass
-class DPRNQEmbedderConfig:
-    passage_encoder: str
-    question_encoder: str
-    metric: Metric
-    normalize: bool
-    dim: int
-    name: str = "dpr_nq_embedder"
+class DPREmbedderConfig:
+    type: str
+    passage_encoder_id: str
+    query_encoder_id: str
+    batch_size: int = 32
+
+    # normalize_embeddings: bool
+    # metric: Metric
+    # normalize: bool
+    # dim: int
 
     def __post_init__(self):
-        if self.dim <= 0:
-            raise ValueError("dim must be > 0")
-        if self.normalize:
+    #     if self.dim <= 0:
+    #         raise ValueError("dim must be > 0")
+        if self.normalize_embeddings:
             raise ValueError("DPR should use normalize=false (dot-product geometry)")
-
-
-@dataclass
-class DPRMultiSetEmbedderConfig:
-    passage_encoder: str
-    question_encoder: str
-    metric: Metric
-    normalize: bool
-    dim: int
-    name: str = "dpr_multiset_embedder"
-
-    def __post_init__(self):
-        if self.dim <= 0:
-            raise ValueError("dim must be > 0")
-        if self.normalize:
-            raise ValueError("DPR should use normalize=false (dot-product geometry)")
-
 
 @dataclass
 class SyntheticEmbedderConfig:
@@ -70,7 +78,7 @@ class SyntheticEmbedderConfig:
     sleep_time: float
     query_prefix: str
     passage_prefix: str
-    name: str = "synthetic_embedder"
+    batch_size: int = 32
 
     def __post_init__(self):
         if self.dim <= 0:
@@ -91,21 +99,19 @@ class GemmaEmbedderConfig:
 
 
 # If you want one wrapper config, do it as a tagged union.
-EmbedderType = Literal["dpr_nq", "dpr_multiset", "synthetic", "gemma"]
+EmbedderType = Literal["dpr", "synthetic", "gemma"]
 
 @dataclass
 class EmbedderConfig:
     type: EmbedderType
-    dpr_nq: Optional[DPRNQEmbedderConfig] = None
-    dpr_multiset: Optional[DPRMultiSetEmbedderConfig] = None
+    dpr: Optional[DPREmbedderConfig] = None
     synthetic: Optional[SyntheticEmbedderConfig] = None
     gemma: Optional[GemmaEmbedderConfig] = None
 
     def __post_init__(self):
         # Enforce exactly one sub-config present and matching `type`
         mapping = {
-            "dpr_nq": self.dpr_nq,
-            "dpr_multiset": self.dpr_multiset,
+            "dpr": self.dpr,
             "synthetic": self.synthetic,
             "gemma": self.gemma,
         }
@@ -149,14 +155,34 @@ class LlamaGeneratorConfig:
             print("⚠️ model_name does not look like an Instruct model")
 
 
-# faasrag/core/config_schema.py
+# -------------------------
+# DocStore
+# -------------------------
+DocSourceFormat = Literal["jsonl"]
+DocBackendKind = Literal["sqlite", "jsonl_offsets", "memory"]
+@dataclass
+class DocStoreConfig:
+    name: str
+    source_uri: str  # local path or s3://...
+    source_format: DocSourceFormat = "jsonl"
+    source_id_key: str = "pid"
+    source_title_key: str = "title"
+    source_text_key: str = "text"
+    backend_kind: DocBackendKind = "sqlite"
+
 
 @dataclass
 class RagServiceConfig:
     generator: LlamaGeneratorConfig
     embedder: EmbedderConfig
-    vector_index_path: str
-    docstore_path: str
+    index: IndexConfig
+    docstore: DocStoreConfig
+    artifact_dir: str
+    max_inflight: int = 64
+    num_workers: int = 1
+    host: str = "localhost"
+    port: int = 50051
+    log_level: str = "INFO"
     top_k: int = 5
     device: str = "auto"
     cache: Optional[ProximityCacheConfig] = None

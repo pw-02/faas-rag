@@ -1,0 +1,35 @@
+//python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. rag.proto
+
+
+syntax = "proto3";
+
+package rag;
+
+message RAGRequest {
+  string query = 1;
+  int32 k = 2;
+  int32 max_tokens = 3;
+  string query_class = 4; // "short" | "medium" | "long" (optional)
+}
+
+message Trace {
+  double retrieve_ms = 1;
+  double rerank_ms = 2;
+  double llm_queue_ms = 3;
+  double decode_ms = 4;
+
+  int32 k = 5;
+  int32 prompt_tokens = 6;
+  int32 output_tokens = 7;
+
+  repeated string retrieved_doc_ids = 8;
+}
+
+message RAGResponse {
+  string answer = 1;
+  Trace trace = 2;
+}
+
+service RAGService {
+  rpc Query(RAGRequest) returns (RAGResponse);
+}

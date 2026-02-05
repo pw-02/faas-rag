@@ -3,3 +3,7 @@ $env:PYTHONPATH=".;$env:PYTHONPATH"
 
 export PYTHONPATH=".:$PYTHONPATH"
 python data/datasets/download.py
+
+
+
+python  adarag/run_baselines.py --faiss_indexes faiss_wiki_dpr/ivf_100k faiss_wiki_dpr/ivf_500k faiss_wiki_dpr/ivf_1m faiss_wiki_dpr/ivf_2_5m faiss_wiki_dpr/ivf_5m

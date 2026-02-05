@@ -1,0 +1,5 @@
+type: hnsw
+path: /data/faiss/hnsw_500k.faiss
+use_gpu: false
+metric: ip
+ef_search: 64

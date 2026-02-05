@@ -1,2 +1,2 @@
-name: gemma300m 
+type: gemma300m 
 model_name: google/embeddinggemma-300m

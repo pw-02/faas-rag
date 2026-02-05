@@ -1,9 +1,18 @@
 defaults:
   - generator: llama3_8b_instruct
-  - embedder: dpr_nq
+  - embedder: dpr
+  - index: wiki_flat_100k
+  - docstore: wiki_dpr_100k
   - _self_
 
+host: localhost
+port: 50051
 vector_index_path: index.faiss
 docstore_path: meta.jsonl
 top_k: 5
-device: auto
+num_workers: 1
+max_inflight: 100
+
+device: null # "auto", "cpu", or "cuda"
+log_level: INFO
+artifact_dir: artifacts

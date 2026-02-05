@@ -1,158 +1,139 @@
-# embedders.py
-from __future__ import annotations
-
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import List, Optional
-import hashlib
-import time
+import threading
+from typing import List, Optional, Union
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-
-# -------------------------------
-# Base interface
-# -------------------------------
-class BaseEmbedder(ABC):
-    @abstractmethod
-    def embed_queries(self, queries: List[str]) -> np.ndarray:
-        ...
-
-    @abstractmethod
-    def embed_documents(self, texts: List[str]) -> np.ndarray:
-        ...
+from faasrag.core.args import (
+    EmbedderConfig,
+    DPREmbedderConfig,
+    SyntheticEmbedderConfig,
+    GemmaEmbedderConfig,
+)
 
 
-# -------------------------------
-# Synthetic embedder (benchmarking)
-# -------------------------------
-class SyntheticEmbedder(BaseEmbedder):
+# -------------------------
+# DPR Embedder
+# -------------------------
+
+class DPREmbedder:
     """
-    Synthetic embedder for benchmarking.
-
-    - Deterministic: same text -> same vector
-    - Optional sleep: simulate latency
-    - Configurable dim to match FAISS index dim
+    DPR-style dual encoder.
+    Uses dot-product retrieval => embeddings are NOT normalized.
     """
+
     def __init__(
         self,
-        dim: int,
+        device: str,
+        query_encoder_id: str,
+        passage_encoder_id: str,
+        batch_size: int = 32,
+        show_progress_bar: bool = False,
+    ):
+        self.name = "dpr"
+        self.device = device
+        self.query_encoder_id = query_encoder_id
+        self.passage_encoder_id = passage_encoder_id
+        self.batch_size = batch_size
+        self.show_progress_bar = show_progress_bar
+
+        self._query_model: Optional[SentenceTransformer] = None
+        self._passage_model: Optional[SentenceTransformer] = None
+        self._lock = threading.Lock()
+
+    def _load_query_model(self) -> SentenceTransformer:
+        if self._query_model is None:
+            with self._lock:
+                if self._query_model is None:
+                    model = SentenceTransformer(self.query_encoder_id, device=self.device)
+                    model.eval()
+                    self._query_model = model
+        return self._query_model
+
+    def _load_passage_model(self) -> SentenceTransformer:
+        if self._passage_model is None:
+            with self._lock:
+                if self._passage_model is None:
+                    model = SentenceTransformer(self.passage_encoder_id, device=self.device)
+                    model.eval()
+                    self._passage_model = model
+        return self._passage_model
+
+    def embed_queries(self, queries: List[str]) -> np.ndarray:
+        model = self._load_query_model()
+        emb = model.encode(
+            queries,
+            batch_size=self.batch_size,
+            convert_to_numpy=True,
+            normalize_embeddings=False,
+            show_progress_bar=self.show_progress_bar,
+        )
+        return emb.astype(np.float32, copy=False)
+
+    def embed_passages(self, passages: List[str]) -> np.ndarray:
+        model = self._load_passage_model()
+        emb = model.encode(
+            passages,
+            batch_size=self.batch_size,
+            convert_to_numpy=True,
+            normalize_embeddings=False,
+            show_progress_bar=self.show_progress_bar,
+        )
+        return emb.astype(np.float32, copy=False)
+
+
+# -------------------------
+# Synthetic Embedder
+# -------------------------
+
+class SyntheticEmbedder:
+    def __init__(
+        self,
         *,
-        normalize: bool = True,
-        sleep_seconds: float = 0.0,
-        seed: int = 0,
-        query_prefix: str = "query: ",
-        doc_prefix: str = "passage: ",
+        dim: int,
+        sleep_seconds: float,
+        query_prefix: str,
+        passage_prefix: str,
+        normalize: bool,
     ):
+        import hashlib, time
+
         self.dim = int(dim)
-        self.normalize = bool(normalize)
         self.sleep_seconds = float(sleep_seconds)
-        self.seed = int(seed)
         self.query_prefix = str(query_prefix)
-        self.doc_prefix = str(doc_prefix)
+        self.passage_prefix = str(passage_prefix)
+        self.normalize = bool(normalize)
+        self._hash = hashlib.blake2b
+        self._time = time
 
-    def _vec_for_text(self, t: str) -> np.ndarray:
-        # stable 32/64-bit seed from text
-        h = hashlib.blake2b(t.encode("utf-8"), digest_size=8).digest()
-        text_seed = int.from_bytes(h, "little", signed=False) ^ self.seed
-
-        rng = np.random.default_rng(text_seed)
+    def _vec(self, s: str) -> np.ndarray:
+        h = self._hash(s.encode("utf-8"), digest_size=8).digest()
+        seed = int.from_bytes(h, "little", signed=False)
+        rng = np.random.default_rng(seed)
         v = rng.standard_normal(self.dim, dtype=np.float32)
-
         if self.normalize:
-            n = np.linalg.norm(v)
-            if n > 0:
-                v = v / n
-        return v.astype(np.float32)
-
-    def _embed(self, texts: List[str], prefix: str) -> np.ndarray:
-        if self.sleep_seconds > 0:
-            time.sleep(self.sleep_seconds)
-
-        vecs = np.stack([self._vec_for_text(prefix + t) for t in texts], axis=0)
-        return vecs.astype(np.float32)
+            v /= (np.linalg.norm(v) + 1e-12)
+        return v
 
     def embed_queries(self, queries: List[str]) -> np.ndarray:
-        return self._embed(queries, prefix=self.query_prefix)
+        if self.sleep_seconds:
+            self._time.sleep(self.sleep_seconds)
+        return np.stack([self._vec(self.query_prefix + q) for q in queries])
 
-    def embed_documents(self, texts: List[str]) -> np.ndarray:
-        return self._embed(texts, prefix=self.doc_prefix)
-
-
-# -------------------------------
-# DPR embedder (NQ)
-# -------------------------------
-class DPREmbedderNQ(BaseEmbedder):
-    """
-    DPR encoders for NQ.
-    IMPORTANT: DPR uses dot-product (inner product) and MUST NOT normalize.
-    Compatible with facebook/wiki_dpr config: psgs_w100.nq.*
-    """
-    def __init__(
-        self,
-        device: str = "cpu",
-        # normalize: bool = False,
-        passage_format: str = "title_sep_text",
-    ):
-        """
-        passage_format:
-          - "title_sep_text": expects document strings already formatted like "title [SEP] text"
-          - "raw": expects raw strings as-is
-        """
-        self.device = device
-        # self.normalize = bool(normalize)  # keep configurable, but default False for DPR
-        self.passage_format = passage_format
-        self.question_encoder = None
-        self.question_encoder = self._load_question_encoder()
-        self.passage_encoder = None
-       
-    def _load_passage_encoder(self):
-        if self.passage_encoder is None:
-            self.passage_encoder = SentenceTransformer(
-                "facebook-dpr-ctx_encoder-single-nq-base",
-                device=self.device,
-            )
-
-    def _load_question_encoder(self):
-        if self.question_encoder is None:
-            self.question_encoder = SentenceTransformer(
-                "facebook-dpr-question_encoder-single-nq-base",
-                device=self.device,
-            )
-
-    def embed_queries(self, queries: List[str]) -> np.ndarray:
-
-        self._load_question_encoder()
-        return self.question_encoder.encode(
-            queries,
-            convert_to_numpy=True,
-            normalize_embeddings=False,  # default False
-        ).astype(np.float32)
-
-    def embed_documents(self, texts: List[str]) -> np.ndarray:
-        # If caller already formats passages as "title [SEP] text", pass them through.
-        # If you want to enforce formatting here, do it upstream where you still have title/text fields.
-        self._load_passage_encoder()
-        return self.passage_encoder.encode(
-            texts,
-            convert_to_numpy=True,
-            normalize_embeddings=False,  # default False
-        ).astype(np.float32)
+    def embed_passages(self, passages: List[str]) -> np.ndarray:
+        if self.sleep_seconds:
+            self._time.sleep(self.sleep_seconds)
+        return np.stack([self._vec(self.passage_prefix + t) for t in passages])
 
 
-# -------------------------------
-# Optional: EmbeddingGemma (cosine style)
-# -------------------------------
-class GemmaEmbedder(BaseEmbedder):
-    """
-    EmbeddingGemma is typically used with cosine similarity:
-      - normalize embeddings
-      - use IndexFlatIP (dot-product on normalized vectors == cosine)
-    """
-    def __init__(self, device: str = "cpu", model_name: str = "google/embeddinggemma-300m"):
-        self.device = device
-        self.model = SentenceTransformer(model_name, device=self.device)
+# -------------------------
+# Gemma Embedder
+# -------------------------
+
+class GemmaEmbedder:
+    def __init__(self, *, device: str, model_name: str):
+        self.model = SentenceTransformer(model_name, device=device)
+        self.model.eval()
 
     def embed_queries(self, queries: List[str]) -> np.ndarray:
         return self.model.encode(
@@ -161,46 +142,46 @@ class GemmaEmbedder(BaseEmbedder):
             normalize_embeddings=True,
         ).astype(np.float32)
 
-    def embed_documents(self, texts: List[str]) -> np.ndarray:
+    def embed_passages(self, passages: List[str]) -> np.ndarray:
         return self.model.encode(
-            texts,
+            passages,
             convert_to_numpy=True,
             normalize_embeddings=True,
         ).astype(np.float32)
 
 
-# -------------------------------
-# Factory
-# -------------------------------
-def load_embedder(
-    embedder_name: str,
-    device: str,
-    max_length: int = 512,  # reserved for future HF embedders
-    *,
-    delay_for_synthetic: float = 0.0,
-    dim_for_synthetic: int = 768,
-) -> BaseEmbedder:
-    """
-    embedder_name options (examples):
-      - "synthetic"
-      - "dpr_nq" or "dpr_qa"
-      - "gemma"
-    """
-    name = (embedder_name or "").lower().strip()
+# -------------------------
+# Builder
+# -------------------------
 
-    if name.startswith("synthetic"):
-        return SyntheticEmbedder(
-            dim=dim_for_synthetic,
-            normalize=True,
-            sleep_seconds=delay_for_synthetic,
+Embedder = Union[DPREmbedder, SyntheticEmbedder, GemmaEmbedder]
+
+
+def build_embedder(cfg: EmbedderConfig, device: str) -> Embedder:
+    if cfg.type == "dpr":
+        c: DPREmbedderConfig = cfg
+        return DPREmbedder(
+            device=device,
+            query_encoder_id=c.query_encoder_id,
+            passage_encoder_id=c.passage_encoder_id,
+            batch_size=c.batch_size,
         )
 
-    # DPR (NQ) — dot-product geometry, do NOT normalize
-    if name in {"dpr_nq", "dpr_qa", "dpr"}:
-        return DPREmbedderNQ(device=device)
+    if cfg.type == "synthetic":
+        c: SyntheticEmbedderConfig = cfg
+        return SyntheticEmbedder(
+            dim=c.dim,
+            sleep_seconds=c.sleep_time,
+            query_prefix=c.query_prefix,
+            passage_prefix=c.passage_prefix,
+            normalize=c.normalize,
+        )
 
-    # EmbeddingGemma — cosine workflow (normalize)
-    if name in {"gemma", "embeddinggemma", "gemma_300m"}:
-        return GemmaEmbedder(device=device)
+    if cfg.type == "gemma":
+        c: GemmaEmbedderConfig = cfg
+        return GemmaEmbedder(
+            device=device,
+            model_name=c.model_name,
+        )
 
-    raise ValueError(f"Unknown embedder_name: {embedder_name!r}")
+    raise ValueError(f"Unknown embedder type: {cfg.type!r}")
