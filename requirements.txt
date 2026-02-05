@@ -9,3 +9,4 @@ grpcio-tools
 pandas
 accelerate
 torch>=1.13.0
+boto3

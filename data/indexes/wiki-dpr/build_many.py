@@ -37,9 +37,9 @@ SIZES = [
 JOBS: list[tuple[str, list[str]]] = []
 
 # Optional Flat baseline (small sizes only)
-for tag, n in SIZES:
-    if n <= 1_000_000:
-        JOBS.append((f"flat_{tag}", ["--index_type", "flat_ip", "--n_vectors", str(n)]))
+# for tag, n in SIZES:
+#     if n <= 1_000_000:
+#         JOBS.append((f"flat_{tag}", ["--index_type", "flat_ip", "--n_vectors", str(n)]))
 
 # HNSW for all sizes
 def hnsw_params(n: int) -> tuple[str, str]:
@@ -59,17 +59,17 @@ def hnsw_params(n: int) -> tuple[str, str]:
 
 for tag, n in SIZES:
     batch, ef_search = hnsw_params(n)
-    JOBS.append((
-        f"hnsw_{tag}",
-        [
-            "--index_type", "hnsw_ip",
-            "--n_vectors", str(n),
-            "--batch_size", batch,
-            "--n_neighbors", "32",
-            "--ef_construction", "200",
-            "--ef_search", ef_search,
-        ],
-    ))
+    # JOBS.append((
+    #     f"hnsw_{tag}",
+    #     [
+    #         "--index_type", "hnsw_ip",
+    #         "--n_vectors", str(n),
+    #         "--batch_size", batch,
+    #         "--n_neighbors", "32",
+    #         "--ef_construction", "200",
+    #         "--ef_search", ef_search,
+    #     ],
+    # ))
 
 # IVF for all sizes
 def ivf_params(n: int) -> tuple[str, str, str, str]:
@@ -89,17 +89,18 @@ def ivf_params(n: int) -> tuple[str, str, str, str]:
 
 for tag, n in SIZES:
     n_lists, train_size, nprobe, batch = ivf_params(n)
-    JOBS.append((
-        f"ivf_{tag}",
-        [
-            "--index_type", "ivf_ip",
-            "--n_vectors", str(n),
-            "--batch_size", batch,
-            "--n_lists", n_lists,
-            "--train_size", train_size,
-            "--nprobe", nprobe,
-        ],
-    ))
+    if n>=10_000_000:
+        JOBS.append((
+            f"ivf_{tag}",
+            [
+                "--index_type", "ivf_ip",
+                "--n_vectors", str(n),
+                "--batch_size", batch,
+                "--n_lists", n_lists,
+                "--train_size", train_size,
+                "--nprobe", nprobe,
+            ],
+        ))
 
 # ---------------- metrics helpers ----------------
 
