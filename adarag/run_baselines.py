@@ -520,8 +520,11 @@ def main():
             # "faiss_wiki_dpr/flat_5m",
             "faiss_wiki_dpr/hnsw_5m",
             "faiss_wiki_dpr/ivf_5m",
+            # "faiss_wiki_dpr/flat_10m",
+            "faiss_wiki_dpr/hnsw_10m",
+            "faiss_wiki_dpr/ivf_10m",
         ],
-        default="faiss_wiki_dpr/hnsw_5m",
+        default="faiss_wiki_dpr/hnsw_10m",
     )
 
     # Make passage_store optional; default=None means "infer it"
