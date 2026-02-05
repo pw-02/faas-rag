@@ -491,55 +491,57 @@ def infer_passage_store_from_index(faiss_index: str) -> str:
 
 
 def main():
-
-
-
-    run_date_time_now  = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_date_time_now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     ap = argparse.ArgumentParser()
 
     ap.add_argument("--s3_bucket", required=False, default="vectorindexes")
     ap.add_argument("--s3_prefix", required=False, default="wiki-dpr")
 
-    # IMPORTANT: treat these as "paths relative to s3_prefix" (logical names), not local paths
+    INDEX_CHOICES = [
+        "faiss_wiki_dpr/flat_100k",
+        "faiss_wiki_dpr/hnsw_100k",
+        "faiss_wiki_dpr/ivf_100k",
+        "faiss_wiki_dpr/flat_500k",
+        "faiss_wiki_dpr/hnsw_500k",
+        "faiss_wiki_dpr/ivf_500k",
+        "faiss_wiki_dpr/flat_1m",
+        "faiss_wiki_dpr/hnsw_1m",
+        "faiss_wiki_dpr/ivf_1m",
+        "faiss_wiki_dpr/hnsw_2_5m",
+        "faiss_wiki_dpr/ivf_2_5m",
+        "faiss_wiki_dpr/hnsw_5m",
+        "faiss_wiki_dpr/ivf_5m",
+        "faiss_wiki_dpr/hnsw_10m",
+        "faiss_wiki_dpr/ivf_10m",
+    ]
+
+    # NEW: multiple indexes
     ap.add_argument(
-        "--faiss_index",
-        required=False,
-        choices=[
-            "faiss_wiki_dpr/flat_100k",
-            "faiss_wiki_dpr/hnsw_100k",
-            "faiss_wiki_dpr/ivf_100k",
-            "faiss_wiki_dpr/flat_500k",
-            "faiss_wiki_dpr/hnsw_500k",
-            "faiss_wiki_dpr/ivf_500k",
-            "faiss_wiki_dpr/flat_1m",
-            "faiss_wiki_dpr/hnsw_1m",
-            "faiss_wiki_dpr/ivf_1m",
-            # "faiss_wiki_dpr/flat_2_5m",
-            "faiss_wiki_dpr/hnsw_2_5m",
-            "faiss_wiki_dpr/ivf_2_5m",
-            # "faiss_wiki_dpr/flat_5m",
-            "faiss_wiki_dpr/hnsw_5m",
-            "faiss_wiki_dpr/ivf_5m",
-            # "faiss_wiki_dpr/flat_10m",
-            "faiss_wiki_dpr/hnsw_10m",
-            "faiss_wiki_dpr/ivf_10m",
-        ],
-        default="faiss_wiki_dpr/hnsw_10m",
+        "--faiss_indexes",
+        nargs="+",
+        choices=INDEX_CHOICES,
+        default=["faiss_wiki_dpr/flat_100k"],
+        help="One or more FAISS indexes (relative to s3_prefix).",
     )
 
-    # Make passage_store optional; default=None means "infer it"
+    # Optional: if omitted, infer per index
     ap.add_argument(
         "--passage_store",
         required=False,
         default=None,
-        help="If omitted, inferred from --faiss_index (e.g. *_500k -> wiki-passages/500k).",
+        help="If omitted, inferred from each index (e.g. *_500k -> wiki-passages/500k).",
     )
-    # local_dir is the root under which we mirror S3 keys
+
     ap.add_argument("--local_dir", required=False, default="data/indexes")
     ap.add_argument("--queries", required=False, default="data/datasets/qa/nq/nq_dev.jsonl")
 
     ap.add_argument("--encoder", required=False, default="facebook-dpr-question_encoder-single-nq-base")
-    ap.add_argument("--generator", required=False, default="meta-llama/Llama-3.1-8B-Instruct", help="e.g., Qwen/Qwen2.5-3B-Instruct, meta-llama/Llama-3.1-8B-Instruct")
+    ap.add_argument(
+        "--generator",
+        required=False,
+        default="meta-llama/Llama-3.1-8B-Instruct",
+        help="e.g., Qwen/Qwen2.5-3B-Instruct, meta-llama/Llama-3.1-8B-Instruct",
+    )
 
     ap.add_argument("--ks", nargs="+", type=int, default=[0, 1, 5, 20])
     ap.add_argument("--limit", type=int, default=200)
@@ -547,93 +549,101 @@ def main():
     ap.add_argument("--max_new_tokens", type=int, default=64)
     ap.add_argument("--device", default=None, help="e.g., cpu, cuda")
     ap.add_argument("--show_examples", type=int, default=5)
-    ap.add_argument("--save_dir", default=None)
+    ap.add_argument(
+        "--save_root",
+        default="adarag/results",
+        help="Root output dir. Per-index subfolders will be created under this.",
+    )
     ap.add_argument("--seed", type=int, default=0)
 
     args = ap.parse_args()
     args.device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
-    
-    if args.passage_store is None:
-        args.passage_store = infer_passage_store_from_index(args.faiss_index)
 
-    # Decide whether we even need retrieval
-    need_retrieval = any(k > 0 for k in args.ks)
-
-    local_faiss_index_path = None
-    local_passage_store_path = None
-
-    if need_retrieval:
-        # Download from S3
-        index_prefix = f"{args.s3_prefix}/{args.faiss_index}".rstrip("/")
-        passages_prefix = f"{args.s3_prefix}/{args.passage_store}".rstrip("/")
-
-        s3_download_prefix(args.s3_bucket, index_prefix, args.local_dir, skip_existing=True)
-        s3_download_prefix(args.s3_bucket, passages_prefix, args.local_dir, skip_existing=True)
-
-        # Resolve local filesystem paths
-        local_index_dir = os.path.join(args.local_dir, args.s3_prefix, args.faiss_index)
-        local_passages_dir_or_file = os.path.join(args.local_dir, args.s3_prefix, args.passage_store)
-
-        local_faiss_index_path = resolve_faiss_index_path(local_index_dir)
-        local_passage_store_path = resolve_passage_store_path(local_passages_dir_or_file)
-
+    # Load data + generator ONCE (big speed win)
     examples = load_jsonl(args.queries, limit=args.limit)
 
-    # Generator always needed
     gen = LocalGenerator(
         model_name_or_path=args.generator,
         device=args.device,
         max_new_tokens=args.max_new_tokens,
     )
 
-    # Retriever only if needed
-    retriever = None
-    if need_retrieval:
-        retriever = STRetriever(
-            faiss_index_path=local_faiss_index_path,
-            passage_store_path=local_passage_store_path,
-            encoder_name_or_path=args.encoder,
-            device=args.device,
+    all_indexes_compact = []
+
+    for faiss_index in args.faiss_indexes:
+        print("\n" + "#" * 90)
+        print(f"Running index: {faiss_index}")
+        print("#" * 90)
+
+        # Infer passage store PER index unless user forced a single one
+        passage_store = args.passage_store or infer_passage_store_from_index(faiss_index)
+
+        need_retrieval = any(k > 0 for k in args.ks)
+
+        local_faiss_index_path = None
+        local_passage_store_path = None
+        retriever = None
+
+        if need_retrieval:
+            index_prefix = f"{args.s3_prefix}/{faiss_index}".rstrip("/")
+            passages_prefix = f"{args.s3_prefix}/{passage_store}".rstrip("/")
+
+            s3_download_prefix(args.s3_bucket, index_prefix, args.local_dir, skip_existing=True)
+            s3_download_prefix(args.s3_bucket, passages_prefix, args.local_dir, skip_existing=True)
+
+            local_index_dir = os.path.join(args.local_dir, args.s3_prefix, faiss_index)
+            local_passages_dir_or_file = os.path.join(args.local_dir, args.s3_prefix, passage_store)
+
+            local_faiss_index_path = resolve_faiss_index_path(local_index_dir)
+            local_passage_store_path = resolve_passage_store_path(local_passages_dir_or_file)
+
+            retriever = STRetriever(
+                faiss_index_path=local_faiss_index_path,
+                passage_store_path=local_passage_store_path,
+                encoder_name_or_path=args.encoder,
+                device=args.device,
+            )
+
+        per_index_results = []
+        for k in args.ks:
+            res = run_setting(
+                examples=examples,
+                retriever=retriever,
+                gen=gen,
+                k=k,
+                max_ctx_chars=args.max_ctx_chars,
+                show_examples=args.show_examples,
+                seed=args.seed,
+            )
+            per_index_results.append(res)
+
+        # Print per-index summary table
+        print("\n" + "#" * 90)
+        print(f"Summary for index: {faiss_index}")
+        print(f"{'k':>4} {'N':>6} {'EM':>8} {'F1':>8} {'avg_gen_tok':>12} {'avg_ret_calls':>14}")
+        for r in per_index_results:
+            print(
+                f"{r['k']:>4} {r['N']:>6} {r['EM']:>8.4f} {r['F1']:>8.4f} "
+                f"{r['avg_gen_tokens']:>12.1f} {r['avg_retrieval_calls']:>14.3f}"
+            )
+
+        # Save per-index results into a dedicated folder
+        index_tag = faiss_index.replace("/", "__")
+        save_dir = os.path.join(
+            args.save_root,
+            f"{index_tag}__{os.path.basename(args.generator).rsplit('/',1)[-1]}__{os.path.basename(args.queries).rsplit('.',1)[0]}"
         )
+        os.makedirs(save_dir, exist_ok=True)
 
-    all_results = []
-    for k in args.ks:
-        res = run_setting(
-            examples=examples,
-            retriever=retriever,
-            gen=gen,
-            k=k,
-            max_ctx_chars=args.max_ctx_chars,
-            show_examples=args.show_examples,
-            seed=args.seed,
-        )
-        all_results.append(res)
-
-    # Print summary table
-    print("\n" + "#" * 90)
-    print("Summary (higher EM/F1 better, lower cost better)")
-    print(f"{'k':>4} {'N':>6} {'EM':>8} {'F1':>8} {'avg_gen_tok':>12} {'avg_ret_calls':>14}")
-    for r in all_results:
-        print(
-            f"{r['k']:>4} {r['N']:>6} {r['EM']:>8.4f} {r['F1']:>8.4f} "
-            f"{r['avg_gen_tokens']:>12.1f} {r['avg_retrieval_calls']:>14.3f}"
-        )
-
-    # Save
-    if not args.save_dir:
-        #make save dir named ofter index, generator, and query file
-        args.save_dir = f"adarag/results/{os.path.basename(args.faiss_index).rsplit('.',1)[0]}_{os.path.basename(args.generator).rsplit('.',1)[0]}_{os.path.basename(args.queries).rsplit('.',1)[0]}"
-
-    if args.save_dir:
-        os.makedirs(args.save_dir, exist_ok=True)
-        file_name = f"baseline_results_{os.path.basename(args.queries).rsplit('.',1)[0]}_{run_date_time_now}.json"
-        summary_path = os.path.join(args.save_dir, file_name)
+        file_name = f"baseline_results_{run_date_time_now}.json"
+        summary_path = os.path.join(save_dir, file_name)
         with open(summary_path, "w", encoding="utf-8") as f:
-            json.dump(all_results, f, ensure_ascii=False, indent=2)
+            json.dump(per_index_results, f, ensure_ascii=False, indent=2)
         print(f"\nSaved full results to: {summary_path}")
 
         compact = [
             {
+                "index": faiss_index,
                 "k": r["k"],
                 "N": r["N"],
                 "EM": r["EM"],
@@ -641,12 +651,23 @@ def main():
                 "avg_gen_tokens": r["avg_gen_tokens"],
                 "avg_retrieval_calls": r["avg_retrieval_calls"],
             }
-            for r in all_results
+            for r in per_index_results
         ]
-        compact_path = os.path.join(args.save_dir, f"compact_{os.path.basename(args.queries).rsplit('.',1)[0]}_{run_date_time_now}.json")
+        compact_path = os.path.join(save_dir, f"compact_{run_date_time_now}.json")
         with open(compact_path, "w", encoding="utf-8") as f:
             json.dump(compact, f, ensure_ascii=False, indent=2)
         print(f"Saved compact summary to: {compact_path}")
+
+        all_indexes_compact.extend(compact)
+
+    # Save one combined compact file across all indexes
+    combined_dir = os.path.join(args.save_root, "combined")
+    os.makedirs(combined_dir, exist_ok=True)
+    combined_path = os.path.join(combined_dir, f"all_indexes_compact_{run_date_time_now}.json")
+    with open(combined_path, "w", encoding="utf-8") as f:
+        json.dump(all_indexes_compact, f, ensure_ascii=False, indent=2)
+    print(f"\nSaved combined compact summary to: {combined_path}")
+
 
 if __name__ == "__main__":
     main()
