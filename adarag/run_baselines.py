@@ -481,6 +481,12 @@ def infer_passage_store_from_index(faiss_index: str) -> str:
         return "wiki-passages/500k"
     if faiss_index.endswith("_1m"):
         return "wiki-passages/1m"
+    if faiss_index.endswith("_2_5m"):
+        return "wiki-passages/2_5m"
+    if faiss_index.endswith("_5m"):
+        return "wiki-passages/5m"
+    if faiss_index.endswith("_10m"):
+        return "wiki-passages/10m"
     raise ValueError(f"Unknown index size in faiss_index: {faiss_index}")
 
 
@@ -508,8 +514,10 @@ def main():
             "faiss_wiki_dpr/flat_1m",
             "faiss_wiki_dpr/hnsw_1m",
             "faiss_wiki_dpr/ivf_1m",
+            # "faiss_wiki_dpr/flat_2_5m",
+            "faiss_wiki_dpr/hnsw_2_5m",
         ],
-        default="faiss_wiki_dpr/hnsw_1m",
+        default="faiss_wiki_dpr/hnsw_2_5m",
     )
 
     # Make passage_store optional; default=None means "infer it"
