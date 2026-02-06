@@ -144,10 +144,13 @@ async def _wait_for_service_ready(target: str, timeout_s: float = 120.0) -> None
     """
     Poll the service by calling Ping() with a short timeout until it responds with ok=True.
     """
+    #set no timeout for now
+    
     deadline = time.time() + timeout_s
     last_err: Optional[str] = None
-
-    while time.time() < deadline:
+    
+    #set no timeout for now
+    while True: #time.time() < deadline:
         try:
             async with grpc.aio.insecure_channel(target) as channel:
                 stub = rag_pb2_grpc.RAGServiceStub(channel)
@@ -159,7 +162,7 @@ async def _wait_for_service_ready(target: str, timeout_s: float = 120.0) -> None
                 last_err = "Ping returned ok=false"
         except Exception as e:
             last_err = f"{type(e).__name__}: {e}"
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(5)
 
     raise TimeoutError(
         f"Service not ready at {target} after {timeout_s}s. Last error: {last_err}"
@@ -179,13 +182,13 @@ def wait_for_service_ready_sync(target: str, timeout_s: float) -> None:
 
 def build_experiments() -> List[Dict[str, object]]:
     return [
-        {"name": "wiki_faiss_flat_100k",  "overrides": ["index=wiki_faiss_flat_100k", "docstore=wiki_dpr_100k"]},
-        {"name": "wiki_faiss_ivf_100k",   "overrides": ["index=wiki_faiss_ivf_100k", "docstore=wiki_dpr_100k"]},
-        {"name": "wiki_faiss_hnsw_100k",  "overrides": ["index=wiki_faiss_hnsw_100k", "docstore=wiki_dpr_100k"]},
+        # {"name": "wiki_faiss_flat_100k",  "overrides": ["index=wiki_faiss_flat_100k", "docstore=wiki_dpr_100k"]},
+        # {"name": "wiki_faiss_ivf_100k",   "overrides": ["index=wiki_faiss_ivf_100k", "docstore=wiki_dpr_100k"]},
+        # {"name": "wiki_faiss_hnsw_100k",  "overrides": ["index=wiki_faiss_hnsw_100k", "docstore=wiki_dpr_100k"]},
         
-        {"name": "wiki_faiss_flat_500k",  "overrides": ["index=wiki_faiss_flat_500k", "docstore=wiki_dpr_500k"]},
-        {"name": "wiki_faiss_hnsw_500k",  "overrides": ["index=wiki_faiss_hnsw_500k", "docstore=wiki_dpr_500k"]},
-        {"name": "wiki_faiss_ivf_500k",  "overrides": ["index=wiki_faiss_ivf_500k", "docstore=wiki_dpr_500k"]},
+        # {"name": "wiki_faiss_flat_500k",  "overrides": ["index=wiki_faiss_flat_500k", "docstore=wiki_dpr_500k"]},
+        # {"name": "wiki_faiss_hnsw_500k",  "overrides": ["index=wiki_faiss_hnsw_500k", "docstore=wiki_dpr_500k"]},
+        # {"name": "wiki_faiss_ivf_500k",  "overrides": ["index=wiki_faiss_ivf_500k", "docstore=wiki_dpr_500k"]},
 
         {"name": "wiki_faiss_flat_1m",  "overrides": ["index=wiki_faiss_flat_1m", "docstore=wiki_dpr_1m"]},
         {"name": "wiki_faiss_hnsw_1m",  "overrides": ["index=wiki_faiss_hnsw_1m", "docstore=wiki_dpr_1m"]},
@@ -195,11 +198,11 @@ def build_experiments() -> List[Dict[str, object]]:
         {"name": "wiki_faiss_ivf_2_5m",  "overrides": ["index=wiki_faiss_ivf_2_5m", "docstore=wiki_dpr_2_5m"]},
 
         
-        {"name": "wiki_faiss_hnsw_5m",  "overrides": ["index=wiki_faiss_hnsw_5m", "docstore=wiki_dpr_5m"]},
-        {"name": "wiki_faiss_ivf_5m",  "overrides": ["index=wiki_faiss_ivf_5m", "docstore=wiki_dpr_5m"]},
+        # {"name": "wiki_faiss_hnsw_5m",  "overrides": ["index=wiki_faiss_hnsw_5m", "docstore=wiki_dpr_5m"]},
+        # {"name": "wiki_faiss_ivf_5m",  "overrides": ["index=wiki_faiss_ivf_5m", "docstore=wiki_dpr_5m"]},
        
-        {"name": "wiki_faiss_hnsw_21m",  "overrides": ["index=wiki_faiss_hnsw_21m", "docstore=wiki_dpr_21m"]},
-        {"name": "wiki_faiss_hnsw_10m",  "overrides": ["index=wiki_faiss_hnsw_10m", "docstore=wiki_dpr_10m"]},
+        # {"name": "wiki_faiss_hnsw_21m",  "overrides": ["index=wiki_faiss_hnsw_21m", "docstore=wiki_dpr_21m"]},
+        # {"name": "wiki_faiss_hnsw_10m",  "overrides": ["index=wiki_faiss_hnsw_10m", "docstore=wiki_dpr_10m"]},
 
         #not yet created!
 
