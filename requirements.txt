@@ -3,7 +3,7 @@ faiss-cpu
 transformers
 sentence_transformers
 psutil
-hydra-core==1.1.2
+hydra-core
 grpcio
 grpcio-tools
 pandas

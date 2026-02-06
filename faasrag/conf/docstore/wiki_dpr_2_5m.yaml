@@ -1,0 +1,14 @@
+name: wiki_dpr_2_5m
+
+# Source corpus (truth)
+source_uri: s3://vectorindexes/wiki-dpr/wiki-passages/2_5m/meta_psgs_w100_nq_no_index_2500000_text.jsonl
+source_format: jsonl
+
+# Field mapping inside JSONL
+source_id_key: faiss_id
+source_title_key: title
+source_text_key: text
+
+# 'sqlite', 'jsonl_offsets' for simple local file with offsets, 'memory' for in-memory (not recommended for large corpora)
+backend_kind: memory # sqlite, jsonl_offsets, memory
+

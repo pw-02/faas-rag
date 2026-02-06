@@ -2,6 +2,7 @@ $env:PYTHONPATH=".;$env:PYTHONPATH"
 
 
 export PYTHONPATH=".:$PYTHONPATH"
+python faasrag/experiments/sweep_runner.py
 python data/datasets/download.py
 
 

@@ -179,9 +179,35 @@ def wait_for_service_ready_sync(target: str, timeout_s: float) -> None:
 
 def build_experiments() -> List[Dict[str, object]]:
     return [
-        {"name": "wiki_flat_100k",        "overrides": ["index=wiki_flat_100k",       "docstore=wiki_dpr_100k"]},
-        {"name": "wiki_faiss_ivf_100k",   "overrides": ["index=wiki_faiss_ivf_100k",  "docstore=wiki_dpr_100k"]},
+        {"name": "wiki_faiss_flat_100k",  "overrides": ["index=wiki_faiss_flat_100k", "docstore=wiki_dpr_100k"]},
+        {"name": "wiki_faiss_ivf_100k",   "overrides": ["index=wiki_faiss_ivf_100k", "docstore=wiki_dpr_100k"]},
         {"name": "wiki_faiss_hnsw_100k",  "overrides": ["index=wiki_faiss_hnsw_100k", "docstore=wiki_dpr_100k"]},
+        
+        {"name": "wiki_faiss_flat_500k",  "overrides": ["index=wiki_faiss_flat_500k", "docstore=wiki_dpr_500k"]},
+        {"name": "wiki_faiss_hnsw_500k",  "overrides": ["index=wiki_faiss_hnsw_500k", "docstore=wiki_dpr_500k"]},
+        {"name": "wiki_faiss_ivf_500k",  "overrides": ["index=wiki_faiss_ivf_500k", "docstore=wiki_dpr_500k"]},
+
+        {"name": "wiki_faiss_flat_1m",  "overrides": ["index=wiki_faiss_flat_1m", "docstore=wiki_dpr_1m"]},
+        {"name": "wiki_faiss_hnsw_1m",  "overrides": ["index=wiki_faiss_hnsw_1m", "docstore=wiki_dpr_1m"]},
+        {"name": "wiki_faiss_ivf_1m",  "overrides": ["index=wiki_faiss_ivf_1m", "docstore=wiki_dpr_1m"]},
+
+        # {"name": "wiki_faiss_flat_2_5m",  "overrides": ["index=wiki_faiss_flat_1m", "docstore=wiki_dpr_2_5m"]},
+        {"name": "wiki_faiss_hnsw_2_5m",  "overrides": ["index=wiki_faiss_hnsw_2_5m", "docstore=wiki_dpr_2_5m"]},
+        {"name": "wiki_faiss_ivf_2_5m",  "overrides": ["index=wiki_faiss_ivf_2_5m", "docstore=wiki_dpr_2_5m"]},
+
+        
+        # {"name": "wiki_faiss_flat_5m",  "overrides": ["index=wiki_faiss_flat_5m", "docstore=wiki_dpr_5m"]},
+        {"name": "wiki_faiss_hnsw_5m",  "overrides": ["index=wiki_faiss_hnsw_5m", "docstore=wiki_dpr_5m"]},
+        {"name": "wiki_faiss_ivf_5m",  "overrides": ["index=wiki_faiss_ivf_5m", "docstore=wiki_dpr_5m"]},
+
+        # {"name": "wiki_faiss_flat_10m",  "overrides": ["index=wiki_faiss_flat_10m", "docstore=wiki_dpr_10m"]},
+        # {"name": "wiki_faiss_hnsw_10m",  "overrides": ["index=wiki_faiss_hnsw_10m", "docstore=wiki_dpr_10m"]},
+        # {"name": "wiki_faiss_ivf_10m",  "overrides": ["index=wiki_faiss_ivf_10m", "docstore=wiki_dpr_10m"]},
+
+        # {"name": "wiki_faiss_flat_21m",  "overrides": ["index=wiki_faiss_flat_21m", "docstore=wiki_dpr_21m"]},
+        # {"name": "wiki_faiss_hnsw_21m",  "overrides": ["index=wiki_faiss_hnsw_21m", "docstore=wiki_dpr_21m"]},
+        # {"name": "wiki_faiss_ivf_21m",  "overrides": ["index=wiki_faiss_ivf_21m", "docstore=wiki_dpr_21m"]},
+
     ]
 
 

@@ -1,0 +1,9 @@
+# defaults:
+#   - /docstore: wiki_dpr_100k
+#   - _self_
+
+type: flat
+path: s3://vectorindexes/wiki-dpr/faiss_wiki_dpr/flat_1m/index_psgs_w100_nq_no_index_flat_ip_1000000.faiss
+use_gpu: false
+metric: ip
+docstore: wiki_dpr_100k   # reference by name
