@@ -37,13 +37,13 @@ def get_resource_snapshot() -> dict[str, float]:
 
     snap: dict[str, float] = {
         # Process
-        "proc_rss_mb": proc.memory_info().rss / 1024 / 1024,
+        "proc_rss_gb": proc.memory_info().rss / 1024 / 1024 / 1024,
         "proc_cpu_percent": proc.cpu_percent(interval=None),
 
        # System
-        "system_mem_total_mb": vm.total / 1024 / 1024,
-        "system_mem_available_mb": vm.available / 1024 / 1024,
-        "system_mem_used_mb": vm.used / 1024 / 1024,
+        "system_mem_total_gb": vm.total / 1024 / 1024 / 1024,
+        "system_mem_available_gb": vm.available / 1024 / 1024 / 1024,
+        "system_mem_used_gb": vm.used / 1024 / 1024 / 1024,
         "system_mem_percent": vm.percent,
 
         "system_cpu_percent": psutil.cpu_percent(interval=None),
@@ -62,8 +62,8 @@ def get_resource_snapshot() -> dict[str, float]:
             snap.update(
                 {
                     "gpu_util_percent": float(util.gpu),
-                    "gpu_mem_used_mb": mem.used / 1024 / 1024,
-                    "gpu_mem_total_mb": mem.total / 1024 / 1024,
+                    "gpu_mem_used_gb": mem.used / 1024 / 1024 / 1024,
+                    "gpu_mem_total_gb": mem.total / 1024 / 1024 / 1024,
                     "gpu_temp_c": float(temp),
                 }
             )
