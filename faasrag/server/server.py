@@ -172,39 +172,38 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
                 prompt_tokens = int(result.get("prompt_tokens", 0) or 0)
                 output_tokens = int(result.get("output_tokens", 0) or 0)
 
-                # Pipeline stage timings are in seconds (your RagPipeline.run contract)
-                timings_s = result.get("timings_s") or {}
-                retrieval_s = float(timings_s.get("total_retrieval_s", 0.0))
-                decode_s = float(timings_s.get("decode_s", 0.0))
+                # Pipeline stage timings are in seconds
+                raw_timings = result.get("timings_s") or {}
+                timings_s: dict[str, float] = {k: float(v) for k, v in raw_timings.items()}
+
+                # Add service-level timings for trace visibility
+                timings_s["queue_s"] = float(queue_s)
+                timings_s["e2e_s"] = float(e2e_s)
+
                 cache_hits = int(result.get("cache_hits", 0))
                 cache_misses = int(result.get("cache_misses", 0))
                 cache_used = bool(result.get("cache_used", False))
 
                 # Optional: log e2e + queue for debugging
                 self.logger.debug(
-                    "req done worker=%d queue_s=%.2f e2e_s=%.2f retrieve_s=%.2f decode_s=%.2f",
-                    worker_id,
-                    queue_s,
-                    e2e_s,
-                    retrieval_s,
-                    decode_s,
+                "req done worker=%d queue_s=%.3f e2e_s=%.3f retrieval_s=%.3f decode_s=%.3f",
+                worker_id,
+                timings_s.get("queue_s", 0.0),
+                timings_s.get("e2e_s", 0.0),
+                timings_s.get("total_retrieval_s", 0.0),
+                timings_s.get("decode_s", 0.0),
                 )
-
-                #add e2e and queue time to timings_s for better visibility in the trace
-                timings_s["queue_s"] = queue_s
-                timings_s["e2e_s"] = e2e_s
 
                 trace = rag_pb2.Trace(
                     timings_s=timings_s,
                     cache_hits=cache_hits,
                     cache_misses=cache_misses,
                     cache_used=cache_used,
-                    k=top_k,
-                    prompt_tokens=prompt_tokens,
-                    output_tokens=output_tokens,
+                    k=int(top_k),
+                    prompt_tokens=int(prompt_tokens),
+                    output_tokens=int(output_tokens),
                     retrieved_doc_ids=retrieved_doc_ids,
                 )
-
                 if not job.future.done():
                     job.future.set_result(rag_pb2.RAGResponse(answer=answer, trace=trace))
 

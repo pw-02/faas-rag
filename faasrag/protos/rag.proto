@@ -1,6 +1,5 @@
 //python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. rag.proto
 
-
 syntax = "proto3";
 
 package rag;
@@ -9,15 +8,22 @@ message RAGRequest {
   string query = 1;
   int32 k = 2;
   int32 max_tokens = 3;
-  string query_class = 4; // "short" | "medium" | "long" (optional)
+  string query_class = 4; // optional hint ("short", "medium", "long")
 }
 
 message Trace {
-  double retrieve_ms = 1;
-  double rerank_ms = 2;
-  double llm_queue_ms = 3;
-  double decode_ms = 4;
+  // Flexible timing breakdown (ALL IN SECONDS)
+  // Typical keys:
+  // embed_s, ann_s, docstore_s, total_retrieval_s,
+  // prompt_s, decode_s, total_s, queue_s, e2e_s
+  map<string, double> timings_s = 1;
 
+  // Cache stats (per request)
+  bool cache_used = 2;
+  int32 cache_hits = 3;
+  int32 cache_misses = 4;
+
+  // Request metadata
   int32 k = 5;
   int32 prompt_tokens = 6;
   int32 output_tokens = 7;
