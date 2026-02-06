@@ -19,11 +19,10 @@ seed: 42
 
 prompt_type: rag_open   # "llm_only", "rag_strict", "rag_open"
 max_ctx_chars: 4000
-
 telemetry:
   enabled: true
   interval_s: 3
-  path: resource_usage.jsonl
+  path: exp_results/resource_usage.jsonl
 
 
 

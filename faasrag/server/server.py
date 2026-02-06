@@ -20,7 +20,8 @@ from faasrag.core.resource_usage import resource_monitor_loop
 
 def setup_logger(
     name: str,
-    log_file: str = "ragservice.log",
+    log_to_file: bool = False,
+    log_file: str = "rag_service.log",
     level: int = logging.INFO,
 ) -> logging.Logger:
     logger = logging.getLogger(name)
@@ -34,7 +35,7 @@ def setup_logger(
         ch.setFormatter(formatter)
         logger.addHandler(ch)
 
-        if log_file:
+        if log_to_file and log_file:
             fh = logging.FileHandler(log_file, mode="w", encoding="utf-8")
             fh.setLevel(level)
             fh.setFormatter(formatter)
@@ -64,7 +65,6 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
     - Query() enqueues a job and awaits completion
     - background worker(s) pop jobs and run RagPipeline in a thread
     """
-
     def __init__(
         self,
         cfg: RagServiceConfig,
@@ -92,6 +92,7 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
             prompt_type=cfg.prompt_type,
             max_ctx_chars=cfg.max_ctx_chars,
             seed=cfg.seed,
+            logger=self.logger,
         )
 
         self._num_workers = max(1, int(num_workers))

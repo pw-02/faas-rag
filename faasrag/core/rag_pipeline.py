@@ -49,7 +49,7 @@ class RagPipeline:
         retrieve_only: bool = False,
         seed: Optional[int] = None,
     ):
-        self.logger = logger or logging.getLogger("rag_pipeline")
+        self.logger = logger or logging.getLogger("rag_service")
 
         self.retrieve_only = bool(retrieve_only)
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -178,16 +178,16 @@ class RagPipeline:
 
                 retrieved_doc_ids = [str(p.pid) for p in passages]
         
-            timings["total_retrieval_s"] = (
-                timings.get("embed_s", 0.0)
-                + timings.get("ann_s", 0.0)
-                + timings.get("docstore_s", 0.0)
-            )
+            # timings["total_retrieval_s"] = (
+            #     timings.get("embed_s", 0.0)
+            #     + timings.get("ann_s", 0.0)
+            #     + timings.get("docstore_s", 0.0)
+            # )
         else:
             timings["embed_s"] = 0.0
             timings["ann_s"] = 0.0
             timings["docstore_s"] = 0.0
-            timings["total_retrieval_s"] = 0.0
+            timings["pipeline_s"] = 0.0
         
         # -------------------------
         # Early exit (retrieve-only)
@@ -196,13 +196,13 @@ class RagPipeline:
             timings["prompt_s"] = 0.0
             timings["decode_s"] = 0.0
 
-            # timings["total_s"] = (
-            #     timings.get("embed_s", 0.0)
-            #     + timings.get("ann_s", 0.0)
-            #     + timings.get("docstore_s", 0.0)
-            #     + timings.get("prompt_s", 0.0)
-            #     + timings.get("decode_s", 0.0)
-            #     )
+            timings["pipeline_s"] = (
+                timings.get("embed_s", 0.0)
+                + timings.get("ann_s", 0.0)
+                + timings.get("docstore_s", 0.0)
+                + timings.get("prompt_s", 0.0)
+                + timings.get("decode_s", 0.0)
+                )
 
             return {
                 "answer": "",
@@ -232,14 +232,13 @@ class RagPipeline:
             text, out_tokens = self.generator.generate_messages(messages)
             answer = text
         
-        # timings["total_s"] = (
-        #     timings.get("embed_s", 0.0)
-        #     + timings.get("ann_s", 0.0)
-        #     + timings.get("docstore_s", 0.0)
-        #     + timings.get("prompt_s", 0.0)
-        #     + timings.get("decode_s", 0.0)
-        # )
-
+        timings["pipeline_s"] = (
+            timings.get("embed_s", 0.0)
+            + timings.get("ann_s", 0.0)
+            + timings.get("docstore_s", 0.0)
+            + timings.get("prompt_s", 0.0)
+            + timings.get("decode_s", 0.0)
+        )
 
         return {
         "answer": answer,
