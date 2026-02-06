@@ -239,7 +239,7 @@ def main() -> None:
 
     ap.add_argument("--runs_dir", default="runs")
     ap.add_argument("--dataset_path", default="data/datasets/qa/nq/nq_dev.jsonl")
-    ap.add_argument("--limit", type=int, default=200)
+    ap.add_argument("--limit", type=int, default=500)
 
     ap.add_argument("--base_port", type=int, default=50051)
     ap.add_argument("--host", default="127.0.0.1")
