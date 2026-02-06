@@ -3,12 +3,12 @@ defaults:
   - embedder: dpr
   - index: wiki_flat_100k
   - docstore: wiki_dpr_100k
-  - cache: proximity
+  - cache: null #proximity
   - _self_
 
 host: localhost
 port: 50051
-top_k: 5
+top_k: 5 #k=0 => no retrieval, pure generation
 num_workers: 1
 max_inflight: 100
 retrieve_only: false
@@ -17,8 +17,15 @@ log_level: INFO
 artifact_dir: artifacts
 seed: 42
 
-prompt_type: no_retrieval   # "no_retrieval", "with_context"
+prompt_type: rag_open   # "llm_only", "rag_strict", "rag_open"
 max_ctx_chars: 4000
+
+telemetry:
+  enabled: true
+  interval_s: 3
+  path: resource_usage.jsonl
+
+
 
 hydra:
   run:

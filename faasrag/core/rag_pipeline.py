@@ -21,6 +21,14 @@ from faasrag.core.generators import build_generator
 from faasrag.core.docstores import load_docstore
 from faasrag.core.indexes import load_index
 from faasrag.core.prompts import get_prompt_strategy, extract_short_answer
+from contextlib import contextmanager
+
+
+@contextmanager
+def timed(store: dict, key: str):
+    t0 = time.perf_counter()
+    yield
+    store[key] = time.perf_counter() - t0
 
 
 class RagPipeline:
@@ -115,76 +123,99 @@ class RagPipeline:
             raise ValueError("top_k must be >= 0")
         
         # k == 0 => pure generation
-        no_retrieval = k == 0
+        no_retrieval = k == 0 or self.prompt_type == "no_retrieval"
         passages: list[Passage] = []
         retrieved_doc_ids: list[str] = []
-        retrieve_ms = 0.0
+
+        timings: dict[str, float] = {}
+        cache_stats = None
 
         # -------------------------
         # Retrieval
         # -------------------------
+
         if not no_retrieval:
-            t0 = time.perf_counter()
+            with timed(timings, "embed_s"):
+                qvec = self.embedder.embed_queries([query])
+                if hasattr(qvec, "detach"):
+                    qvec = qvec.detach().cpu().numpy()
+                qvec = np.asarray(qvec, dtype=np.float32)
             
-            qvec = self.embedder.embed_queries([query])
-            if hasattr(qvec, "detach"):
-                qvec = qvec.detach().cpu().numpy()
-            qvec = np.asarray(qvec, dtype=np.float32)
-
-            if self.cache is not None:
-                distances, indices = self.cache.cached_search(qvec, k=k, backend_index=self.index)
-            else:
-                distances, indices = self.index.search(qvec, k)
-
-            for rank, pid in enumerate(indices[0]):
-                if pid < 0:
-                    continue
-                d = self.docstore.get(str(pid))
-                if d is None:
-                    continue
-
-                passages.append(
-                    Passage(
-                        pid=int(pid),
-                        title=d.get("title", ""),
-                        text=d.get("text", ""),
-                        score=float(distances[0][rank]),
+            with timed(timings, "ann_s"):
+                if self.cache is not None:
+                    distances, indices, cache_stats = self.cache.cached_search(
+                        qvec, k=k, backend_index=self.index
                     )
-                )
+                else:
+                    distances, indices = self.index.search(qvec, k)
+            
+            with timed(timings, "docstore_s"):
+                for rank, pid in enumerate(indices[0]):
+                    if pid < 0:
+                        continue
 
-            retrieved_doc_ids = [str(p.pid) for p in passages]
-            retrieve_ms = (time.perf_counter() - t0) * 1000.0
+                    d = self.docstore.get(str(pid))
+                    if d is None:
+                        continue
 
+                    passages.append(
+                        Passage(
+                            pid=int(pid),
+                            title=d.get("title", ""),
+                            text=d.get("text", ""),
+                            score=float(distances[0][rank]),
+                        )
+                    )
+
+                retrieved_doc_ids = [str(p.pid) for p in passages]
+        
+            timings["total_retrieval_s"] = (
+                timings.get("embed_s", 0.0)
+                + timings.get("ann_s", 0.0)
+                + timings.get("docstore_s", 0.0)
+            )
+        else:
+            timings["total_retrieval_s"] = 0.0
+        
+        # -------------------------
+        # Early exit
+        # -------------------------
         if self.retrieve_only or self.generator is None:
+            timings["prompt_s"] = 0.0
+            timings["decode_s"] = 0.0
+            timings["total_s"] = timings["total_retrieval_s"]
             return {
                 "answer": "",
                 "retrieved_doc_ids": retrieved_doc_ids,
-                "prompt_tokens": 0,
                 "output_tokens": 0,
-                "retrieve_ms": retrieve_ms,
-                "decode_ms": 0.0,
+                "timings_s": timings,
+                "cache": cache_stats,
             }
+            
 
         # -------------------------
-        # Prompt + generation
+        # Prompt construction
         # -------------------------
-        if no_retrieval:
-            messages = get_prompt_strategy("no_retrieval")(query)
-        else:
-            messages = self.prompt_fn(query, passages, self.max_ctx_chars)
+        with timed(timings, "prompt_s"):
+            if no_retrieval:
+                messages = get_prompt_strategy("no_retrieval")(query)
+            else:
+                messages = self.prompt_fn(query, passages, self.max_ctx_chars)
+        
+        # -------------------------
+        # Generation
+        # -------------------------
+        with timed(timings, "generate_s"):
+            text, out_tokens = self.generator.generate_messages(messages)
+            answer = text
+        
+        timings["total_s"] = sum(timings.values())
 
-        t1 = time.perf_counter()
-
-        text, out_tokens = self.generator.generate_messages(messages)
-        answer = extract_short_answer(text)
-
-        decode_ms = (time.perf_counter() - t1) * 1000.0
 
         return {
             "answer": answer,
             "retrieved_doc_ids": retrieved_doc_ids,
-            "prompt_tokens": 0,
             "output_tokens": int(out_tokens),
-            "retrieve_ms": retrieve_ms,
-            "decode_ms": decode_ms,
-        }
+            "timings_s": timings,
+            "cache": cache_stats
+            }

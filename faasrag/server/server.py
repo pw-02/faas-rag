@@ -14,6 +14,8 @@ from faasrag.core.rag_pipeline import RagPipeline
 from faasrag.core.args import RagServiceConfig
 import faasrag.protos.rag_pb2 as rag_pb2
 import faasrag.protos.rag_pb2_grpc as rag_pb2_grpc
+# Background resource sampler (writes resource_usage.jsonl every N seconds)
+from faasrag.core.resource_usage import resource_monitor_loop
 
 
 def setup_logger(
@@ -27,7 +29,6 @@ def setup_logger(
 
     if not logger.hasHandlers():
         formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-
         ch = logging.StreamHandler(sys.stdout)
         ch.setLevel(level)
         ch.setFormatter(formatter)
@@ -73,7 +74,9 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
         logger: Optional[logging.Logger] = None,
     ):
         self.cfg = cfg
-        self.cfg.device = cfg.device if cfg.device != "auto" else ("cuda" if torch.cuda.is_available() else "cpu")
+        device = cfg.device or "auto"
+        self.cfg.device = ("cuda" if torch.cuda.is_available() else "cpu") if device == "auto" else torch.device(device)
+        
         self.logger = logger or logging.getLogger("rag_service")
 
         self.rag_pipeline = RagPipeline(
@@ -84,7 +87,7 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
             docstore_cfg=cfg.docstore,
             artifact_dir=cfg.artifact_dir,
             top_k=cfg.top_k,
-            device=cfg.device,
+            device=self.cfg.device,
             retrieve_only=cfg.retrieve_only,
             prompt_type=cfg.prompt_type,
             max_ctx_chars=cfg.max_ctx_chars,
@@ -129,15 +132,11 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
     def _run_pipeline_sync(self, query: str, top_k: int, max_tokens: int) -> Dict[str, Any]:
         """
         Run pipeline synchronously in a worker thread.
-        Replace `self.rag_pipeline.run(...)` with your actual method name.
         """
-        # Example contract: returns dict with keys used below.
-        # Implement this in RagPipeline (recommended).
         result = self.rag_pipeline.run(query=query, top_k=top_k, max_tokens=max_tokens)
 
         if isinstance(result, dict):
             return result
-
         # Minimal fallback
         return {"answer": str(result)}
     # ------------------------------------------------------
@@ -153,13 +152,11 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
                 req = job.request
                 top_k = int(req.k) if req.k and req.k > 0 else int(self.cfg.top_k)
                 max_tokens = int(req.max_tokens) if req.max_tokens and req.max_tokens > 0 else 0
-
-                # Cap concurrent executions
+                
                 async with self._inflight_sem:
                     result = await loop.run_in_executor(
                         self._executor, self._run_pipeline_sync, req.query, top_k, max_tokens
                     )
-
                 t1 = time.perf_counter()
 
                 answer = str(result.get("answer", ""))
@@ -167,12 +164,21 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
                 prompt_tokens = int(result.get("prompt_tokens", 0) or 0)
                 output_tokens = int(result.get("output_tokens", 0) or 0)
 
+                # Your pipeline returns timings_s (seconds). Convert to ms for protobuf Trace.
+                timings_s = result.get("timings_s") or {}
+                retrieve_ms = float(timings_s.get("total_retrieval_s", 0.0)) * 1000.0
+                decode_ms = float(timings_s.get("decode_s", 0.0)) * 1000.0
+
+                # End-to-end latency for safety if decode_ms missing
                 e2e_ms = (t1 - t0) * 1000.0
+                if decode_ms <= 0.0:
+                    decode_ms = e2e_ms
+
                 trace = rag_pb2.Trace(
-                    retrieve_ms=float(result.get("retrieve_ms", 0.0) or 0.0),
+                    retrieve_ms=retrieve_ms,
                     rerank_ms=float(result.get("rerank_ms", 0.0) or 0.0),
                     llm_queue_ms=float(result.get("llm_queue_ms", 0.0) or 0.0),
-                    decode_ms=float(result.get("decode_ms", e2e_ms) or e2e_ms),
+                    decode_ms=decode_ms,
                     k=top_k,
                     prompt_tokens=prompt_tokens,
                     output_tokens=output_tokens,
@@ -185,7 +191,7 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
             except Exception as e:
                 self.logger.exception("Worker %d failed", worker_id)
                 if not job.future.done():
-                    job.future.set_exception(e)
+                      job.future.set_exception(e)
 
             finally:
                 self.pending.task_done()
@@ -195,7 +201,6 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
         fut = loop.create_future()
         job = Job(request=request, future=fut, arrival_ts=time.perf_counter())
 
-        # Backpressure: reject if queue is full
         try:
             self.pending.put_nowait(job)
         except asyncio.QueueFull:
@@ -219,10 +224,21 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
             context.set_details(str(e))
             return rag_pb2.RAGResponse(answer="", trace=rag_pb2.Trace())
 
-
 async def _serve_async(cfg: RagServiceConfig):
+    
     logger = setup_logger(name="rag_service", level=_parse_log_level(cfg.log_level))
     logger.info("Starting RAG Service")
+
+    # Optional background resource monitor (telemetry)
+    monitor_task: Optional[asyncio.Task] = None
+    if cfg.telemetry is not None and cfg.telemetry.enabled:
+        interval_s = float(cfg.telemetry.interval_s)
+        out_path = str(cfg.telemetry.path)
+
+        monitor_task = asyncio.create_task(
+            resource_monitor_loop(interval_s=interval_s, output_path=out_path)
+        )
+        logger.info("Telemetry enabled interval=%.2fs path=%s", interval_s, out_path)
 
     server = grpc.aio.server(
         options=[
@@ -230,7 +246,6 @@ async def _serve_async(cfg: RagServiceConfig):
             ("grpc.max_receive_message_length", 50 * 1024 * 1024),
         ]
     )
-
     service = ScheduledRAGService(
         cfg,
         num_workers=cfg.num_workers,
@@ -250,9 +265,12 @@ async def _serve_async(cfg: RagServiceConfig):
     except KeyboardInterrupt:
         logger.warning("⛔ Shutting down RAG Service...")
     finally:
+        if monitor_task is not None:
+            monitor_task.cancel()
+            await asyncio.gather(monitor_task, return_exceptions=True)
+
         await service.stop()
         await server.stop(grace=None)
-
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):

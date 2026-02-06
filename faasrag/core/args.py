@@ -286,6 +286,14 @@ class DocStoreConfig:
 PromptType = Literal["no_retrieval", "with_context"]
 
 
+@dataclass
+class TelemetryConfig:
+    enabled: bool = False
+    interval_s: float = 5.0
+    path: str = "resource_usage.jsonl"
+
+
+
 # -------------------------
 # Service config
 # -------------------------
@@ -308,6 +316,7 @@ class RagServiceConfig:
 
     prompt_type: PromptType = "with_context"
     max_ctx_chars: int = 4000
+    telemetry: Optional[TelemetryConfig] = None
 
     top_k: int = 5
     device: str = "auto"
