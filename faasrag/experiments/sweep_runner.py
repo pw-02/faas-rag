@@ -290,6 +290,12 @@ def main() -> None:
             print(f"\n=== SKIP {idx:02d}: {name} (results.jsonl exists) ===")
             continue
 
+        #if folder already exists but results json doesn't, clear out contents (allows re-running failed runs without affecting others)
+        if run_dir.exists() and not results_path.exists():
+            for f in run_dir.iterdir():
+                if f.is_file():
+                    f.unlink()
+
         telemetry_overrides: List[str] = []
         resource_usage_path = run_dir / "resource_usage.jsonl"
         telemetry_overrides = [
