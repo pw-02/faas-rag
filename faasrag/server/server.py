@@ -161,7 +161,10 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
                 
                 async with self._inflight_sem:
                     result = await loop.run_in_executor(
-                    self._executor, self._run_pipeline_sync, req.query, top_k, max_tokens
+                    self._executor, self._run_pipeline_sync, 
+                    req.query, 
+                    top_k, 
+                    max_tokens
                 )
 
                 t1 = time.perf_counter()
@@ -244,6 +247,14 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return rag_pb2.RAGResponse(answer="", trace=rag_pb2.Trace())
+    
+    async def Ping(self, request: rag_pb2.PingRequest, context) -> rag_pb2.PingResponse:
+        return rag_pb2.PingResponse(
+            ok=True,
+            queue_depth=self.pending.qsize(),
+            max_inflight=self._max_inflight,
+        )
+
 
 async def _serve_async(cfg: RagServiceConfig):
     

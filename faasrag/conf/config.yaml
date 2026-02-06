@@ -1,7 +1,7 @@
 defaults:
   - generator: qwen2_5_instruct
   - embedder: dpr
-  - index: wiki_flat_100k
+  - index: wiki_faiss_hnsw_100k
   - docstore: wiki_dpr_100k
   - cache: null #proximity,  _null_
   - _self_
@@ -22,7 +22,7 @@ max_ctx_chars: 4000
 telemetry:
   enabled: true
   interval_s: 3
-  path: exp_results/resource_usage.jsonl
+  path: resource_usage.jsonl
 
 
 

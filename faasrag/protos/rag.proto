@@ -1,5 +1,6 @@
-//python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. rag.proto
-
+/*
+python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. rag.proto
+*/
 syntax = "proto3";
 
 package rag;
@@ -36,6 +37,17 @@ message RAGResponse {
   Trace trace = 2;
 }
 
+message PingRequest {}
+
+message PingResponse {
+  bool ok = 1;
+  uint32 queue_depth = 2;
+  uint32 max_inflight = 3;
+}
+
+
 service RAGService {
   rpc Query(RAGRequest) returns (RAGResponse);
+  rpc Ping(PingRequest) returns (PingResponse);
+
 }
