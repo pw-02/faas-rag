@@ -124,16 +124,19 @@ class RagPipeline:
         
         # k == 0 => pure generation
         no_retrieval = k == 0 or self.prompt_type == "no_retrieval"
+
         passages: list[Passage] = []
         retrieved_doc_ids: list[str] = []
-
         timings: dict[str, float] = {}
-        cache_stats = None
+        cache_stats: dict[str, Any] | None = None
+        #define these so you can safely return them everywhere
+        cache_used = False
+        cache_hits = 0
+        cache_misses = 0
 
         # -------------------------
         # Retrieval
         # -------------------------
-
         if not no_retrieval:
             with timed(timings, "embed_s"):
                 qvec = self.embedder.embed_queries([query])
@@ -143,11 +146,17 @@ class RagPipeline:
             
             with timed(timings, "ann_s"):
                 if self.cache is not None:
+                    cache_used = True
                     distances, indices, cache_stats = self.cache.cached_search(
                         qvec, k=k, backend_index=self.index
                     )
                 else:
                     distances, indices = self.index.search(qvec, k)
+            
+            # Interpret cache stats (per-call, not global)
+            if cache_stats is not None:
+                cache_hits = int(cache_stats.get("hits", 0))
+                cache_misses = int(cache_stats.get("misses", 0))
             
             with timed(timings, "docstore_s"):
                 for rank, pid in enumerate(indices[0]):
@@ -175,22 +184,36 @@ class RagPipeline:
                 + timings.get("docstore_s", 0.0)
             )
         else:
+            timings["embed_s"] = 0.0
+            timings["ann_s"] = 0.0
+            timings["docstore_s"] = 0.0
             timings["total_retrieval_s"] = 0.0
         
         # -------------------------
-        # Early exit
+        # Early exit (retrieve-only)
         # -------------------------
         if self.retrieve_only or self.generator is None:
             timings["prompt_s"] = 0.0
             timings["decode_s"] = 0.0
-            timings["total_s"] = timings["total_retrieval_s"]
+
+            timings["total_s"] = (
+                timings.get("embed_s", 0.0)
+                + timings.get("ann_s", 0.0)
+                + timings.get("docstore_s", 0.0)
+                + timings.get("prompt_s", 0.0)
+                + timings.get("decode_s", 0.0)
+                )
+
             return {
                 "answer": "",
                 "retrieved_doc_ids": retrieved_doc_ids,
+                "prompt_tokens": 0,
                 "output_tokens": 0,
                 "timings_s": timings,
-                "cache": cache_stats,
-            }
+                "cache_used": cache_used,
+                "cache_hits": cache_hits,
+                "cache_misses": cache_misses,
+                }
             
 
         # -------------------------
@@ -205,17 +228,26 @@ class RagPipeline:
         # -------------------------
         # Generation
         # -------------------------
-        with timed(timings, "generate_s"):
+        with timed(timings, "decode_s"):
             text, out_tokens = self.generator.generate_messages(messages)
             answer = text
         
-        timings["total_s"] = sum(timings.values())
+        timings["total_s"] = (
+            timings.get("embed_s", 0.0)
+            + timings.get("ann_s", 0.0)
+            + timings.get("docstore_s", 0.0)
+            + timings.get("prompt_s", 0.0)
+            + timings.get("decode_s", 0.0)
+        )
 
 
         return {
-            "answer": answer,
-            "retrieved_doc_ids": retrieved_doc_ids,
-            "output_tokens": int(out_tokens),
-            "timings_s": timings,
-            "cache": cache_stats
-            }
+        "answer": answer,
+        "retrieved_doc_ids": retrieved_doc_ids,
+        "prompt_tokens": 0,
+        "output_tokens": int(out_tokens),
+        "timings_s": timings,
+        "cache_used": cache_used,
+        "cache_hits": cache_hits,
+        "cache_misses": cache_misses,
+    }

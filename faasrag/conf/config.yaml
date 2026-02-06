@@ -3,7 +3,7 @@ defaults:
   - embedder: dpr
   - index: wiki_flat_100k
   - docstore: wiki_dpr_100k
-  - cache: null #proximity
+  - cache: null #proximity,  _null_
   - _self_
 
 host: localhost

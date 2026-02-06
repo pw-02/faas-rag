@@ -1,6 +1,7 @@
 type: proximity
-policy: fifo # options: fifo, lpt, lsh_fifo, lsh_lpt
-tolerance: 0.8
-capacity: 10 #number of entries in the cache
-lsh_bucket_capacity: 5 #number of entries per LSH bucket
-lsh_num_hashes: 128
+proximity:
+  policy: fifo
+  tolerance: 0.8
+  capacity: 10
+  lsh_bucket_capacity: 5
+  lsh_num_hashes: 128

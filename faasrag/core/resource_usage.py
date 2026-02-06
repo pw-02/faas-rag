@@ -40,9 +40,12 @@ def get_resource_snapshot() -> dict[str, float]:
         "proc_rss_mb": proc.memory_info().rss / 1024 / 1024,
         "proc_cpu_percent": proc.cpu_percent(interval=None),
 
-        # System
+       # System
         "system_mem_total_mb": vm.total / 1024 / 1024,
         "system_mem_available_mb": vm.available / 1024 / 1024,
+        "system_mem_used_mb": vm.used / 1024 / 1024,
+        "system_mem_percent": vm.percent,
+
         "system_cpu_percent": psutil.cpu_percent(interval=None),
         "system_cpu_cores": psutil.cpu_count(logical=True),
     }

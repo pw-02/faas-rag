@@ -83,7 +83,7 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
             generator_cfg=cfg.generator,
             embedder_cfg=cfg.embedder,
             index_cfg=cfg.index,
-            cache_cfg=cfg.cache,
+            cache_cfg=cfg.cache if hasattr(cfg, "cache") else None,
             docstore_cfg=cfg.docstore,
             artifact_dir=cfg.artifact_dir,
             top_k=cfg.top_k,
@@ -146,6 +146,11 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
 
         while not self._stop.is_set():
             job: Job = await self.pending.get()
+            
+            # How long the request waited in the service queue before a worker started it
+            queue_s = time.perf_counter() - job.arrival_ts
+
+            # End-to-end time measured from when worker began handling it (not from client)
             t0 = time.perf_counter()
 
             try:
@@ -155,30 +160,45 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
                 
                 async with self._inflight_sem:
                     result = await loop.run_in_executor(
-                        self._executor, self._run_pipeline_sync, req.query, top_k, max_tokens
-                    )
+                    self._executor, self._run_pipeline_sync, req.query, top_k, max_tokens
+                )
+
                 t1 = time.perf_counter()
+                e2e_s = t1 - t0
+                timings_s = result.get("timings_s") or {}
 
                 answer = str(result.get("answer", ""))
                 retrieved_doc_ids = result.get("retrieved_doc_ids") or []
                 prompt_tokens = int(result.get("prompt_tokens", 0) or 0)
                 output_tokens = int(result.get("output_tokens", 0) or 0)
 
-                # Your pipeline returns timings_s (seconds). Convert to ms for protobuf Trace.
+                # Pipeline stage timings are in seconds (your RagPipeline.run contract)
                 timings_s = result.get("timings_s") or {}
-                retrieve_ms = float(timings_s.get("total_retrieval_s", 0.0)) * 1000.0
-                decode_ms = float(timings_s.get("decode_s", 0.0)) * 1000.0
+                retrieval_s = float(timings_s.get("total_retrieval_s", 0.0))
+                decode_s = float(timings_s.get("decode_s", 0.0))
+                cache_hits = int(result.get("cache_hits", 0))
+                cache_misses = int(result.get("cache_misses", 0))
+                cache_used = bool(result.get("cache_used", False))
 
-                # End-to-end latency for safety if decode_ms missing
-                e2e_ms = (t1 - t0) * 1000.0
-                if decode_ms <= 0.0:
-                    decode_ms = e2e_ms
+                # Optional: log e2e + queue for debugging
+                self.logger.debug(
+                    "req done worker=%d queue_s=%.2f e2e_s=%.2f retrieve_s=%.2f decode_s=%.2f",
+                    worker_id,
+                    queue_s,
+                    e2e_s,
+                    retrieval_s,
+                    decode_s,
+                )
+
+                #add e2e and queue time to timings_s for better visibility in the trace
+                timings_s["queue_s"] = queue_s
+                timings_s["e2e_s"] = e2e_s
 
                 trace = rag_pb2.Trace(
-                    retrieve_ms=retrieve_ms,
-                    rerank_ms=float(result.get("rerank_ms", 0.0) or 0.0),
-                    llm_queue_ms=float(result.get("llm_queue_ms", 0.0) or 0.0),
-                    decode_ms=decode_ms,
+                    timings_s=timings_s,
+                    cache_hits=cache_hits,
+                    cache_misses=cache_misses,
+                    cache_used=cache_used,
                     k=top_k,
                     prompt_tokens=prompt_tokens,
                     output_tokens=output_tokens,
