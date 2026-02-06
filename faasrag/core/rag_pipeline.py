@@ -196,13 +196,13 @@ class RagPipeline:
             timings["prompt_s"] = 0.0
             timings["decode_s"] = 0.0
 
-            timings["total_s"] = (
-                timings.get("embed_s", 0.0)
-                + timings.get("ann_s", 0.0)
-                + timings.get("docstore_s", 0.0)
-                + timings.get("prompt_s", 0.0)
-                + timings.get("decode_s", 0.0)
-                )
+            # timings["total_s"] = (
+            #     timings.get("embed_s", 0.0)
+            #     + timings.get("ann_s", 0.0)
+            #     + timings.get("docstore_s", 0.0)
+            #     + timings.get("prompt_s", 0.0)
+            #     + timings.get("decode_s", 0.0)
+            #     )
 
             return {
                 "answer": "",
@@ -232,13 +232,13 @@ class RagPipeline:
             text, out_tokens = self.generator.generate_messages(messages)
             answer = text
         
-        timings["total_s"] = (
-            timings.get("embed_s", 0.0)
-            + timings.get("ann_s", 0.0)
-            + timings.get("docstore_s", 0.0)
-            + timings.get("prompt_s", 0.0)
-            + timings.get("decode_s", 0.0)
-        )
+        # timings["total_s"] = (
+        #     timings.get("embed_s", 0.0)
+        #     + timings.get("ann_s", 0.0)
+        #     + timings.get("docstore_s", 0.0)
+        #     + timings.get("prompt_s", 0.0)
+        #     + timings.get("decode_s", 0.0)
+        # )
 
 
         return {

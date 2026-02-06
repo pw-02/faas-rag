@@ -186,11 +186,12 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
 
                 # Optional: log e2e + queue for debugging
                 self.logger.debug(
-                "req done worker=%d queue_s=%.3f e2e_s=%.3f retrieval_s=%.3f decode_s=%.3f",
+                "req done worker=%d queue_s=%.3f e2e_s=%.3f ann_s=%.3f docstore_s=%.3f decode_s=%.3f",
                 worker_id,
                 timings_s.get("queue_s", 0.0),
                 timings_s.get("e2e_s", 0.0),
-                timings_s.get("total_retrieval_s", 0.0),
+                timings_s.get("ann_s", 0.0),
+                timings_s.get("docstore_s", 0.0),
                 timings_s.get("decode_s", 0.0),
                 )
 
