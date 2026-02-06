@@ -257,6 +257,7 @@ def main() -> None:
     # readiness + telemetry wiring
     ap.add_argument("--ready_timeout_s", type=float, default=120.0)
     ap.add_argument("--enable_telemetry", action="store_true", default=False)
+    ap.add_argument("--skip_if_exists", action="store_true", default=True)
 
     args = ap.parse_args()
 
@@ -274,6 +275,11 @@ def main() -> None:
 
         run_dir = runs_dir / f"{idx:02d}_{name}"
         run_dir.mkdir(parents=True, exist_ok=True)
+
+        #if run directory already exists, skip (allows resuming partial sweeps without re-running completed ones)
+        if args.skip_if_exists and any(run_dir.iterdir()):
+            print(f"\n=== SKIP {idx:02d}: {name} (run directory not empty) ===")
+            continue
 
         port = args.base_port + idx
         target = f"{args.host}:{port}"
