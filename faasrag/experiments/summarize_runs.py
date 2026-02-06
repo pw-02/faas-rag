@@ -44,7 +44,12 @@ def _load_meta(run_dir: Path) -> Dict[str, Any]:
     return {}
 
 
-def _collect_run(run_dir: Path, results_name: str = "results.jsonl") -> Optional[Dict[str, Any]]:
+def _collect_run(
+    run_dir: Path,
+    *,
+    results_name: str = "results.jsonl",
+    skip_first_n: int = 0,
+) -> Optional[Dict[str, Any]]:
     results_path = run_dir / results_name
     if not results_path.exists():
         return None
@@ -60,7 +65,15 @@ def _collect_run(run_dir: Path, results_name: str = "results.jsonl") -> Optional
 
     stage_vals: Dict[str, List[float]] = {}
 
-    for rec in _iter_jsonl(results_path):
+    # Skip warmup records (regardless of error/success)
+    it = _iter_jsonl(results_path)
+    for _ in range(max(0, int(skip_first_n))):
+        try:
+            next(it)
+        except StopIteration:
+            break
+
+    for rec in it:
         total += 1
         if rec.get("error"):
             err_count += 1
@@ -184,6 +197,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs_dir", default="runs")
     ap.add_argument("--results_name", default="results.jsonl")
+    ap.add_argument("--skip_first_n", type=int, default=1, help="Skip first N records in each run as warmup")
+
     ap.add_argument(
         "--sort_by",
         default="lat_p95",
@@ -202,7 +217,7 @@ def main() -> None:
 
     runs: List[Dict[str, Any]] = []
     for rd in run_dirs:
-        r = _collect_run(rd, results_name=args.results_name)
+        r = _collect_run(rd, results_name=args.results_name, skip_first_n=args.skip_first_n)
         if r is not None:
             runs.append(r)
 
