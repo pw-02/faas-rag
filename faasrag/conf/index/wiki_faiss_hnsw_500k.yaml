@@ -1,5 +1,5 @@
 type: hnsw
-path: https://vectorindexes.s3.us-west-2.amazonaws.com/wiki-dpr/faiss_wiki_dpr/hnsw_500k/index_psgs_w100_nq_no_index_hnsw_ip_500000.faiss
+path: s3://vectorindexes/wiki-dpr/faiss_wiki_dpr/hnsw_500k/index_psgs_w100_nq_no_index_hnsw_ip_500000.faiss
 use_gpu: false
 metric: ip
 ef_search: 64
