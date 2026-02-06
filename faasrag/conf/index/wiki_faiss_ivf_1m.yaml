@@ -3,3 +3,4 @@ type: ivf
 path: s3://vectorindexes/wiki-dpr/faiss_wiki_dpr/ivf_1m/index_psgs_w100_nq_no_index_ivf_ip_1000000.faiss
 metric: ip
 nprobe: 16
+use_gpu: false
