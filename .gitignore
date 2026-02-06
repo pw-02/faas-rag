@@ -13,4 +13,4 @@ data/datasets
 data/indexes/wiki-dpr/hnsw_100k
 data/indexes/wiki-dpr/wiki-passages
 artifacts/
-ragservice.log
+*.log*

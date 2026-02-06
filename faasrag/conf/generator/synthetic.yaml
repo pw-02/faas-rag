@@ -1,0 +1,4 @@
+#synthetic embedder that will sleep for a short time to simulate embedding computation
+type: synthetic
+sleep_time: 0.01  # time in seconds to sleep per embedding computation
+response_prefix: "synthetic_generator"  # prefix to add to the generated text for testing purposes

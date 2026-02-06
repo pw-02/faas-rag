@@ -1,18 +1,32 @@
 defaults:
-  - generator: llama3_8b_instruct
+  - generator: qwen2_5_instruct
   - embedder: dpr
   - index: wiki_flat_100k
   - docstore: wiki_dpr_100k
+  - cache: proximity
   - _self_
 
 host: localhost
 port: 50051
-vector_index_path: index.faiss
-docstore_path: meta.jsonl
 top_k: 5
 num_workers: 1
 max_inflight: 100
-
-device: null # "auto", "cpu", or "cuda"
+retrieve_only: false
+device: null
 log_level: INFO
 artifact_dir: artifacts
+seed: 42
+
+prompt_type: no_retrieval   # "no_retrieval", "with_context"
+max_ctx_chars: 4000
+
+hydra:
+  run:
+    dir: .
+  sweep:
+    dir: .
+  output_subdir: null
+  job_logging:
+    level: DISABLE
+  hydra_logging:
+    level: DISABLE

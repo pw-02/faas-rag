@@ -1,0 +1,40 @@
+import logging
+import hydra
+from faasrag.core.args import RagServiceConfig
+from faasrag.core.rag_pipeline import RagPipeline
+
+@hydra.main(config_path="../conf", config_name="config", version_base=None)
+def main(cfg: RagServiceConfig):
+    logging.basicConfig(level=logging.INFO)
+
+    print("Loaded config")
+
+    pipeline = RagPipeline(
+        generator_cfg=cfg.generator,
+        embedder_cfg=cfg.embedder,
+        index_cfg=cfg.index,
+        docstore_cfg=cfg.docstore,
+        artifact_dir=cfg.artifact_dir,
+        prompt_type=cfg.prompt_type,
+        max_ctx_chars=cfg.max_ctx_chars,
+        cache_cfg=cfg.cache,
+        top_k=cfg.top_k,
+        retrieve_only=cfg.retrieve_only,
+        device=cfg.device,
+        seed=cfg.seed,
+    )
+
+    print("Pipeline initialized")
+
+    query = "Who wrote The Hobbit?"
+
+    print("Running query:", query)
+
+    out = pipeline.run(query)
+
+    print("\n=== RESULT ===")
+    print(out)
+
+
+if __name__ == "__main__":
+    main()
