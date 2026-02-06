@@ -276,10 +276,6 @@ def main() -> None:
         run_dir = runs_dir / f"{idx:02d}_{name}"
         run_dir.mkdir(parents=True, exist_ok=True)
 
-        #if run directory already exists, skip (allows resuming partial sweeps without re-running completed ones)
-        if args.skip_if_exists and any(run_dir.iterdir()):
-            print(f"\n=== SKIP {idx:02d}: {name} (run directory not empty) ===")
-            continue
 
         port = args.base_port + idx
         target = f"{args.host}:{port}"
@@ -288,6 +284,11 @@ def main() -> None:
         client_log = run_dir / "client.log"
         results_path = run_dir / "results.jsonl"
         meta_path = run_dir / "meta.json"
+
+        #if results json already exists, skip (allows resuming partial sweeps without re-running completed ones)
+        if args.skip_if_exists and results_path.exists():
+            print(f"\n=== SKIP {idx:02d}: {name} (results.jsonl exists) ===")
+            continue
 
         telemetry_overrides: List[str] = []
         resource_usage_path = run_dir / "resource_usage.jsonl"
