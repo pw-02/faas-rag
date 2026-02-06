@@ -23,6 +23,13 @@ class SyntheticGenerator:
             time.sleep(self.sleep_seconds)
         text = f"{self.response_prefix} {prompt}"
         return text, 0
+    
+    def generate_messages(self, messages: list[dict[str, str]]) -> tuple[str, int]:
+        if self.sleep_seconds > 0:
+            time.sleep(self.sleep_seconds)
+        prompt = "\n".join(f'{m["role"]}: {m["content"]}' for m in messages) + "\nassistant:"
+        text = f"{self.response_prefix} {prompt}"
+        return text, 0
 
 
 class HFCausalLMGenerator:

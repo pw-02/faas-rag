@@ -21,8 +21,10 @@ try:
 
     nvmlInit()
     _NVML_AVAILABLE = True
+    print("NVML initialized; GPU stats will be included in resource snapshots.")
 except Exception:
     _NVML_AVAILABLE = False
+    print("NVML not available; GPU stats will be skipped in resource snapshots.")
 
 
 def get_resource_snapshot() -> dict[str, float]:
