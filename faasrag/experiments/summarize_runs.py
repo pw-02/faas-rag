@@ -195,7 +195,7 @@ def _print_stage_breakdown(best: Dict[str, Any], stage_keys: List[str]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runs_dir", default="runs")
+    ap.add_argument("--runs_dir", default="runs/aws_r6a12xlarge")
     ap.add_argument("--results_name", default="results.jsonl")
     ap.add_argument("--skip_first_n", type=int, default=1, help="Skip first N records in each run as warmup")
 
@@ -204,7 +204,7 @@ def main() -> None:
         default="lat_p95",
         choices=["lat_p50", "lat_p95", "lat_p99", "e2e_p95", "rps", "err_rate"],
     )
-    ap.add_argument("--csv_out", default="runs/summary.csv")
+    ap.add_argument("--csv_out", default="runs/aws_r6a12xlarge/summary.csv")
     ap.add_argument("--show_stages", action="store_true")
     ap.add_argument(
         "--stage_keys",
