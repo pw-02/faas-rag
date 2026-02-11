@@ -12,7 +12,7 @@ PromptFn = Callable[[str, list[Passage] | None, int | None], list[dict[str, str]
 # Utilities
 # -------------------------
 
-def extract_short_answer(text: str) -> str:
+def extract_short_answer(text: str, max_chars: int | None = None) -> str:
     """
     Normalize model output for QA-style evaluation:
     - first line
@@ -30,6 +30,8 @@ def extract_short_answer(text: str) -> str:
     # clean quotes
     t = t.strip('"').strip("'").strip()
 
+    if max_chars is not None:
+        t = t[:max_chars].strip()
     return t
 
 

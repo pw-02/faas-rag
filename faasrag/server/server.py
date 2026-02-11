@@ -175,6 +175,7 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
                 timings_s = result.get("timings_s") or {}
 
                 answer = str(result.get("answer", ""))
+                
                 retrieved_doc_ids = result.get("retrieved_doc_ids") or []
                 prompt_tokens = int(result.get("prompt_tokens", 0) or 0)
                 completion_tokens = int(result.get("completion_tokens", 0) or 0)
