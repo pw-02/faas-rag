@@ -28,20 +28,28 @@ def setup_logger(
     logger.setLevel(level)
     logger.propagate = False
 
-    if not logger.hasHandlers():
-        formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-        ch = logging.StreamHandler(sys.stdout)
+    if not logger.handlers:
+        formatter = logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+        )
+
+        ch = logging.StreamHandler()  # stderr
         ch.setLevel(level)
         ch.setFormatter(formatter)
         logger.addHandler(ch)
 
         if log_to_file and log_file:
-            fh = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+            fh = logging.FileHandler(log_file, mode="a", encoding="utf-8")
             fh.setLevel(level)
             fh.setFormatter(formatter)
             logger.addHandler(fh)
+    else:
+        # update levels if already initialized
+        for h in logger.handlers:
+            h.setLevel(level)
 
     return logger
+
 
 
 def _parse_log_level(level: Any) -> int:
@@ -77,8 +85,7 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
         device = cfg.device or "auto"
         self.cfg.device = ("cuda" if torch.cuda.is_available() else "cpu") if device == "auto" else torch.device(device)
         
-        self.logger = logger or logging.getLogger("rag_service")
-        cfg.docstore.backend_kind = cfg.docstore_backend
+        self.logger = logger
         
         self.rag_pipeline = RagPipeline(
             generator_cfg=cfg.generator,
@@ -201,7 +208,7 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
                     cache_hits=cache_hits,
                     cache_misses=cache_misses,
                     cache_used=cache_used,
-                    k=int(len(self.rag_pipeline.top_k)),
+                    k=int(self.rag_pipeline.top_k),
                     prompt_tokens=int(prompt_tokens),
                     completion_tokens=int(completion_tokens),
                     total_tokens=int(total_tokens),
@@ -256,7 +263,9 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
 
 async def _serve_async(cfg: RagServiceConfig):
     
-    logger = setup_logger(name="rag_service", level=_parse_log_level(cfg.log_level))
+    logger = setup_logger(
+        name="rag_service",
+        level=_parse_log_level(cfg.log_level))
     logger.info("Starting RAG Service")
 
     # Optional background resource monitor (telemetry)

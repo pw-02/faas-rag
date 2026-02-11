@@ -4,6 +4,8 @@ defaults:
   - index: wiki_faiss_hnsw_100k
   - docstore: wiki_dpr_100k
   - cache: null #proximity,  _null_
+  - override hydra/job_logging: disabled
+  - override hydra/hydra_logging: disabled
   - _self_
 
 host: localhost
@@ -22,9 +24,7 @@ max_ctx_chars: 4000
 telemetry:
   enabled: true
   interval_s: 3
-  path: resource_usage.jsonl
-
-
+  path: logs/resource_usage.jsonl
 
 hydra:
   run:
@@ -32,7 +32,16 @@ hydra:
   sweep:
     dir: .
   output_subdir: null
-  job_logging:
-    level: DISABLE
-  hydra_logging:
-    level: DISABLE
+
+
+
+# hydra:
+#   run:
+#     dir: .
+#   sweep:
+#     dir: .
+#   output_subdir: null
+#   job_logging:
+#     level: DISABLE
+#   hydra_logging:
+#     level: DISABLE

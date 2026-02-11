@@ -6,6 +6,7 @@
 *.gz*
 *.npy*
 results/
+logs/
 figures/
 runs/
 *pycache*/

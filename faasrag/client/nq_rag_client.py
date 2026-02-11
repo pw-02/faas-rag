@@ -21,8 +21,6 @@ class ClientConfig:
     shuffle: bool
     seed: int
 
-    k: int
-    max_tokens: int
     deadline_s: float
     concurrency: int
     retries: int
@@ -73,8 +71,6 @@ async def call_rag(
     stub: rag_pb2_grpc.RAGServiceStub,
     query: str,
     *,
-    k: int,
-    max_tokens: int,
     deadline_s: float,
     retries: int,
     retry_backoff_s: float,
@@ -84,7 +80,7 @@ async def call_rag(
         attempt += 1
         t0 = time.perf_counter()
         try:
-            req = rag_pb2.RAGRequest(query=query, k=k, max_tokens=max_tokens)
+            req = rag_pb2.RAGRequest(query=query)
             resp = await stub.Query(req, timeout=deadline_s)
             return resp, None, (time.perf_counter() - t0)
 
@@ -172,8 +168,6 @@ async def run(cfg: ClientConfig) -> None:
             "gold": normalize_gold(gold_raw),
             "gold_all": gold_raw,  # keep full list for evaluation later
             "dataset_path": cfg.dataset_path,
-            "k": cfg.k,
-            "max_tokens": cfg.max_tokens,
         }
 
         if not isinstance(q, str) or not q.strip():
@@ -186,8 +180,6 @@ async def run(cfg: ClientConfig) -> None:
             resp, err, latency_s = await call_rag(
                 stub,
                 q.strip(),
-                k=cfg.k,
-                max_tokens=cfg.max_tokens,
                 deadline_s=cfg.deadline_s,
                 retries=cfg.retries,
                 retry_backoff_s=cfg.retry_backoff_s,
@@ -231,12 +223,10 @@ def parse_args() -> ClientConfig:
     ap = argparse.ArgumentParser()
     ap.add_argument("--target", type=str, default="127.0.0.1:50051")
     ap.add_argument("--dataset_path", type=str, default="data/datasets/qa/nq/nq_dev.jsonl")
-    ap.add_argument("--limit", type=int, default=1, help="0 = all")
+    ap.add_argument("--limit", type=int, default=20, help="0 = all")
     ap.add_argument("--shuffle", action="store_true", default=False)
     ap.add_argument("--seed", type=int, default=0)
 
-    ap.add_argument("--k", type=int, default=5)
-    ap.add_argument("--max_tokens", type=int, default=256)
     ap.add_argument("--deadline_s", type=float, default=3000.0)
 
     ap.add_argument("--concurrency", type=int, default=1)
@@ -253,8 +243,6 @@ def parse_args() -> ClientConfig:
         limit=args.limit,
         shuffle=args.shuffle,
         seed=args.seed,
-        k=args.k,
-        max_tokens=args.max_tokens,
         deadline_s=args.deadline_s,
         concurrency=args.concurrency,
         retries=args.retries,
