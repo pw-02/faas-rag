@@ -78,7 +78,8 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
         self.cfg.device = ("cuda" if torch.cuda.is_available() else "cpu") if device == "auto" else torch.device(device)
         
         self.logger = logger or logging.getLogger("rag_service")
-
+        cfg.docstore.backend_kind = cfg.docstore_backend
+        
         self.rag_pipeline = RagPipeline(
             generator_cfg=cfg.generator,
             embedder_cfg=cfg.embedder,
@@ -130,11 +131,11 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
         self._executor.shutdown(wait=False)
 
     # ---- IMPORTANT: adapt this to your RagPipeline API ----
-    def _run_pipeline_sync(self, query: str, top_k: int, max_tokens: int) -> Dict[str, Any]:
+    def _run_pipeline_sync(self, query: str) -> Dict[str, Any]:
         """
         Run pipeline synchronously in a worker thread.
         """
-        result = self.rag_pipeline.run(query=query, top_k=top_k, max_tokens=max_tokens)
+        result = self.rag_pipeline.run(query=query)
 
         if isinstance(result, dict):
             return result
@@ -156,15 +157,10 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
 
             try:
                 req = job.request
-                top_k = int(req.k) if req.k and req.k > 0 else int(self.cfg.top_k)
-                max_tokens = int(req.max_tokens) if req.max_tokens and req.max_tokens > 0 else 0
-                
                 async with self._inflight_sem:
                     result = await loop.run_in_executor(
                     self._executor, self._run_pipeline_sync, 
                     req.query, 
-                    top_k, 
-                    max_tokens
                 )
 
                 t1 = time.perf_counter()
@@ -174,7 +170,8 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
                 answer = str(result.get("answer", ""))
                 retrieved_doc_ids = result.get("retrieved_doc_ids") or []
                 prompt_tokens = int(result.get("prompt_tokens", 0) or 0)
-                output_tokens = int(result.get("output_tokens", 0) or 0)
+                completion_tokens = int(result.get("completion_tokens", 0) or 0)
+                total_tokens = int(result.get("total_tokens", 0) or 0)
 
                 # Pipeline stage timings are in seconds
                 raw_timings = result.get("timings_s") or {}
@@ -204,9 +201,10 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
                     cache_hits=cache_hits,
                     cache_misses=cache_misses,
                     cache_used=cache_used,
-                    k=int(top_k),
+                    k=int(len(self.rag_pipeline.top_k)),
                     prompt_tokens=int(prompt_tokens),
-                    output_tokens=int(output_tokens),
+                    completion_tokens=int(completion_tokens),
+                    total_tokens=int(total_tokens),
                     retrieved_doc_ids=retrieved_doc_ids,
                 )
                 if not job.future.done():

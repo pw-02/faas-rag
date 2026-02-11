@@ -112,24 +112,15 @@ class RagPipeline:
     # ------------------------------------------------
     # Main entry point (used by gRPC)
     # ------------------------------------------------
-    def run(self, query: str, top_k: Optional[int] = None, max_tokens: int = 0) -> dict[str, Any]:
-
-        if not query or not query.strip():
+    def run(self, query: str) -> dict[str, Any]:
+        query = (query or "").strip()
+        if not query:
             raise ValueError("query must be non-empty")
         
-        k = self.top_k if top_k is None else int(top_k)
-        
-        if k < 0:
-            raise ValueError("top_k must be >= 0")
-        
-        # k == 0 => pure generation
-        no_retrieval = k == 0 or self.prompt_type == "no_retrieval"
-
+        no_retrieval = (self.top_k == 0) or (self.prompt_type == "no_retrieval")
         passages: list[Passage] = []
         retrieved_doc_ids: list[str] = []
         timings: dict[str, float] = {}
-        cache_stats: dict[str, Any] | None = None
-        #define these so you can safely return them everywhere
         cache_used = False
         cache_hits = 0
         cache_misses = 0
@@ -137,24 +128,26 @@ class RagPipeline:
         # -------------------------
         # Retrieval
         # -------------------------
-        if not no_retrieval:
+        if no_retrieval:
+            timings.update({"embed_s": 0.0, "ann_s": 0.0, "docstore_s": 0.0})
+        else:     
             with timed(timings, "embed_s"):
                 qvec = self.embedder.embed_queries([query])
                 if hasattr(qvec, "detach"):
                     qvec = qvec.detach().cpu().numpy()
                 qvec = np.asarray(qvec, dtype=np.float32)
-            
+
+            cache_stats: dict[str, Any] | None = None
             with timed(timings, "ann_s"):
                 if self.cache is not None:
                     cache_used = True
                     distances, indices, cache_stats = self.cache.cached_search(
-                        qvec, k=k, backend_index=self.index
+                        qvec, k=self.top_k, backend_index=self.index
                     )
                 else:
-                    distances, indices = self.index.search(qvec, k)
+                    distances, indices = self.index.search(qvec, self.top_k)
             
-            # Interpret cache stats (per-call, not global)
-            if cache_stats is not None:
+            if cache_stats:
                 cache_hits = int(cache_stats.get("hits", 0))
                 cache_misses = int(cache_stats.get("misses", 0))
             
@@ -163,47 +156,25 @@ class RagPipeline:
                     if pid < 0:
                         continue
 
-                    d = self.docstore.get(str(pid))
-                    if d is None:
+                    doc = self.docstore.get(str(pid))
+                    if not doc:
                         continue
-
                     passages.append(
                         Passage(
                             pid=int(pid),
-                            title=d.get("title", ""),
-                            text=d.get("text", ""),
+                            title=doc.get("title", ""),
+                            text=doc.get("text", ""),
                             score=float(distances[0][rank]),
                         )
                     )
 
                 retrieved_doc_ids = [str(p.pid) for p in passages]
-        
-            # timings["total_retrieval_s"] = (
-            #     timings.get("embed_s", 0.0)
-            #     + timings.get("ann_s", 0.0)
-            #     + timings.get("docstore_s", 0.0)
-            # )
-        else:
-            timings["embed_s"] = 0.0
-            timings["ann_s"] = 0.0
-            timings["docstore_s"] = 0.0
-            timings["pipeline_s"] = 0.0
-        
+
         # -------------------------
         # Early exit (retrieve-only)
         # -------------------------
         if self.retrieve_only or self.generator is None:
-            timings["prompt_s"] = 0.0
-            timings["decode_s"] = 0.0
-
-            timings["pipeline_s"] = (
-                timings.get("embed_s", 0.0)
-                + timings.get("ann_s", 0.0)
-                + timings.get("docstore_s", 0.0)
-                + timings.get("prompt_s", 0.0)
-                + timings.get("decode_s", 0.0)
-                )
-
+            timings.update({"prompt_s": 0.0, "decode_s": 0.0})
             return {
                 "answer": "",
                 "retrieved_doc_ids": retrieved_doc_ids,
@@ -213,9 +184,7 @@ class RagPipeline:
                 "cache_used": cache_used,
                 "cache_hits": cache_hits,
                 "cache_misses": cache_misses,
-                }
-            
-
+            }
         # -------------------------
         # Prompt construction
         # -------------------------
@@ -229,24 +198,142 @@ class RagPipeline:
         # Generation
         # -------------------------
         with timed(timings, "decode_s"):
-            text, out_tokens = self.generator.generate_messages(messages)
-            answer = text
+            answer, prompt_tokens, completion_tokens, total_tokens = self.generator.generate_messages(messages)
         
-        timings["pipeline_s"] = (
-            timings.get("embed_s", 0.0)
-            + timings.get("ann_s", 0.0)
-            + timings.get("docstore_s", 0.0)
-            + timings.get("prompt_s", 0.0)
-            + timings.get("decode_s", 0.0)
-        )
-
         return {
         "answer": answer,
         "retrieved_doc_ids": retrieved_doc_ids,
-        "prompt_tokens": 0,
-        "output_tokens": int(out_tokens),
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
         "timings_s": timings,
         "cache_used": cache_used,
         "cache_hits": cache_hits,
         "cache_misses": cache_misses,
     }
+
+
+
+
+
+    # def run(self, query: str, top_k: Optional[int] = None, max_tokens: int = 0) -> dict[str, Any]:
+
+    #     if not query or not query.strip():
+    #         raise ValueError("query must be non-empty")
+        
+    #     k = self.top_k if top_k is None else int(top_k)
+        
+    #     if k < 0:
+    #         raise ValueError("top_k must be >= 0")
+        
+    #     # k == 0 => pure generation
+    #     no_retrieval = k == 0 or self.prompt_type == "no_retrieval"
+
+    #     passages: list[Passage] = []
+    #     retrieved_doc_ids: list[str] = []
+    #     timings: dict[str, float] = {}
+    #     cache_stats: dict[str, Any] | None = None
+    #     #define these so you can safely return them everywhere
+    #     cache_used = False
+    #     cache_hits = 0
+    #     cache_misses = 0
+
+    #     # -------------------------
+    #     # Retrieval
+    #     # -------------------------
+    #     if not no_retrieval:
+    #         with timed(timings, "embed_s"):
+    #             qvec = self.embedder.embed_queries([query])
+    #             if hasattr(qvec, "detach"):
+    #                 qvec = qvec.detach().cpu().numpy()
+    #             qvec = np.asarray(qvec, dtype=np.float32)
+            
+    #         with timed(timings, "ann_s"):
+    #             if self.cache is not None:
+    #                 cache_used = True
+    #                 distances, indices, cache_stats = self.cache.cached_search(
+    #                     qvec, k=k, backend_index=self.index
+    #                 )
+    #             else:
+    #                 distances, indices = self.index.search(qvec, k)
+            
+    #         # Interpret cache stats (per-call, not global)
+    #         if cache_stats is not None:
+    #             cache_hits = int(cache_stats.get("hits", 0))
+    #             cache_misses = int(cache_stats.get("misses", 0))
+            
+    #         with timed(timings, "docstore_s"):
+    #             for rank, pid in enumerate(indices[0]):
+    #                 if pid < 0:
+    #                     continue
+
+    #                 d = self.docstore.get(str(pid))
+    #                 if d is None:
+    #                     continue
+
+    #                 passages.append(
+    #                     Passage(
+    #                         pid=int(pid),
+    #                         title=d.get("title", ""),
+    #                         text=d.get("text", ""),
+    #                         score=float(distances[0][rank]),
+    #                     )
+    #                 )
+
+    #             retrieved_doc_ids = [str(p.pid) for p in passages]
+        
+    #         # timings["total_retrieval_s"] = (
+    #         #     timings.get("embed_s", 0.0)
+    #         #     + timings.get("ann_s", 0.0)
+    #         #     + timings.get("docstore_s", 0.0)
+    #         # )
+    #     else:
+    #         timings["embed_s"] = 0.0
+    #         timings["ann_s"] = 0.0
+    #         timings["docstore_s"] = 0.0
+    #     # -------------------------
+    #     # Early exit (retrieve-only)
+    #     # -------------------------
+    #     if self.retrieve_only or self.generator is None:
+    #         timings["prompt_s"] = 0.0
+    #         timings["decode_s"] = 0.0
+
+    #         return {
+    #             "answer": "",
+    #             "retrieved_doc_ids": retrieved_doc_ids,
+    #             "prompt_tokens": 0,
+    #             "output_tokens": 0,
+    #             "timings_s": timings,
+    #             "cache_used": cache_used,
+    #             "cache_hits": cache_hits,
+    #             "cache_misses": cache_misses,
+    #             }
+            
+
+    #     # -------------------------
+    #     # Prompt construction
+    #     # -------------------------
+    #     with timed(timings, "prompt_s"):
+    #         if no_retrieval:
+    #             messages = get_prompt_strategy("no_retrieval")(query)
+    #         else:
+    #             messages = self.prompt_fn(query, passages, self.max_ctx_chars)
+        
+    #     # -------------------------
+    #     # Generation
+    #     # -------------------------
+    #     with timed(timings, "decode_s"):
+    #         text, out_tokens = self.generator.generate_messages(messages)
+    #         answer = text
+    
+
+    #     return {
+    #     "answer": answer,
+    #     "retrieved_doc_ids": retrieved_doc_ids,
+    #     "prompt_tokens": 0,
+    #     "output_tokens": int(out_tokens),
+    #     "timings_s": timings,
+    #     "cache_used": cache_used,
+    #     "cache_hits": cache_hits,
+    #     "cache_misses": cache_misses,
+    # }

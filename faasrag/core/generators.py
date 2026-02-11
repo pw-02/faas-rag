@@ -18,18 +18,28 @@ class SyntheticGenerator:
         self.sleep_seconds = float(sleep_seconds)
         self.response_prefix = response_prefix
 
-    def generate(self, prompt: str) -> tuple[str, int]:
+    def _approx_tokens(self, s: str) -> int:
+        # cheap, stable heuristic: ~4 chars/token (very rough)
+        s = s or ""
+        return max(1, len(s) // 4) if s else 0
+
+    def generate(self, prompt: str) -> tuple[str, int, int, int]:
         if self.sleep_seconds > 0:
             time.sleep(self.sleep_seconds)
+
         text = f"{self.response_prefix} {prompt}"
-        return text, 0
-    
-    def generate_messages(self, messages: list[dict[str, str]]) -> tuple[str, int]:
-        if self.sleep_seconds > 0:
-            time.sleep(self.sleep_seconds)
+
+        prompt_tokens = self._approx_tokens(prompt)
+        completion_tokens = self._approx_tokens(text) - prompt_tokens
+        completion_tokens = max(0, completion_tokens)
+        total_tokens = prompt_tokens + completion_tokens
+
+        return text, prompt_tokens, completion_tokens, total_tokens
+
+    def generate_messages(self, messages: list[dict[str, str]]) -> tuple[str, int, int, int]:
         prompt = "\n".join(f'{m["role"]}: {m["content"]}' for m in messages) + "\nassistant:"
-        text = f"{self.response_prefix} {prompt}"
-        return text, 0
+        return self.generate(prompt)
+
 
 
 class HFCausalLMGenerator:
@@ -60,7 +70,7 @@ class HFCausalLMGenerator:
         self.top_p = float(top_p)
         self.top_k = int(top_k)
         self.do_sample = bool(do_sample)
-        self.max_new_tokens = int(max_new_tokens)
+        self.max_new_tokens = int(max_new_tokens) #"It’s the maximum number of tokens the model is allowed to generate."
         self.use_4bit = bool(use_4bit)
         self.hf_token = hf_token
 
@@ -99,7 +109,7 @@ class HFCausalLMGenerator:
         return {k: v.to(model_device) for k, v in inputs.items()}
 
     @torch.no_grad()
-    def generate(self, prompt: str) -> tuple[str, int]:
+    def generate(self, prompt: str) -> tuple[str, int, int, int]:
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True)
         inputs = self._move_inputs_to_model_device(inputs)
 
@@ -114,15 +124,17 @@ class HFCausalLMGenerator:
             eos_token_id=self.tokenizer.eos_token_id,
         )
 
-        prompt_len = inputs["input_ids"].shape[-1]
-        gen_ids = out[0][prompt_len:]
+        prompt_tokens = inputs["input_ids"].shape[-1]
+        total_tokens = out.shape[-1]
+        completion_tokens = total_tokens - prompt_tokens
+        gen_ids = out[0][prompt_tokens:]
         text = self.tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
 
         # text=extract_short_answer(text)
-        return text, int(gen_ids.shape[-1])
+        return text, int(prompt_tokens), int(completion_tokens), int(total_tokens)
 
     @torch.no_grad()
-    def generate_messages(self, messages: list[dict[str, str]]) -> tuple[str, int]:
+    def generate_messages(self, messages: list[dict[str, str]]) -> tuple[str, int, int, int]:
         """
         Chat-style generation using tokenizer chat template when available.
 

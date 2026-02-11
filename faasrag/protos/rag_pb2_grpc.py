@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import faasrag.protos.rag_pb2 as rag__pb2
+import rag_pb2 as rag__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__

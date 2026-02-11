@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\trag.proto\x12\x03rag\"O\n\nRAGRequest\x12\r\n\x05query\x18\x01 \x01(\t\x12\t\n\x01k\x18\x02 \x01(\x05\x12\x12\n\nmax_tokens\x18\x03 \x01(\x05\x12\x13\n\x0bquery_class\x18\x04 \x01(\t\"\xf7\x01\n\x05Trace\x12+\n\ttimings_s\x18\x01 \x03(\x0b\x32\x18.rag.Trace.TimingsSEntry\x12\x12\n\ncache_used\x18\x02 \x01(\x08\x12\x12\n\ncache_hits\x18\x03 \x01(\x05\x12\x14\n\x0c\x63\x61\x63he_misses\x18\x04 \x01(\x05\x12\t\n\x01k\x18\x05 \x01(\x05\x12\x15\n\rprompt_tokens\x18\x06 \x01(\x05\x12\x15\n\routput_tokens\x18\x07 \x01(\x05\x12\x19\n\x11retrieved_doc_ids\x18\x08 \x03(\t\x1a/\n\rTimingsSEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"8\n\x0bRAGResponse\x12\x0e\n\x06\x61nswer\x18\x01 \x01(\t\x12\x19\n\x05trace\x18\x02 \x01(\x0b\x32\n.rag.Trace\"\r\n\x0bPingRequest\"E\n\x0cPingResponse\x12\n\n\x02ok\x18\x01 \x01(\x08\x12\x13\n\x0bqueue_depth\x18\x02 \x01(\r\x12\x14\n\x0cmax_inflight\x18\x03 \x01(\r2e\n\nRAGService\x12*\n\x05Query\x12\x0f.rag.RAGRequest\x1a\x10.rag.RAGResponse\x12+\n\x04Ping\x12\x10.rag.PingRequest\x1a\x11.rag.PingResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\trag.proto\x12\x03rag\"\x1b\n\nRAGRequest\x12\r\n\x05query\x18\x01 \x01(\t\"\x91\x02\n\x05Trace\x12+\n\ttimings_s\x18\x01 \x03(\x0b\x32\x18.rag.Trace.TimingsSEntry\x12\x12\n\ncache_used\x18\x02 \x01(\x08\x12\x12\n\ncache_hits\x18\x03 \x01(\x05\x12\x14\n\x0c\x63\x61\x63he_misses\x18\x04 \x01(\x05\x12\t\n\x01k\x18\x05 \x01(\x05\x12\x15\n\rprompt_tokens\x18\x06 \x01(\x05\x12\x19\n\x11\x63ompletion_tokens\x18\x07 \x01(\x05\x12\x14\n\x0ctotal_tokens\x18\x08 \x01(\x05\x12\x19\n\x11retrieved_doc_ids\x18\t \x03(\t\x1a/\n\rTimingsSEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"8\n\x0bRAGResponse\x12\x0e\n\x06\x61nswer\x18\x01 \x01(\t\x12\x19\n\x05trace\x18\x02 \x01(\x0b\x32\n.rag.Trace\"\r\n\x0bPingRequest\"E\n\x0cPingResponse\x12\n\n\x02ok\x18\x01 \x01(\x08\x12\x13\n\x0bqueue_depth\x18\x02 \x01(\r\x12\x14\n\x0cmax_inflight\x18\x03 \x01(\r2e\n\nRAGService\x12*\n\x05Query\x12\x0f.rag.RAGRequest\x1a\x10.rag.RAGResponse\x12+\n\x04Ping\x12\x10.rag.PingRequest\x1a\x11.rag.PingResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,17 +34,17 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TRACE_TIMINGSSENTRY']._loaded_options = None
   _globals['_TRACE_TIMINGSSENTRY']._serialized_options = b'8\001'
   _globals['_RAGREQUEST']._serialized_start=18
-  _globals['_RAGREQUEST']._serialized_end=97
-  _globals['_TRACE']._serialized_start=100
-  _globals['_TRACE']._serialized_end=347
-  _globals['_TRACE_TIMINGSSENTRY']._serialized_start=300
-  _globals['_TRACE_TIMINGSSENTRY']._serialized_end=347
-  _globals['_RAGRESPONSE']._serialized_start=349
-  _globals['_RAGRESPONSE']._serialized_end=405
-  _globals['_PINGREQUEST']._serialized_start=407
-  _globals['_PINGREQUEST']._serialized_end=420
-  _globals['_PINGRESPONSE']._serialized_start=422
-  _globals['_PINGRESPONSE']._serialized_end=491
-  _globals['_RAGSERVICE']._serialized_start=493
-  _globals['_RAGSERVICE']._serialized_end=594
+  _globals['_RAGREQUEST']._serialized_end=45
+  _globals['_TRACE']._serialized_start=48
+  _globals['_TRACE']._serialized_end=321
+  _globals['_TRACE_TIMINGSSENTRY']._serialized_start=274
+  _globals['_TRACE_TIMINGSSENTRY']._serialized_end=321
+  _globals['_RAGRESPONSE']._serialized_start=323
+  _globals['_RAGRESPONSE']._serialized_end=379
+  _globals['_PINGREQUEST']._serialized_start=381
+  _globals['_PINGREQUEST']._serialized_end=394
+  _globals['_PINGRESPONSE']._serialized_start=396
+  _globals['_PINGRESPONSE']._serialized_end=465
+  _globals['_RAGSERVICE']._serialized_start=467
+  _globals['_RAGSERVICE']._serialized_end=568
 # @@protoc_insertion_point(module_scope)

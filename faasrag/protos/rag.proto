@@ -7,9 +7,6 @@ package rag;
 
 message RAGRequest {
   string query = 1;
-  int32 k = 2;
-  int32 max_tokens = 3;
-  string query_class = 4; // optional hint ("short", "medium", "long")
 }
 
 message Trace {
@@ -27,9 +24,10 @@ message Trace {
   // Request metadata
   int32 k = 5;
   int32 prompt_tokens = 6;
-  int32 output_tokens = 7;
+  int32 completion_tokens = 7;
+  int32 total_tokens = 8;
 
-  repeated string retrieved_doc_ids = 8;
+  repeated string retrieved_doc_ids = 9;
 }
 
 message RAGResponse {

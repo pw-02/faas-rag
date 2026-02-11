@@ -9,6 +9,7 @@ def main(cfg: RagServiceConfig):
 
     print("Loaded config")
 
+
     pipeline = RagPipeline(
         generator_cfg=cfg.generator,
         embedder_cfg=cfg.embedder,
@@ -33,7 +34,9 @@ def main(cfg: RagServiceConfig):
     out = pipeline.run(query)
 
     print("\n=== RESULT ===")
-    print(out)
+    for k, v in out.items():
+        print(f"{k}: {v}")
+
 
 
 if __name__ == "__main__":

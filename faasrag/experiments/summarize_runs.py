@@ -208,7 +208,7 @@ def main() -> None:
     ap.add_argument("--show_stages", action="store_true")
     ap.add_argument(
         "--stage_keys",
-        default="queue_s,e2e_s,pipeline_s,ann_s,docstore_s,decode_s,embed_s,total_s",
+        default="queue_s,e2e_s,ann_s,docstore_s,decode_s,embed_s,total_s",
     )
     args = ap.parse_args()
 

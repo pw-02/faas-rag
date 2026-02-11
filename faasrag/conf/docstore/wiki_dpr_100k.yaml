@@ -10,5 +10,5 @@ source_title_key: title
 source_text_key: text
 
 # 'sqlite', 'jsonl_offsets' for simple local file with offsets, 'memory' for in-memory (not recommended for large corpora)
-backend_kind: memory # sqlite, jsonl_offsets, memory
+backend_kind: sqlite # sqlite, jsonl_offsets, memory
 
