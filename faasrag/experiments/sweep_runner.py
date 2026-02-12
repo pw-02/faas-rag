@@ -9,11 +9,15 @@ For each experiment:
   4) stop service
   5) repeat
 
-Writes outputs under runs/<idx>_<name>/:
-  - service.log
-  - client.log
-  - results.jsonl
-  - meta.json
+Now supports sweeping CLIENT concurrency levels via --concurrency_levels.
+
+Writes outputs under:
+  runs/<exp_folder>/<idx>_<name>/cXXX/
+    - service.log
+    - client.log
+    - results.jsonl
+    - meta.json
+    - (optional) resource_usage.jsonl + service_config.yaml (if telemetry enabled)
 """
 
 import argparse
@@ -27,12 +31,13 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple,Iterable
+from typing import Dict, List, Optional
 
 import grpc
 
 import faasrag.protos.rag_pb2 as rag_pb2
 import faasrag.protos.rag_pb2_grpc as rag_pb2_grpc
+
 
 SUPPORTED_INDEX_TYPES = {
     "100k": ["hnsw", "flat", "ivf"],
@@ -55,6 +60,7 @@ ALL_INDEX_TYPES = sorted({t for types in SUPPORTED_INDEX_TYPES.values() for t in
 ALL_SIZES = sorted(SUPPORTED_INDEX_TYPES.keys())
 ALL_DOCSTORE_BACKENDS = list(SUPPORTED_DOCSTORE_BACKENDS)
 
+
 def _make_experiment(index_type: str, dataset_size: str, docstore_backend: str, exp_folder_name: str) -> Dict[str, object]:
     return {
         "name": f"wiki_faiss_{index_type}_{dataset_size}_{docstore_backend}",
@@ -66,29 +72,12 @@ def _make_experiment(index_type: str, dataset_size: str, docstore_backend: str, 
         ],
     }
 
-def _validate(index_type: str, dataset_size: str, docstore_backend: str) -> None:
-    if dataset_size not in SUPPORTED_INDEX_TYPES:
-        raise ValueError(f"Unknown dataset_size {dataset_size!r}. Supported: {ALL_SIZES}")
-    if docstore_backend not in ALL_DOCSTORE_BACKENDS:
-        raise ValueError(f"Unknown docstore_backend {docstore_backend!r}. Supported: {ALL_DOCSTORE_BACKENDS}")
-
-    allowed = SUPPORTED_INDEX_TYPES[dataset_size]
-    if index_type not in allowed:
-        raise ValueError(
-            f"index_type {index_type!r} is not supported for dataset_size {dataset_size!r}. "
-            f"Supported for {dataset_size}: {allowed}"
-        )
-
-# -------------------------
-# Simple “one-axis sweep” helpers
-# -------------------------
 
 def build_docstore_backend_experiments(
     *,
     index_type: str = "hnsw",
     dataset_size: str = "21m",
 ) -> List[Dict[str, object]]:
-    # Validate once (for each backend, index_type/dataset_size must still be valid)
     if dataset_size not in SUPPORTED_INDEX_TYPES:
         raise ValueError(f"Unknown dataset_size {dataset_size!r}. Supported: {ALL_SIZES}")
     if index_type not in SUPPORTED_INDEX_TYPES[dataset_size]:
@@ -96,28 +85,14 @@ def build_docstore_backend_experiments(
             f"index_type {index_type!r} is not supported for dataset_size {dataset_size!r}. "
             f"Supported for {dataset_size}: {SUPPORTED_INDEX_TYPES[dataset_size]}"
         )
-
     return [_make_experiment(index_type, dataset_size, b, "docstore_backend_exps") for b in ALL_DOCSTORE_BACKENDS]
 
-
-# def build_increasing_concurrency_exps(index_type: str = "hnsw",
-#                                       dataset_size: str = "21m",
-#                                       docstore_backend: str = "local_jsonl_offsets",
-#                                       concurreny_levels = None):
-    
-#     if concurreny_levels is None:
-#         concurreny_levels = [1, 10, 20, 30, 40, 50]
-    
-#     experiments = []
-#     for concurrency in concurreny_levels:
-#         experiments.append(_make_experiment(index_type, dataset_size, docstore_backend, f"concurrency_{concurrency}_exps"))
 
 def build_index_type_experiments(
     *,
     dataset_size: str = "21m",
     docstore_backend: str = "local_jsonl_offsets",
 ) -> List[Dict[str, object]]:
-    # Only generate index types that are valid for that dataset_size
     if dataset_size not in SUPPORTED_INDEX_TYPES:
         raise ValueError(f"Unknown dataset_size {dataset_size!r}. Supported: {ALL_SIZES}")
     if docstore_backend not in ALL_DOCSTORE_BACKENDS:
@@ -143,16 +118,12 @@ def build_index_size_experiments(
             exps.append(_make_experiment(index_type, size, docstore_backend, "index_size_exps"))
     return exps
 
-# -------------------------
-# General cartesian builder (optional)
-# -------------------------
 
 def build_experiments(
     index_type: Optional[str] = "hnsw",
     dataset_size: Optional[str] = "21m",
     docstore_backend: Optional[str] = None,
 ) -> List[Dict[str, object]]:
-    # Determine candidate sets
     sizes = [dataset_size] if dataset_size is not None else ALL_SIZES
     backends = [docstore_backend] if docstore_backend is not None else ALL_DOCSTORE_BACKENDS
 
@@ -176,61 +147,6 @@ def build_experiments(
     return exps
 
 
-
-# def build_experiments(
-#     index_type: Optional[str] = "hnsw",
-#     dataset_size: Optional[str] = "21m",
-#     docstore_backend: Optional[str] = None,
-# ) -> List[Dict[str, object]]:
-
-#     if index_type is not None and index_type not in ALL_INDEX_TYPES:
-#         raise ValueError(f"Unknown index_type {index_type!r}. Supported: {ALL_INDEX_TYPES}")
-
-#     if dataset_size is not None and dataset_size not in SUPPORTED_INDEX_TYPES:
-#         raise ValueError(f"Unknown dataset_size {dataset_size!r}. Supported: {ALL_SIZES}")
-
-#     if docstore_backend is not None and docstore_backend not in ALL_DOCSTORE_BACKENDS:
-#         raise ValueError(
-#             f"Unknown docstore_backend {docstore_backend!r}. "
-#             f"Supported: {ALL_DOCSTORE_BACKENDS}"
-#         )
-
-#     # Validate (index_type, dataset_size) pair
-#     if index_type is not None and dataset_size is not None:
-#         allowed_for_size = SUPPORTED_INDEX_TYPES[dataset_size]
-#         if index_type not in allowed_for_size:
-#             raise ValueError(
-#                 f"index_type {index_type!r} is not supported for dataset_size {dataset_size!r}. "
-#                 f"Supported for {dataset_size}: {allowed_for_size}"
-#             )
-
-#     sizes = [dataset_size] if dataset_size is not None else list(SUPPORTED_INDEX_TYPES.keys())
-#     backends = [docstore_backend] if docstore_backend is not None else ALL_DOCSTORE_BACKENDS
-
-#     experiments: List[Dict[str, object]] = []
-
-#     for size in sizes:
-#         types = SUPPORTED_INDEX_TYPES[size]
-#         if index_type is not None:
-#             types = [t for t in types if t == index_type]
-
-#         for t in types:
-#             for ds_backend in backends:
-#                 experiments.append(
-#                     {
-#                         "name": f"wiki_faiss_{t}_{size}_{ds_backend}",
-#                         "overrides": [
-#                             f"index=wiki_faiss_{t}_{size}",
-#                             f"docstore=wiki_dpr_{size}",
-#                             f"docstore_backend={ds_backend}",
-#                         ],
-#                     }
-#                 )
-
-#     return experiments
-
-
-
 # -----------------------
 # Subprocess helpers
 # -----------------------
@@ -249,11 +165,11 @@ def _tee_stream(prefix, stream, logfile, *, to_console: bool):
 def popen_tee(
     cmd,
     *,
-    log_path,
+    log_path: Path,
     cwd=None,
     env=None,
-    prefix="",
-    to_console=True,
+    prefix: str = "",
+    to_console: bool = True,
 ):
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_f = open(log_path, "w", encoding="utf-8")
@@ -287,8 +203,7 @@ def popen_tee(
     return proc, log_f
 
 
-
-def run_tee(cmd, *, log_path, prefix="", to_console=True):
+def run_tee(cmd, *, log_path: Path, prefix: str = "", to_console: bool = True) -> int:
     proc, log_f = popen_tee(cmd, log_path=log_path, prefix=prefix, to_console=to_console)
     try:
         return proc.wait()
@@ -297,7 +212,6 @@ def run_tee(cmd, *, log_path, prefix="", to_console=True):
             log_f.close()
         except Exception:
             pass
-
 
 
 def stop_process_tree(proc: subprocess.Popen, *, grace_s: float = 10.0) -> None:
@@ -383,7 +297,7 @@ def wait_for_service_ready_sync(target: str, timeout_s: float) -> None:
 
 
 # -----------------------
-# Run one experiment
+# Run one experiment (one concurrency point)
 # -----------------------
 
 def run_experiment(
@@ -395,6 +309,7 @@ def run_experiment(
     service_base: List[str],
     client_base: List[str],
     run_dir: Path,
+    client_concurrency: int,
 ) -> None:
     port = args.base_port + idx
     target = f"{args.host}:{port}"
@@ -405,7 +320,7 @@ def run_experiment(
     meta_path = run_dir / "meta.json"
 
     if args.skip_if_exists and results_path.exists():
-        print(f"\n=== SKIP {idx:02d}: {name} (results.jsonl exists) ===")
+        print(f"\n=== SKIP {idx:02d}: {name} c={client_concurrency} (results.jsonl exists) ===")
         return
 
     # Clean dir if rerunning a failed attempt
@@ -430,7 +345,7 @@ def run_experiment(
         + ["--dataset_path", args.dataset_path]
         + ["--limit", str(args.limit)]
         + ["--deadline_s", str(args.deadline_s)]
-        + ["--concurrency", str(args.concurrency)]
+        + ["--concurrency", str(client_concurrency)]
         + ["--retries", str(args.retries)]
         + ["--retry_backoff_s", str(args.retry_backoff_s)]
         + ["--seed", str(args.seed)]
@@ -439,12 +354,14 @@ def run_experiment(
     if args.shuffle:
         client_cmd.append("--shuffle")
 
-    print(f"\n=== RUN {idx:02d}: {name} @ {target} ===")
+    print(f"\n=== RUN {idx:02d}: {name} c={client_concurrency} @ {target} ===")
     print("SERVICE:", " ".join(service_cmd))
     print("CLIENT: ", " ".join(client_cmd))
 
     t_start = time.time()
-    service_proc, service_log_f = popen_tee(service_cmd, log_path=service_log, prefix="[SERVICE] ", to_console=not args.quiet)
+    service_proc, service_log_f = popen_tee(
+        service_cmd, log_path=service_log, prefix="[SERVICE] ", to_console=not args.quiet
+    )
 
     try:
         wait_for_service_ready_sync(target, timeout_s=float(args.ready_timeout_s))
@@ -457,6 +374,7 @@ def run_experiment(
         meta = {
             "run_name": name,
             "run_index": idx,
+            "client_concurrency": client_concurrency,
             "target": target,
             "service_cmd": service_cmd,
             "client_cmd": client_cmd,
@@ -465,7 +383,7 @@ def run_experiment(
             "limit": args.limit,
             "client_params": {
                 "deadline_s": args.deadline_s,
-                "concurrency": args.concurrency,
+                "concurrency": client_concurrency,
                 "retries": args.retries,
                 "retry_backoff_s": args.retry_backoff_s,
                 "shuffle": args.shuffle,
@@ -494,6 +412,29 @@ def run_experiment(
 # Main
 # -----------------------
 
+def _parse_concurrency_levels(s: str) -> List[int]:
+    levels: List[int] = []
+    for part in s.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            v = int(part)
+        except ValueError as e:
+            raise ValueError(f"Bad --concurrency_levels entry {part!r} (must be int)") from e
+        if v < 1:
+            raise ValueError(f"Concurrency must be >= 1, got {v}")
+        levels.append(v)
+    # de-dupe while preserving order
+    seen = set()
+    out = []
+    for v in levels:
+        if v not in seen:
+            seen.add(v)
+            out.append(v)
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
 
@@ -508,7 +449,9 @@ def main() -> None:
     ap.add_argument("--host", default="127.0.0.1")
 
     ap.add_argument("--deadline_s", type=float, default=3000.0)
-    ap.add_argument("--concurrency", type=int, default=1)
+    ap.add_argument("--concurrency_levels", type=str, default="1,2,4,8,16",
+                    help="Comma-separated client concurrency levels to sweep (e.g. '1,2,4,8,16')")
+
     ap.add_argument("--retries", type=int, default=1)
     ap.add_argument("--retry_backoff_s", type=float, default=0.5)
     ap.add_argument("--shuffle", action="store_true", default=False)
@@ -518,12 +461,11 @@ def main() -> None:
     ap.add_argument("--enable_telemetry", action="store_true", default=True)
     ap.add_argument("--skip_if_exists", action="store_true", default=False)
 
-    ap.add_argument("--quiet",action="store_true",
-                    default=True,
+    ap.add_argument("--quiet", action="store_true", default=True,
                     help="Do not print service/client logs to console (file only)")
 
-
     args = ap.parse_args()
+    concurrency_levels = _parse_concurrency_levels(args.concurrency_levels)
 
     runs_dir = Path(args.runs_dir)
     runs_dir.mkdir(parents=True, exist_ok=True)
@@ -531,13 +473,14 @@ def main() -> None:
     service_base = shlex.split(args.service_cmd)
     client_base = shlex.split(args.client_cmd)
 
+    # Choose which experiments to run:
     # experiments = build_experiments()
     # experiments = build_docstore_backend_experiments()
     experiments = build_index_size_experiments()
     # experiments += build_index_type_experiments()
 
-    #print out total number of experiments and names before starting
     print(f"Total experiments to run: {len(experiments)}")
+    print(f"Concurrency levels: {concurrency_levels}")
     print("Experiments:")
     for idx, exp in enumerate(experiments):
         print(f"  {idx:02d}: {exp['name']}")
@@ -545,20 +488,22 @@ def main() -> None:
     for idx, exp in enumerate(experiments):
         name = str(exp["name"])
         overrides = list(exp.get("overrides", []))
-        exp_folder_name = exp.get("exp_folder_name", "other_experiments")
+        exp_folder_name = str(exp.get("exp_folder_name", "other_experiments"))
 
-        run_dir = runs_dir / exp_folder_name / f"{idx:02d}_{name}"
-        run_dir.mkdir(parents=True, exist_ok=True)
+        for c in concurrency_levels:
+            run_dir = runs_dir / exp_folder_name / f"{idx:02d}_{name}" / f"c{c:03d}"
+            run_dir.mkdir(parents=True, exist_ok=True)
 
-        run_experiment(
-            idx=idx,
-            name=name,
-            overrides=overrides,
-            args=args,
-            service_base=service_base,
-            client_base=client_base,
-            run_dir=run_dir,
-        )
+            run_experiment(
+                idx=idx,
+                name=name,
+                overrides=overrides,
+                args=args,
+                service_base=service_base,
+                client_base=client_base,
+                run_dir=run_dir,
+                client_concurrency=c,
+            )
 
     print("\n✅ Sweep complete.")
 

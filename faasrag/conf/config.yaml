@@ -14,8 +14,8 @@ docstore_backend: s3_jsonl_offsets # local_sqlite, local_jsonl_offsets, s3_jsonl
 host: localhost
 port: 50051
 top_k: 5 #k=0 => no retrieval, pure generation
-num_workers: 1
-max_inflight: 100
+num_workers: 8
+max_inflight: 8
 retrieve_only: False
 log_level: INFO
 artifact_dir: artifacts
