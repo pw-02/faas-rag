@@ -66,24 +66,26 @@ def build_experiments(index_type: Optional[str] = "hnsw") -> List[Dict[str, obje
 # Subprocess helpers
 # -----------------------
 
-def _tee_stream(prefix: str, stream, logfile) -> None:
+def _tee_stream(prefix, stream, logfile, *, to_console: bool):
     for line in iter(stream.readline, ""):
         msg = f"{prefix}{line}"
-        sys.stdout.write(msg)
-        sys.stdout.flush()
+        if to_console:
+            sys.stdout.write(msg)
+            sys.stdout.flush()
         logfile.write(msg)
         logfile.flush()
     stream.close()
 
 
 def popen_tee(
-    cmd: List[str],
+    cmd,
     *,
-    log_path: Path,
-    cwd: Optional[str] = None,
-    env: Optional[Dict[str, str]] = None,
-    prefix: str = "",
-) -> Tuple[subprocess.Popen, "object"]:
+    log_path,
+    cwd=None,
+    env=None,
+    prefix="",
+    to_console=True,
+):
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_f = open(log_path, "w", encoding="utf-8")
 
@@ -106,18 +108,19 @@ def popen_tee(
         creationflags=creationflags,
     )
 
-    assert proc.stdout is not None
     threading.Thread(
         target=_tee_stream,
         args=(prefix, proc.stdout, log_f),
+        kwargs={"to_console": to_console},
         daemon=True,
     ).start()
 
     return proc, log_f
 
 
-def run_tee(cmd: List[str], *, log_path: Path, prefix: str = "") -> int:
-    proc, log_f = popen_tee(cmd, log_path=log_path, prefix=prefix)
+
+def run_tee(cmd, *, log_path, prefix="", to_console=True):
+    proc, log_f = popen_tee(cmd, log_path=log_path, prefix=prefix, to_console=to_console)
     try:
         return proc.wait()
     finally:
@@ -125,6 +128,7 @@ def run_tee(cmd: List[str], *, log_path: Path, prefix: str = "") -> int:
             log_f.close()
         except Exception:
             pass
+
 
 
 def stop_process_tree(proc: subprocess.Popen, *, grace_s: float = 10.0) -> None:
@@ -271,12 +275,12 @@ def run_experiment(
     print("CLIENT: ", " ".join(client_cmd))
 
     t_start = time.time()
-    service_proc, service_log_f = popen_tee(service_cmd, log_path=service_log, prefix="[SERVICE] ")
+    service_proc, service_log_f = popen_tee(service_cmd, log_path=service_log, prefix="[SERVICE] ", to_console=not args.quiet)
 
     try:
         wait_for_service_ready_sync(target, timeout_s=float(args.ready_timeout_s))
 
-        ret = run_tee(client_cmd, log_path=client_log, prefix="[CLIENT] ")
+        ret = run_tee(client_cmd, log_path=client_log, prefix="[CLIENT] ", to_console=not args.quiet)
         if ret != 0:
             raise RuntimeError(f"Client failed with exit code {ret}")
 
@@ -344,6 +348,11 @@ def main() -> None:
     ap.add_argument("--ready_timeout_s", type=float, default=12000.0)
     ap.add_argument("--enable_telemetry", action="store_true", default=True)
     ap.add_argument("--skip_if_exists", action="store_true", default=False)
+
+    ap.add_argument("--quiet",action="store_true",
+                    default=True,
+                    help="Do not print service/client logs to console (file only)")
+
 
     args = ap.parse_args()
 
