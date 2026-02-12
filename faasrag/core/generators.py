@@ -83,7 +83,8 @@ class HFCausalLMGenerator:
         # dtype / device mapping
         if device.startswith("cuda"):
             kwargs["torch_dtype"] = torch.float16
-            kwargs["device_map"] = "auto"
+            kwargs["device_map"] = {"": device}  # simpler than "auto" and works well for single-GPU setups
+            # kwargs["device_map"] = "auto"
         else:
             kwargs["torch_dtype"] = torch.float32
 
@@ -93,7 +94,8 @@ class HFCausalLMGenerator:
                 from transformers import BitsAndBytesConfig
 
                 kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
-                kwargs["device_map"] = "auto"
+                # kwargs["device_map"] = "auto"
+                kwargs["device_map"] = {"": device}  # simpler than "auto" and works well for single-GPU setups
             except Exception as e:
                 raise RuntimeError(
                     "use_4bit=True requires bitsandbytes + compatible environment. "
