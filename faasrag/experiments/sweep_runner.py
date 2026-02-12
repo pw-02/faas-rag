@@ -32,6 +32,7 @@ import os
 import shlex
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -40,19 +41,27 @@ import grpc
 
 import faasrag.protos.rag_pb2 as rag_pb2
 import faasrag.protos.rag_pb2_grpc as rag_pb2_grpc
+import threading
 
 
+def _tee_stream(stream, logfile):
+    for line in iter(stream.readline, ""):
+        sys.stdout.write(line)
+        sys.stdout.flush()
+        logfile.write(line)
+        logfile.flush()
+    stream.close()
 # -----------------------
 # Process management
 # -----------------------
 
 def _popen_with_logs(
-    cmd: List[str],
+    cmd,
     *,
-    stdout_path: Path,
-    cwd: Optional[str] = None,
-    env: Optional[Dict[str, str]] = None,
-) -> Tuple[subprocess.Popen, "object"]:
+    stdout_path,
+    cwd=None,
+    env=None,
+):
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     log_f = open(stdout_path, "w", encoding="utf-8")
 
@@ -62,20 +71,59 @@ def _popen_with_logs(
     if os.name == "nt":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
-        preexec_fn = os.setsid  # type: ignore[attr-defined]
+        preexec_fn = os.setsid
 
     proc = subprocess.Popen(
         cmd,
         cwd=cwd,
         env=env,
-        stdout=log_f,
+        stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
         preexec_fn=preexec_fn,
         creationflags=creationflags,
     )
+
+    threading.Thread(
+        target=_tee_stream,
+        args=(proc.stdout, log_f),
+        daemon=True,
+    ).start()
+
     return proc, log_f
+
+
+# def _popen_with_logs(
+#     cmd: List[str],
+#     *,
+#     stdout_path: Path,
+#     cwd: Optional[str] = None,
+#     env: Optional[Dict[str, str]] = None,
+# ) -> Tuple[subprocess.Popen, "object"]:
+#     stdout_path.parent.mkdir(parents=True, exist_ok=True)
+#     log_f = open(stdout_path, "w", encoding="utf-8")
+
+#     preexec_fn = None
+#     creationflags = 0
+
+#     if os.name == "nt":
+#         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+#     else:
+#         preexec_fn = os.setsid  # type: ignore[attr-defined]
+
+#     proc = subprocess.Popen(
+#         cmd,
+#         cwd=cwd,
+#         env=env,
+#         stdout=log_f,
+#         stderr=subprocess.STDOUT,
+#         text=True,
+#         bufsize=1,
+#         preexec_fn=preexec_fn,
+#         creationflags=creationflags,
+#     )
+#     return proc, log_f
 
 
 def _stop_process_tree(proc: subprocess.Popen, *, grace_s: float = 10.0) -> None:
