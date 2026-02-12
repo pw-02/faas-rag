@@ -368,6 +368,12 @@ def main() -> None:
 
     experiments = build_experiments()
 
+    #print out total number of experiments and names before starting
+    print(f"Total experiments to run: {len(experiments)}")
+    print("Experiments:")
+    for idx, exp in enumerate(experiments):
+        print(f"  {idx:02d}: {exp['name']}")
+
     for idx, exp in enumerate(experiments):
         name = str(exp["name"])
         overrides = list(exp.get("overrides", []))
