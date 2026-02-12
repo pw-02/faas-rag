@@ -330,8 +330,6 @@ def main() -> None:
     ap.add_argument("--host", default="127.0.0.1")
 
     # client knobs (forwarded)
-    ap.add_argument("--k", type=int, default=5)
-    ap.add_argument("--max_tokens", type=int, default=256)
     ap.add_argument("--deadline_s", type=float, default=3000.0)
     ap.add_argument("--concurrency", type=int, default=1)
     ap.add_argument("--retries", type=int, default=1)
@@ -410,8 +408,6 @@ def main() -> None:
                 + ["--target", target]
                 + ["--dataset_path", args.dataset_path]
                 + ["--limit", str(args.limit)]
-                + ["--k", str(args.k)]
-                + ["--max_tokens", str(args.max_tokens)]
                 + ["--deadline_s", str(args.deadline_s)]
                 + ["--concurrency", str(args.concurrency)]
                 + ["--retries", str(args.retries)]
@@ -441,8 +437,6 @@ def main() -> None:
                 "dataset_path": args.dataset_path,
                 "limit": args.limit,
                 "client_params": {
-                    "k": args.k,
-                    "max_tokens": args.max_tokens,
                     "deadline_s": args.deadline_s,
                     "concurrency": args.concurrency,
                     "retries": args.retries,
