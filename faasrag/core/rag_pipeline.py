@@ -87,11 +87,12 @@ class RagPipeline:
             self.generator = build_generator(generator_cfg)
 
         self.logger.info(
-            "RagPipeline initialized prompt=%s retrieve_only=%s top_k=%d device=%s",
+            "RagPipeline initialized prompt=%s retrieve_only=%s top_k=%d embedder_device=%s generator_device=%s",
             self.prompt_type,
             self.retrieve_only,
             self.top_k,
-            self.device,
+            getattr(self.embedder, "device", "unknown"),
+            getattr(self.generator, "device", "unknown"),
         )
 
     def sanity_check_dimensions(self) -> int:
