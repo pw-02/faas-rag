@@ -136,6 +136,7 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
         if isinstance(tt, int):
             total_tokens_total += tt
 
+    index_vector_count = trace.get("index_vector_count")
     ok = total - err_count
     err_rate = (err_count / total) if total else 0.0
 
@@ -153,6 +154,7 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
     total_tokens_avg = (total_tokens_total / ok) if ok else None
 
     return {
+        "index_vector_count": index_vector_count,
         "total": total,
         "ok": ok,
         "errors": err_count,
@@ -217,7 +219,6 @@ def collect_run(
     return {
         "run_dir": str(run_dir),
         "run_name": meta.get("run_name", run_dir.name),
-        "index_vector_count": meta.get("index_vector_count", 0),
         "target": meta.get("target"),
         "wall_time_s": wall_time_s,
         "throughput_rps": throughput,
@@ -388,8 +389,8 @@ def main() -> None:
         w.writerow(
             [
                 "run_name",
-                "run_dir",
                 "index_vector_count",
+                "run_dir",
                 "ok",
                 "total",
                 "err_rate",
@@ -423,8 +424,8 @@ def main() -> None:
             w.writerow(
                 [
                     r["run_name"],
-                    r["run_dir"],
                     r["index_vector_count"],
+                    r["run_dir"],
                     r["ok"],
                     r["total"],
                     r["err_rate"],
