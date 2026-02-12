@@ -15,6 +15,7 @@ def main(cfg: RagServiceConfig):
         embedder_cfg=cfg.embedder,
         index_cfg=cfg.index,
         docstore_cfg=cfg.docstore,
+        docstore_backend=cfg.docstore_backend,
         artifact_dir=cfg.artifact_dir,
         prompt_type=cfg.prompt_type,
         max_ctx_chars=cfg.max_ctx_chars,
