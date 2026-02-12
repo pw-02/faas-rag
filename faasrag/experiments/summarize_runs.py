@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 
+# -------------------------
+# JSONL helpers
+# -------------------------
+
 def iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
     with path.open("r", encoding="utf-8") as f:
         for line in f:
@@ -44,16 +48,16 @@ def fmt(x: Optional[float], *, digits: int = 4) -> str:
     return "-" if x is None else f"{x:.{digits}f}"
 
 
-def load_meta(run_dir: Path) -> Dict[str, Any]:
-    meta_path = run_dir / "meta.json"
+# -------------------------
+# Meta + resource peaks
+# -------------------------
+
+def load_meta(experiment_dir: Path) -> Dict[str, Any]:
+    meta_path = experiment_dir / "meta.json"
     return json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
 
 
 def max_fields_from_jsonl(path: Path, fields: List[str]) -> Dict[str, Optional[float]]:
-    """
-    Compute max numeric value for each field in `fields` across a JSONL file.
-    Returns {field: max_or_None}. If file doesn't exist, all Nones.
-    """
     out: Dict[str, Optional[float]] = {f: None for f in fields}
     if not path.exists():
         return out
@@ -68,6 +72,39 @@ def max_fields_from_jsonl(path: Path, fields: List[str]) -> Dict[str, Optional[f
     return out
 
 
+def collect_resource_peaks(resource_path: Optional[Path]) -> Dict[str, Optional[float]]:
+    fields = [
+        "proc_rss_gb",
+        "gpu_mem_used_gb",
+        "gpu_util_percent",
+        "system_cpu_percent",
+        "system_mem_percent",
+        "system_mem_used_gb",
+    ]
+    if resource_path is None or not resource_path.exists():
+        return {
+            "proc_rss_gb_peak": None,
+            "gpu_mem_used_gb_peak": None,
+            "gpu_util_percent_peak": None,
+            "system_cpu_percent_peak": None,
+            "system_mem_percent_peak": None,
+            "system_mem_used_gb_peak": None,
+        }
+    maxes = max_fields_from_jsonl(resource_path, fields)
+    return {
+        "proc_rss_gb_peak": maxes["proc_rss_gb"],
+        "gpu_mem_used_gb_peak": maxes["gpu_mem_used_gb"],
+        "gpu_util_percent_peak": maxes["gpu_util_percent"],
+        "system_cpu_percent_peak": maxes["system_cpu_percent"],
+        "system_mem_percent_peak": maxes["system_mem_percent"],
+        "system_mem_used_gb_peak": maxes["system_mem_used_gb"],
+    }
+
+
+# -------------------------
+# Results stats (latency, stages, cache, tokens)
+# -------------------------
+
 def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str, Any]:
     ok_lat: List[float] = []
     ok_e2e: List[float] = []
@@ -77,16 +114,17 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
     total = 0
     err_count = 0
 
-    # NEW: cache + token aggregates (successful only)
     cache_hits_total = 0
     cache_misses_total = 0
     prompt_tokens_total = 0
     completion_tokens_total = 0
     total_tokens_total = 0
 
+    index_vector_count: Optional[int] = None
+
     it = iter_jsonl(results_path)
 
-    # skip warmup records regardless of success/failure
+    # skip warmup regardless of success/failure
     for _ in range(max(0, int(skip_first_n))):
         try:
             next(it)
@@ -106,6 +144,11 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
         trace = rec.get("trace") or {}
         timings = trace.get("timings_s") or {}
 
+        if index_vector_count is None:
+            ivc = trace.get("index_vector_count")
+            if isinstance(ivc, int):
+                index_vector_count = ivc
+
         e2e = timings.get("e2e_s")
         if isinstance(e2e, (int, float)):
             ok_e2e.append(float(e2e))
@@ -118,7 +161,6 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
             if isinstance(v, (int, float)):
                 stage_vals.setdefault(k, []).append(float(v))
 
-        # cache + tokens
         ch = trace.get("cache_hits")
         cm = trace.get("cache_misses")
         if isinstance(ch, int):
@@ -136,7 +178,6 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
         if isinstance(tt, int):
             total_tokens_total += tt
 
-    index_vector_count = trace.get("index_vector_count")
     ok = total - err_count
     err_rate = (err_count / total) if total else 0.0
 
@@ -163,7 +204,6 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
         "e2e": ok_e2e,
         "queue": ok_queue,
         "stages": stage_vals,
-        # NEW: cache + tokens
         "cache_hits_total": cache_hits_total,
         "cache_misses_total": cache_misses_total,
         "cache_hit_rate": cache_hit_rate,
@@ -176,50 +216,34 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
     }
 
 
-def collect_resource_peaks(resource_path: Path) -> Dict[str, Optional[float]]:
-    fields = [
-        "proc_rss_gb",
-        "gpu_mem_used_gb",
-        "gpu_util_percent",
-        "system_cpu_percent",
-        "system_mem_percent",
-        "system_mem_used_gb",
-    ]
-    maxes = max_fields_from_jsonl(resource_path, fields)
-    return {
-        "proc_rss_gb_peak": maxes["proc_rss_gb"],
-        "gpu_mem_used_gb_peak": maxes["gpu_mem_used_gb"],
-        "gpu_util_percent_peak": maxes["gpu_util_percent"],
-        "system_cpu_percent_peak": maxes["system_cpu_percent"],
-        "system_mem_percent_peak": maxes["system_mem_percent"],
-        "system_mem_used_gb_peak": maxes["system_mem_used_gb"],
-    }
+# -------------------------
+# Collect a single experiment
+# -------------------------
 
-
-def collect_run(
-    run_dir: Path,
+def collect_experiment(
+    experiment_dir: Path,
     *,
     results_name: str,
     resource_name: str,
     skip_first_n: int,
 ) -> Optional[Dict[str, Any]]:
-    results_path = run_dir / results_name
+    results_path = experiment_dir / results_name
     if not results_path.exists():
         return None
 
-    meta = load_meta(run_dir)
+    meta = load_meta(experiment_dir)
     wall_time_s = meta.get("wall_time_s")
 
     stats = collect_results_stats(results_path, skip_first_n=skip_first_n)
     ok = stats["ok"]
     throughput = (ok / wall_time_s) if (isinstance(wall_time_s, (int, float)) and wall_time_s > 0) else None
 
-    peaks = collect_resource_peaks(run_dir / resource_name)
+    resource_path = experiment_dir / resource_name
+    peaks = collect_resource_peaks(resource_path if resource_path.exists() else None)
 
     return {
-        "run_dir": str(run_dir),
-        "run_name": meta.get("run_name", run_dir.name),
-        "target": meta.get("target"),
+        "experiment_dir": str(experiment_dir),
+        "experiment_name": meta.get("run_name", experiment_dir.name),
         "wall_time_s": wall_time_s,
         "throughput_rps": throughput,
         "meta": meta,
@@ -228,139 +252,23 @@ def collect_run(
     }
 
 
-def print_table(rows: List[Dict[str, Any]]) -> None:
-    headers = [
-        "run",
-        "ok/total",
-        "err%",
-        "wall_s",
-        "rps(ok)",
-        "lat_p50",
-        "lat_p95",
-        "lat_p99",
-        "e2e_p50",
-        "e2e_p95",
-        "queue_p50",
-        "queue_p95",
-        "rss_peak_gb",
-        "gpu_mem_peak_gb",
-        "cache_hit_rate",
-        "tok_total_avg",
-    ]
-    print("| " + " | ".join(headers) + " |")
-    print("|" + "|".join(["---"] * len(headers)) + "|")
+# -------------------------
+# CSV writing (ONE summary.csv per experiment folder)
+# -------------------------
 
-    for r in rows:
-        lat = summarize_sorted(r["lat"])
-        e2e = summarize_sorted(r["e2e"])
-        q = summarize_sorted(r["queue"])
-
-        print(
-            "| "
-            + " | ".join(
-                [
-                    str(r["run_name"]),
-                    f"{r['ok']}/{r['total']}",
-                    f"{(100.0 * r['err_rate']):.2f}",
-                    fmt(r["wall_time_s"], digits=2),
-                    fmt(r["throughput_rps"], digits=3),
-                    fmt(lat["p50"]),
-                    fmt(lat["p95"]),
-                    fmt(lat["p99"]),
-                    fmt(e2e["p50"]),
-                    fmt(e2e["p95"]),
-                    fmt(q["p50"]),
-                    fmt(q["p95"]),
-                    fmt(r.get("proc_rss_gb_peak"), digits=3),
-                    fmt(r.get("gpu_mem_used_gb_peak"), digits=3),
-                    fmt(r.get("cache_hit_rate"), digits=3),
-                    fmt(r.get("total_tokens_avg"), digits=2),
-                ]
-            )
-            + " |"
-        )
-
-
-def print_stage_breakdown(best: Dict[str, Any], stage_keys: List[str]) -> None:
-    print("\nStage breakdown (mean / p50 / p95) for:", best["run_name"])
-    headers = ["stage", "mean_s", "p50_s", "p95_s"]
-    print("| " + " | ".join(headers) + " |")
-    print("|" + "|".join(["---"] * len(headers)) + "|")
-
-    for k in stage_keys:
-        vals = best["stages"].get(k, [])
-        s = summarize_sorted(vals)
-        print(f"| {k} | {fmt(s['mean'])} | {fmt(s['p50'])} | {fmt(s['p95'])} |")
-
-
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--runs_dir", default="runs/jsonl_offsets_hnsw", help="Directory containing run subdirectories")
-    ap.add_argument("--results_name", default="results.jsonl")
-    ap.add_argument("--resource_name", default="resource_usage.jsonl")
-    ap.add_argument("--skip_first_n", type=int, default=1, help="Skip first N records in each run as warmup")
-
-    ap.add_argument(
-        "--sort_by",
-        default="lat_p95",
-        choices=["lat_p50", "lat_p95", "lat_p99", "e2e_p95", "rps", "err_rate"],
-    )
-    ap.add_argument("--show_stages", action="store_true")
-    ap.add_argument(
-        "--stage_keys",
-        default="queue_s,ann_s,docstore_s,decode_s,embed_s,prompt_s",
-    )
-    args = ap.parse_args()
-
-    csv_out = str(Path(args.runs_dir) / "summary.csv")
-
-    runs_dir = Path(args.runs_dir)
-    run_dirs = sorted([p for p in runs_dir.iterdir() if p.is_dir()])
-
-    runs: List[Dict[str, Any]] = []
-    for rd in run_dirs:
-        r = collect_run(
-            rd,
-            results_name=args.results_name,
-            resource_name=args.resource_name,
-            skip_first_n=args.skip_first_n,
-        )
-        if r is not None:
-            runs.append(r)
-
-    if not runs:
-        print(f"No runs found under {runs_dir} with {args.results_name}")
-        return
+def write_experiment_summary_csv(
+    experiment_dir: Path,
+    exp: Dict[str, Any],
+    *,
+    out_name: str,
+    stage_order_preference: List[str],
+) -> Path:
+    out_path = experiment_dir / f"{exp['experiment_name']}_{out_name}"
 
     # Keep preferred stage order first, then append any extras (stable)
-    preferred = [s.strip() for s in args.stage_keys.split(",") if s.strip()]
-    seen = {k for r in runs for k in r["stages"].keys()}
-    all_stage_keys = [k for k in preferred if k in seen] + sorted(seen - set(preferred))
-
-    def sort_key(r: Dict[str, Any]) -> float:
-        lat = summarize_sorted(r["lat"])
-        e2e = summarize_sorted(r["e2e"])
-
-        if args.sort_by == "lat_p50":
-            return lat["p50"] if lat["p50"] is not None else float("inf")
-        if args.sort_by == "lat_p95":
-            return lat["p95"] if lat["p95"] is not None else float("inf")
-        if args.sort_by == "lat_p99":
-            return lat["p99"] if lat["p99"] is not None else float("inf")
-        if args.sort_by == "e2e_p95":
-            return e2e["p95"] if e2e["p95"] is not None else float("inf")
-        if args.sort_by == "rps":
-            return r["throughput_rps"] if r["throughput_rps"] is not None else 0.0
-        if args.sort_by == "err_rate":
-            return r["err_rate"]
-        return float("inf")
-
-    runs.sort(key=sort_key, reverse=(args.sort_by == "rps"))
-
-    print_table(runs)
-
-    out = Path(csv_out)
-    out.parent.mkdir(parents=True, exist_ok=True)
+    seen = set((exp.get("stages") or {}).keys())
+    stage_keys = [k for k in stage_order_preference if k in seen] + sorted(seen - set(stage_order_preference))
+    stage_headers = [f"{k}_mean_s" for k in stage_keys]
 
     token_cache_headers = [
         "cache_hits_total",
@@ -382,15 +290,25 @@ def main() -> None:
         "system_mem_percent_peak",
         "system_mem_used_gb_peak",
     ]
-    stage_headers = [f"{k}_mean_s" for k in all_stage_keys]
 
-    with out.open("w", newline="", encoding="utf-8") as f:
+    # percentile summaries
+    lat = summarize_sorted(exp["lat"])
+    e2e = summarize_sorted(exp["e2e"])
+    q = summarize_sorted(exp["queue"])
+
+    # stage means
+    stage_means: List[Optional[float]] = []
+    for k in stage_keys:
+        vals = exp["stages"].get(k, [])
+        stage_means.append((sum(vals) / len(vals)) if vals else None)
+
+    with out_path.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(
             [
-                "run_name",
+                "experiment_name",
+                "experiment_dir",
                 "index_vector_count",
-                "run_dir",
                 "ok",
                 "total",
                 "err_rate",
@@ -411,62 +329,155 @@ def main() -> None:
             + stage_headers
         )
 
-        for r in runs:
-            lat = summarize_sorted(r["lat"])
-            e2e = summarize_sorted(r["e2e"])
-            q = summarize_sorted(r["queue"])
+        w.writerow(
+            [
+                exp["experiment_name"],
+                exp["experiment_dir"],
+                exp.get("index_vector_count"),
+                exp["ok"],
+                exp["total"],
+                exp["err_rate"],
+                exp.get("wall_time_s"),
+                exp.get("throughput_rps"),
+                lat["p50"],
+                lat["p95"],
+                lat["p99"],
+                e2e["p50"],
+                e2e["p95"],
+                e2e["p99"],
+                q["p50"],
+                q["p95"],
+                q["p99"],
+                # tokens/cache
+                exp.get("cache_hits_total"),
+                exp.get("cache_misses_total"),
+                exp.get("cache_hit_rate"),
+                exp.get("prompt_tokens_total"),
+                exp.get("completion_tokens_total"),
+                exp.get("total_tokens_total"),
+                exp.get("prompt_tokens_avg"),
+                exp.get("completion_tokens_avg"),
+                exp.get("total_tokens_avg"),
+                # peaks
+                exp.get("proc_rss_gb_peak"),
+                exp.get("gpu_mem_used_gb_peak"),
+                exp.get("gpu_util_percent_peak"),
+                exp.get("system_cpu_percent_peak"),
+                exp.get("system_mem_percent_peak"),
+                exp.get("system_mem_used_gb_peak"),
+            ]
+            + stage_means
+        )
 
-            stage_means: List[Optional[float]] = []
-            for k in all_stage_keys:
-                vals = r["stages"].get(k, [])
-                stage_means.append((sum(vals) / len(vals)) if vals else None)
+    return out_path
 
-            w.writerow(
+
+# -------------------------
+# Optional: print an overall table (for convenience)
+# -------------------------
+
+def print_overall_table(exps: List[Dict[str, Any]]) -> None:
+    headers = [
+        "experiment",
+        "ok/total",
+        "err%",
+        "wall_s",
+        "rps(ok)",
+        "lat_p95",
+        "e2e_p95",
+        "rss_peak_gb",
+        "gpu_mem_peak_gb",
+        "cache_hit_rate",
+        "tok_total_avg",
+    ]
+    print("\n| " + " | ".join(headers) + " |")
+    print("|" + "|".join(["---"] * len(headers)) + "|")
+
+    for e in exps:
+        lat = summarize_sorted(e["lat"])
+        e2e = summarize_sorted(e["e2e"])
+        print(
+            "| "
+            + " | ".join(
                 [
-                    r["run_name"],
-                    r["index_vector_count"],
-                    r["run_dir"],
-                    r["ok"],
-                    r["total"],
-                    r["err_rate"],
-                    r["wall_time_s"],
-                    r["throughput_rps"],
-                    lat["p50"],
-                    lat["p95"],
-                    lat["p99"],
-                    e2e["p50"],
-                    e2e["p95"],
-                    e2e["p99"],
-                    q["p50"],
-                    q["p95"],
-                    q["p99"],
-                    # tokens/cache
-                    r.get("cache_hits_total"),
-                    r.get("cache_misses_total"),
-                    r.get("cache_hit_rate"),
-                    r.get("prompt_tokens_total"),
-                    r.get("completion_tokens_total"),
-                    r.get("total_tokens_total"),
-                    r.get("prompt_tokens_avg"),
-                    r.get("completion_tokens_avg"),
-                    r.get("total_tokens_avg"),
-                    # peaks
-                    r.get("proc_rss_gb_peak"),
-                    r.get("gpu_mem_used_gb_peak"),
-                    r.get("gpu_util_percent_peak"),
-                    r.get("system_cpu_percent_peak"),
-                    r.get("system_mem_percent_peak"),
-                    r.get("system_mem_used_gb_peak"),
+                    str(e["experiment_name"]),
+                    f"{e['ok']}/{e['total']}",
+                    f"{(100.0 * e['err_rate']):.2f}",
+                    fmt(e.get("wall_time_s"), digits=2),
+                    fmt(e.get("throughput_rps"), digits=3),
+                    fmt(lat["p95"]),
+                    fmt(e2e["p95"]),
+                    fmt(e.get("proc_rss_gb_peak"), digits=3),
+                    fmt(e.get("gpu_mem_used_gb_peak"), digits=3),
+                    fmt(e.get("cache_hit_rate"), digits=3),
+                    fmt(e.get("total_tokens_avg"), digits=2),
                 ]
-                + stage_means
             )
+            + " |"
+        )
 
-    print(f"\nWrote CSV: {out}")
 
-    if args.show_stages:
-        best = runs[0]
-        stage_keys = [s.strip() for s in args.stage_keys.split(",") if s.strip()]
-        print_stage_breakdown(best, stage_keys)
+# -------------------------
+# Main
+# -------------------------
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--runs_dir", default="runs", help="Root dir containing experiment folders (nested OK)")
+    ap.add_argument("--results_name", default="results.jsonl")
+    ap.add_argument("--resource_name", default="resource_usage.jsonl")
+    ap.add_argument("--summary_name", default="summary.csv", help="Filename to write inside each experiment folder")
+    ap.add_argument("--skip_first_n", type=int, default=1, help="Skip first N records in each run as warmup")
+    ap.add_argument("--stage_keys", default="queue_s,ann_s,docstore_s,decode_s,embed_s,prompt_s")
+    ap.add_argument("--print_table", action="store_true", help="Print an overall markdown table across experiments")
+    args = ap.parse_args()
+
+    runs_dir = Path(args.runs_dir)
+
+    # Find all results.jsonl anywhere under runs_dir; each parent folder is an experiment dir
+    results_files = sorted(runs_dir.rglob(args.results_name))
+    if not results_files:
+        print(f"No {args.results_name} found anywhere under {runs_dir}")
+        return
+
+    stage_pref = [s.strip() for s in args.stage_keys.split(",") if s.strip()]
+
+    experiments: List[Dict[str, Any]] = []
+    written = 0
+
+    # De-dupe experiment dirs if multiple results.jsonl somehow exist in same folder
+    exp_dirs = sorted({p.parent for p in results_files})
+
+    for exp_dir in exp_dirs:
+        exp = collect_experiment(
+            exp_dir,
+            results_name=args.results_name,
+            resource_name=args.resource_name,
+            skip_first_n=args.skip_first_n,
+        )
+        if exp is None:
+            continue
+
+        #chacnge sumamry name to include experiment name
+
+
+        out_path = write_experiment_summary_csv(
+            exp_dir,
+            exp,
+            out_name=args.summary_name,
+            stage_order_preference=stage_pref,
+        )
+        written += 1
+        experiments.append(exp)
+
+        print(f"Wrote {out_path}")
+
+    if not written:
+        print("No experiments summarized (no folders with results.jsonl found).")
+        return
+
+    if args.print_table:
+        print_overall_table(experiments)
 
 
 if __name__ == "__main__":

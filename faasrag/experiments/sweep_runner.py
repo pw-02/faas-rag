@@ -100,6 +100,18 @@ def build_docstore_backend_experiments(
     return [_make_experiment(index_type, dataset_size, b, "docstore_backend_exps") for b in ALL_DOCSTORE_BACKENDS]
 
 
+# def build_increasing_concurrency_exps(index_type: str = "hnsw",
+#                                       dataset_size: str = "21m",
+#                                       docstore_backend: str = "local_jsonl_offsets",
+#                                       concurreny_levels = None):
+    
+#     if concurreny_levels is None:
+#         concurreny_levels = [1, 10, 20, 30, 40, 50]
+    
+#     experiments = []
+#     for concurrency in concurreny_levels:
+#         experiments.append(_make_experiment(index_type, dataset_size, docstore_backend, f"concurrency_{concurrency}_exps"))
+
 def build_index_type_experiments(
     *,
     dataset_size: str = "21m",
@@ -520,7 +532,9 @@ def main() -> None:
     client_base = shlex.split(args.client_cmd)
 
     # experiments = build_experiments()
-    experiments = build_docstore_backend_experiments()
+    # experiments = build_docstore_backend_experiments()
+    experiments = build_index_size_experiments()
+    # experiments += build_index_type_experiments()
 
     #print out total number of experiments and names before starting
     print(f"Total experiments to run: {len(experiments)}")
