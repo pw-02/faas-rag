@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from anyio import Path
+from pathlib import Path
 import grpc
 import hydra
 from omegaconf import OmegaConf
@@ -22,7 +22,9 @@ from faasrag.core.resource_usage import resource_monitor_loop
 
     
 def save_cfg(cfg, path: str = "resolved.yaml") -> None:
-    Path(path).write_text(OmegaConf.to_yaml(cfg, resolve=True))
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(OmegaConf.to_yaml(cfg, resolve=True), encoding="utf-8")
 
 def setup_logger(
     name: str,
