@@ -13,3 +13,4 @@ boto3
 pynvml
 omegaconf
 maturin
+# hf auth login
