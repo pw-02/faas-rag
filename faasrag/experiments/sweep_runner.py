@@ -331,7 +331,7 @@ def main() -> None:
     ap.add_argument("--service_cmd", default="python -u -m faasrag.server.server")
     ap.add_argument("--client_cmd", default="python -u -m faasrag.client.nq_rag_client")
 
-    ap.add_argument("--runs_dir", default="runs")
+    ap.add_argument("--runs_dir", default="runs/sqlite_hnsw", help="Directory to store run outputs")
     ap.add_argument("--dataset_path", default="data/datasets/qa/nq/nq_dev.jsonl")
     ap.add_argument("--limit", type=int, default=500)
 
