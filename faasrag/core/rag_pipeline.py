@@ -39,6 +39,7 @@ class RagPipeline:
         embedder_cfg: EmbedderConfig,
         index_cfg: IndexConfig,
         docstore_cfg: DocStoreConfig,
+        docstore_backend: str,
         artifact_dir: str,
         prompt_type: str,
         max_ctx_chars: int = 4000,
@@ -76,7 +77,7 @@ class RagPipeline:
         dim = self.sanity_check_dimensions()
 
         # 4) Docstore
-        self.docstore = load_docstore(docstore_cfg, artifact_dir=artifact_dir)
+        self.docstore = load_docstore(docstore_cfg, artifact_dir=artifact_dir, backend=docstore_backend)
 
         # 5) Cache
         if cache_cfg is not None:

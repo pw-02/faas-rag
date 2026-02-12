@@ -277,7 +277,6 @@ class DocStoreConfig:
     source_id_key: str = "pid"
     source_title_key: str = "title"
     source_text_key: str = "text"
-    backend_kind: DocBackendKind = "sqlite"
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -325,6 +324,7 @@ class RagServiceConfig:
     top_k: int = 5
     cache: Optional[CacheConfig] = None
     seed: Optional[int] = None
+    docstore_backend: DocBackendKind = "memory"
 
     def __post_init__(self) -> None:
         if not self.artifact_dir:

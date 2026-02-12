@@ -66,6 +66,11 @@ class Job:
     future: asyncio.Future
     arrival_ts: float
 
+def resolve_device(device):
+    if not torch.cuda.is_available():
+        return "cpu"
+    return "cuda:0" if device == "auto" else device
+
 
 class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
     """
@@ -81,21 +86,15 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
         max_inflight: int,
         logger: Optional[logging.Logger] = None,
     ):
-        self.cfg = cfg
-        if not torch.cuda.is_available():
+       
+        cfg.embedder.device = resolve_device(cfg.embedder.device)
+        cfg.generator.device = resolve_device(cfg.generator.device)
+
+        if cfg.embedder.device == "cpu" or cfg.generator.device == "cpu":
             logger.warning("CUDA not available, running on CPU (this may be slow)")
-            cfg.embedder.device = "cpu"
-            cfg.generator.device = "cpu"
-        else:
 
-            if cfg.embedder.device == "auto":
-                cfg.embedder.device = "cuda:0"
-
-            if cfg.generator.device == "auto":
-                cfg.generator.device = "cuda:0"
-
-            logger.info("Using embedder device: %s", cfg.embedder.device)
-            logger.info("Using generator device: %s", cfg.generator.device)
+        logger.info("Using embedder device: %s", cfg.embedder.device)
+        logger.info("Using generator device: %s", cfg.generator.device)
 
         self.logger = logger
         self.rag_pipeline = RagPipeline(
@@ -104,9 +103,9 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
             index_cfg=cfg.index,
             cache_cfg=cfg.cache if hasattr(cfg, "cache") else None,
             docstore_cfg=cfg.docstore,
+            docstore_backend=cfg.docstore_backend,
             artifact_dir=cfg.artifact_dir,
             top_k=cfg.top_k,
-            # device=self.cfg.device,
             retrieve_only=cfg.retrieve_only,
             prompt_type=cfg.prompt_type,
             max_ctx_chars=cfg.max_ctx_chars,

@@ -8,6 +8,7 @@ defaults:
   - override hydra/hydra_logging: disabled
   - _self_
 
+docstore_backend: sqlite # sqlite, jsonl_offsets, memory
 host: localhost
 port: 50051
 top_k: 5 #k=0 => no retrieval, pure generation
@@ -19,7 +20,6 @@ artifact_dir: artifacts
 seed: 42
 prompt_type: rag_strict   # "llm_only", "rag_strict", "rag_open"
 
-# docstore_backend: sqlite # sqlite, jsonl_offsets, memory
 max_ctx_chars: 4000
 telemetry:
   enabled: true

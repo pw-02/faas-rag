@@ -197,7 +197,7 @@ def build_offsets_from_jsonl(jsonl_path: str, offsets_path: str, id_key: str):
 # Public loader
 # -------------------------
 
-def load_docstore(docstore_cfg: DocStoreConfig, artifact_dir: str) -> DocStore:
+def load_docstore(docstore_cfg: DocStoreConfig, artifact_dir: str, backend: str) -> DocStore:
     """
     Ensures local availability of source JSONL and materializes/open backend docstore.
     """
@@ -217,13 +217,12 @@ def load_docstore(docstore_cfg: DocStoreConfig, artifact_dir: str) -> DocStore:
     title_key = docstore_cfg.source_title_key
     text_key = docstore_cfg.source_text_key
 
-    kind = docstore_cfg.backend_kind
-    root = _docstore_root(artifact_dir, docstore_cfg.name, kind)
+    root = _docstore_root(artifact_dir, docstore_cfg.name, backend)
     os.makedirs(root, exist_ok=True)
 
     success = os.path.join(root, "_SUCCESS")
     # 2) backend materialize/open
-    if kind == "sqlite":
+    if backend == "sqlite":
         db_path = os.path.join(root, "docstore.sqlite")
         if not (os.path.exists(db_path) and os.path.exists(success)):
             print(f"[DocStore] Building sqlite docstore at {db_path} from {local_jsonl}")
@@ -237,7 +236,7 @@ def load_docstore(docstore_cfg: DocStoreConfig, artifact_dir: str) -> DocStore:
             _atomic_write_text(success, "ok\n")
         return SqliteDocStore(db_path)
 
-    if kind == "jsonl_offsets":
+    if backend == "jsonl_offsets":
         offsets_path = os.path.join(root, "offsets.json")
         if not (os.path.exists(offsets_path) and os.path.exists(success)):
             print(f"[DocStore] Building offsets at {offsets_path} from {local_jsonl}")
@@ -245,7 +244,7 @@ def load_docstore(docstore_cfg: DocStoreConfig, artifact_dir: str) -> DocStore:
             _atomic_write_text(success, "ok\n")
         return JsonlOffsetsDocStore(local_jsonl, offsets_path, id_key, title_key, text_key)
 
-    if kind == "memory":
+    if backend == "memory":
         return MemoryJsonlDocStore(local_jsonl, id_key, title_key, text_key)
 
-    raise ValueError(f"Unknown backend_kind: {kind!r}")
+    raise ValueError(f"Unknown backend_kind: {backend!r}")
