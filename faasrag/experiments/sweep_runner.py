@@ -55,9 +55,10 @@ ALL_INDEX_TYPES = sorted({t for types in SUPPORTED_INDEX_TYPES.values() for t in
 ALL_SIZES = sorted(SUPPORTED_INDEX_TYPES.keys())
 ALL_DOCSTORE_BACKENDS = list(SUPPORTED_DOCSTORE_BACKENDS)
 
-def _make_experiment(index_type: str, dataset_size: str, docstore_backend: str) -> Dict[str, object]:
+def _make_experiment(index_type: str, dataset_size: str, docstore_backend: str, exp_folder_name: str) -> Dict[str, object]:
     return {
         "name": f"wiki_faiss_{index_type}_{dataset_size}_{docstore_backend}",
+        "exp_folder_name": exp_folder_name,
         "overrides": [
             f"index=wiki_faiss_{index_type}_{dataset_size}",
             f"docstore=wiki_dpr_{dataset_size}",
@@ -96,7 +97,7 @@ def build_docstore_backend_experiments(
             f"Supported for {dataset_size}: {SUPPORTED_INDEX_TYPES[dataset_size]}"
         )
 
-    return [_make_experiment(index_type, dataset_size, b) for b in ALL_DOCSTORE_BACKENDS]
+    return [_make_experiment(index_type, dataset_size, b, "docstore_backend_exps") for b in ALL_DOCSTORE_BACKENDS]
 
 
 def build_index_type_experiments(
@@ -111,7 +112,7 @@ def build_index_type_experiments(
         raise ValueError(f"Unknown docstore_backend {docstore_backend!r}. Supported: {ALL_DOCSTORE_BACKENDS}")
 
     types = SUPPORTED_INDEX_TYPES[dataset_size]
-    return [_make_experiment(t, dataset_size, docstore_backend) for t in types]
+    return [_make_experiment(t, dataset_size, docstore_backend, "index_type_exps") for t in types]
 
 
 def build_index_size_experiments(
@@ -127,24 +128,8 @@ def build_index_size_experiments(
     exps: List[Dict[str, object]] = []
     for size in ALL_SIZES:
         if index_type in SUPPORTED_INDEX_TYPES[size]:
-            exps.append(_make_experiment(index_type, size, docstore_backend))
+            exps.append(_make_experiment(index_type, size, docstore_backend, "index_size_exps"))
     return exps
-
-
-def build_docstore_backend_experiments() -> List[Dict[str, object]]:
-    experiments = []
-    for ds_backend in ALL_DOCSTORE_BACKENDS:
-        experiments.append(
-            {
-                "name": f"wiki_faiss_hnsw_21m_{ds_backend}",
-                "overrides": [
-                    f"index=wiki_faiss_hnsw_21m",
-                    f"docstore=wiki_dpr_21m",
-                    f"docstore_backend={ds_backend}",
-                ],
-            }
-        )
-    return experiments
 
 # -------------------------
 # General cartesian builder (optional)
@@ -174,7 +159,7 @@ def build_experiments(
             for b in backends:
                 if b not in ALL_DOCSTORE_BACKENDS:
                     raise ValueError(f"Unknown docstore_backend {b!r}. Supported: {ALL_DOCSTORE_BACKENDS}")
-                exps.append(_make_experiment(t, size, b))
+                exps.append(_make_experiment(t, size, b, "general_experiments"))
 
     return exps
 
@@ -545,8 +530,9 @@ def main() -> None:
     for idx, exp in enumerate(experiments):
         name = str(exp["name"])
         overrides = list(exp.get("overrides", []))
+        exp_folder_name = exp.get("exp_folder_name", "other_experiments")
 
-        run_dir = runs_dir / f"{idx:02d}_{name}"
+        run_dir = runs_dir / exp_folder_name / f"{idx:02d}_{name}"
         run_dir.mkdir(parents=True, exist_ok=True)
 
         run_experiment(
