@@ -3,192 +3,195 @@ from __future__ import annotations
 from typing import Any, Optional, Sequence
 
 import numpy as np
-import proximipy
+# import proximipy
 
 from faasrag.core.args import CacheConfig, ProximityCacheConfig
 
-
 class ProximityCache:
-    """
-    Wrapper around proximipy caches with optional read-through caching for ANN search.
+     def __init__(self):
+            raise NotImplementedError("ProximityCache is not implemented in this version. Please implement it using your preferred ANN caching library (e.g., proximipy, faiss, etc.) or remove it if not needed.")
 
-    Notes:
-    - For LSH policies ("lsh_*"), you MUST provide embedding dim.
-    - Keys passed to proximipy are expected to be list[float] (or similar).
-    """
+# class ProximityCache:
+#     """
+#     Wrapper around proximipy caches with optional read-through caching for ANN search.
 
-    def __init__(
-        self,
-        *,
-        policy: str,
-        tolerance: float,
-        capacity: int,
-        lsh_bucket_capacity: Optional[int] = None,
-        lsh_num_hashes: Optional[int] = None,
-        seed: Optional[int] = None,
-        dim: Optional[int] = None,
-    ):
-        self.cache_hit_count = 0
-        self.cache_miss_count = 0
+#     Notes:
+#     - For LSH policies ("lsh_*"), you MUST provide embedding dim.
+#     - Keys passed to proximipy are expected to be list[float] (or similar).
+#     """
 
-        self.tolerance = float(tolerance)
-        self.capacity = int(capacity)
-        self.seed = seed
+#     def __init__(
+#         self,
+#         *,
+#         policy: str,
+#         tolerance: float,
+#         capacity: int,
+#         lsh_bucket_capacity: Optional[int] = None,
+#         lsh_num_hashes: Optional[int] = None,
+#         seed: Optional[int] = None,
+#         dim: Optional[int] = None,
+#     ):
+#         self.cache_hit_count = 0
+#         self.cache_miss_count = 0
 
-        # Normalize policy names (support legacy aliases)
-        p = str(policy).lower()
-        p = {"lpt": "lru", "lsh_lpt": "lsh_lru"}.get(p, p)
+#         self.tolerance = float(tolerance)
+#         self.capacity = int(capacity)
+#         self.seed = seed
 
-        if p not in {"fifo", "lru", "lsh_fifo", "lsh_lru"}:
-            raise ValueError(f"Unknown policy={policy!r} (normalized={p!r})")
+#         # Normalize policy names (support legacy aliases)
+#         p = str(policy).lower()
+#         p = {"lpt": "lru", "lsh_lpt": "lsh_lru"}.get(p, p)
 
-        self.policy = p
-        self.dim = dim
+#         if p not in {"fifo", "lru", "lsh_fifo", "lsh_lru"}:
+#             raise ValueError(f"Unknown policy={policy!r} (normalized={p!r})")
 
-        self.lsh_bucket_capacity = None if lsh_bucket_capacity is None else int(lsh_bucket_capacity)
-        self.lsh_num_hashes = None if lsh_num_hashes is None else int(lsh_num_hashes)
+#         self.policy = p
+#         self.dim = dim
 
-        self._cache = self._create_cache()
+#         self.lsh_bucket_capacity = None if lsh_bucket_capacity is None else int(lsh_bucket_capacity)
+#         self.lsh_num_hashes = None if lsh_num_hashes is None else int(lsh_num_hashes)
 
-    def set_dim(self, dim: int) -> None:
-        if dim <= 0:
-            raise ValueError("dim must be > 0")
-        self.dim = int(dim)
-        if self.policy.startswith("lsh_"):
-            self._cache = self._create_cache()
+#         self._cache = self._create_cache()
 
-    def _create_cache(self):
-        if self.capacity <= 0:
-            raise ValueError("capacity must be > 0")
-        if not (0.0 < self.tolerance <= 1.0):
-            raise ValueError("tolerance must be in (0, 1]")
+#     def set_dim(self, dim: int) -> None:
+#         if dim <= 0:
+#             raise ValueError("dim must be > 0")
+#         self.dim = int(dim)
+#         if self.policy.startswith("lsh_"):
+#             self._cache = self._create_cache()
 
-        if self.policy == "fifo":
-            return proximipy.FifoCache(self.capacity)
+#     def _create_cache(self):
+#         if self.capacity <= 0:
+#             raise ValueError("capacity must be > 0")
+#         if not (0.0 < self.tolerance <= 1.0):
+#             raise ValueError("tolerance must be in (0, 1]")
 
-        if self.policy == "lru":
-            return proximipy.LruCache(self.capacity)
+#         if self.policy == "fifo":
+#             return proximipy.FifoCache(self.capacity)
 
-        # LSH policies
-        if self.dim is None or self.dim <= 0:
-            raise ValueError("dim must be provided and > 0 for LSH cache policies")
-        if self.lsh_bucket_capacity is None or self.lsh_bucket_capacity <= 0:
-            raise ValueError("lsh_bucket_capacity must be > 0 for LSH cache policies")
-        if self.lsh_num_hashes is None or self.lsh_num_hashes <= 0:
-            raise ValueError("lsh_num_hashes must be > 0 for LSH cache policies")
+#         if self.policy == "lru":
+#             return proximipy.LruCache(self.capacity)
 
-        cls = proximipy.LshFifoCache if self.policy == "lsh_fifo" else proximipy.LshLruCache
-        return cls(
-            int(self.lsh_num_hashes),
-            int(self.dim),
-            int(self.lsh_bucket_capacity),
-            None if self.seed is None else int(self.seed),
-        )
+#         # LSH policies
+#         if self.dim is None or self.dim <= 0:
+#             raise ValueError("dim must be provided and > 0 for LSH cache policies")
+#         if self.lsh_bucket_capacity is None or self.lsh_bucket_capacity <= 0:
+#             raise ValueError("lsh_bucket_capacity must be > 0 for LSH cache policies")
+#         if self.lsh_num_hashes is None or self.lsh_num_hashes <= 0:
+#             raise ValueError("lsh_num_hashes must be > 0 for LSH cache policies")
 
-    @staticmethod
-    def _as_key(vec: Any) -> list[float]:
-        if isinstance(vec, np.ndarray):
-            return vec.astype(np.float32).tolist()
-        return list(vec)
+#         cls = proximipy.LshFifoCache if self.policy == "lsh_fifo" else proximipy.LshLruCache
+#         return cls(
+#             int(self.lsh_num_hashes),
+#             int(self.dim),
+#             int(self.lsh_bucket_capacity),
+#             None if self.seed is None else int(self.seed),
+#         )
 
-    def insert(self, key: Any, value: Any) -> None:
-        self._cache.insert(self._as_key(key), value, tolerance=self.tolerance)
+#     @staticmethod
+#     def _as_key(vec: Any) -> list[float]:
+#         if isinstance(vec, np.ndarray):
+#             return vec.astype(np.float32).tolist()
+#         return list(vec)
 
-    def find(self, key: Any) -> Any:
-        return self._cache.find(self._as_key(key))
+#     def insert(self, key: Any, value: Any) -> None:
+#         self._cache.insert(self._as_key(key), value, tolerance=self.tolerance)
 
-    def find_many(self, vecs: Any) -> list[Any]:
-        return [self.find(v) for v in vecs]
+#     def find(self, key: Any) -> Any:
+#         return self._cache.find(self._as_key(key))
 
-    def insert_many(self, vecs: Any, values: Sequence[Any]) -> None:
-        for v, val in zip(vecs, values):
-            self.insert(v, val)
+#     def find_many(self, vecs: Any) -> list[Any]:
+#         return [self.find(v) for v in vecs]
 
-    def cached_search(
-        self,
-        vecs: np.ndarray,
-        *,
-        k: int,
-        backend_index: Any,
-        cache_key_k: bool = True,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        if not isinstance(vecs, np.ndarray):
-            raise TypeError("vecs must be a numpy ndarray")
-        if vecs.ndim != 2:
-            raise ValueError("vecs must have shape (B, D)")
-        if k <= 0:
-            raise ValueError("k must be > 0")
+#     def insert_many(self, vecs: Any, values: Sequence[Any]) -> None:
+#         for v, val in zip(vecs, values):
+#             self.insert(v, val)
 
-        cache_res = self.find_many(vecs)
+#     def cached_search(
+#         self,
+#         vecs: np.ndarray,
+#         *,
+#         k: int,
+#         backend_index: Any,
+#         cache_key_k: bool = True,
+#     ) -> tuple[np.ndarray, np.ndarray]:
+#         if not isinstance(vecs, np.ndarray):
+#             raise TypeError("vecs must be a numpy ndarray")
+#         if vecs.ndim != 2:
+#             raise ValueError("vecs must have shape (B, D)")
+#         if k <= 0:
+#             raise ValueError("k must be > 0")
 
-        hit_idxs = [i for i, r in enumerate(cache_res) if r is not None]
-        miss_idxs = [i for i, r in enumerate(cache_res) if r is None]
+#         cache_res = self.find_many(vecs)
 
-        self.cache_hit_count += len(hit_idxs)
-        self.cache_miss_count += len(miss_idxs)
+#         hit_idxs = [i for i, r in enumerate(cache_res) if r is not None]
+#         miss_idxs = [i for i, r in enumerate(cache_res) if r is None]
 
-        B = vecs.shape[0]
-        distances: list[Optional[np.ndarray]] = [None] * B
-        indices: list[Optional[np.ndarray]] = [None] * B
+#         self.cache_hit_count += len(hit_idxs)
+#         self.cache_miss_count += len(miss_idxs)
 
-        # Fill hits; if k mismatches, convert to miss (avoid duplicate miss indices)
-        extra_misses: list[int] = []
-        for i in hit_idxs:
-            cached = cache_res[i]
-            if isinstance(cached, dict):
-                if (not cache_key_k) or (cached.get("k") == k):
-                    distances[i] = np.asarray(cached["distances"], dtype=np.float32)
-                    indices[i] = np.asarray(cached["indices"])
-                else:
-                    extra_misses.append(i)
-            else:
-                indices[i] = np.asarray(cached)
-                distances[i] = np.zeros((k,), dtype=np.float32)
+#         B = vecs.shape[0]
+#         distances: list[Optional[np.ndarray]] = [None] * B
+#         indices: list[Optional[np.ndarray]] = [None] * B
 
-        if extra_misses:
-            miss_set = set(miss_idxs)
-            miss_set.update(extra_misses)
-            miss_idxs = sorted(miss_set)
+#         # Fill hits; if k mismatches, convert to miss (avoid duplicate miss indices)
+#         extra_misses: list[int] = []
+#         for i in hit_idxs:
+#             cached = cache_res[i]
+#             if isinstance(cached, dict):
+#                 if (not cache_key_k) or (cached.get("k") == k):
+#                     distances[i] = np.asarray(cached["distances"], dtype=np.float32)
+#                     indices[i] = np.asarray(cached["indices"])
+#                 else:
+#                     extra_misses.append(i)
+#             else:
+#                 indices[i] = np.asarray(cached)
+#                 distances[i] = np.zeros((k,), dtype=np.float32)
 
-        # Backend search for misses
-        if miss_idxs:
-            missed = vecs[miss_idxs]
-            d_miss, i_miss = backend_index.search(missed, k)
+#         if extra_misses:
+#             miss_set = set(miss_idxs)
+#             miss_set.update(extra_misses)
+#             miss_idxs = sorted(miss_set)
 
-            for j, orig_i in enumerate(miss_idxs):
-                distances[orig_i] = np.asarray(d_miss[j], dtype=np.float32)
-                indices[orig_i] = np.asarray(i_miss[j])
+#         # Backend search for misses
+#         if miss_idxs:
+#             missed = vecs[miss_idxs]
+#             d_miss, i_miss = backend_index.search(missed, k)
 
-                self.insert(
-                    vecs[orig_i],
-                    {
-                        "k": k,
-                        "distances": distances[orig_i].tolist(),
-                        "indices": indices[orig_i].tolist(),
-                    },
-                )
+#             for j, orig_i in enumerate(miss_idxs):
+#                 distances[orig_i] = np.asarray(d_miss[j], dtype=np.float32)
+#                 indices[orig_i] = np.asarray(i_miss[j])
 
-        # Safety: ensure everything filled
-        if any(d is None for d in distances) or any(ix is None for ix in indices):
-            raise RuntimeError("cached_search: some rows were not filled (bug in cache merge logic)")
+#                 self.insert(
+#                     vecs[orig_i],
+#                     {
+#                         "k": k,
+#                         "distances": distances[orig_i].tolist(),
+#                         "indices": indices[orig_i].tolist(),
+#                     },
+#                 )
 
-        return np.vstack(distances), np.vstack(indices)
+#         # Safety: ensure everything filled
+#         if any(d is None for d in distances) or any(ix is None for ix in indices):
+#             raise RuntimeError("cached_search: some rows were not filled (bug in cache merge logic)")
 
-    def get_stats(self) -> dict[str, Any]:
-        denom = self.cache_hit_count + self.cache_miss_count
-        return {
-            "cache_name": "proximity",
-            "policy": self.policy,
-            "capacity": self.capacity,
-            "tolerance": self.tolerance,
-            "lsh_num_hashes": self.lsh_num_hashes,
-            "dim": self.dim,
-            "lsh_bucket_capacity": self.lsh_bucket_capacity,
-            "seed": self.seed,
-            "hit_count": self.cache_hit_count,
-            "miss_count": self.cache_miss_count,
-            "hit_rate": (self.cache_hit_count / denom) if denom > 0 else 0.0,
-        }
+#         return np.vstack(distances), np.vstack(indices)
+
+#     def get_stats(self) -> dict[str, Any]:
+#         denom = self.cache_hit_count + self.cache_miss_count
+#         return {
+#             "cache_name": "proximity",
+#             "policy": self.policy,
+#             "capacity": self.capacity,
+#             "tolerance": self.tolerance,
+#             "lsh_num_hashes": self.lsh_num_hashes,
+#             "dim": self.dim,
+#             "lsh_bucket_capacity": self.lsh_bucket_capacity,
+#             "seed": self.seed,
+#             "hit_count": self.cache_hit_count,
+#             "miss_count": self.cache_miss_count,
+#             "hit_rate": (self.cache_hit_count / denom) if denom > 0 else 0.0,
+#         }
 
 
 # -------------------------
