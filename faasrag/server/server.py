@@ -140,7 +140,6 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
 
         self.logger.info(
             "Initialized RagPipeline device=%s top_k=%d workers=%d max_inflight=%d",
-            cfg.device,
             cfg.top_k,
             self._num_workers,
             self._max_inflight,
