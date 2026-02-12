@@ -45,7 +45,7 @@ SUPPORTED_INDEX_TYPES = {
     "21m": ["hnsw"],
 }
 
-SUPPORTED_DOCSTORES = ["local_sqlite", "local_jsonl_offsets", "s3_jsonl_offsets", "memory_jsonl"]
+SUPPORTED_DOCSTORE_BACKENDS = ["local_sqlite", "local_jsonl_offsets", "s3_jsonl_offsets", "memory_jsonl"]
 
 
 def build_experiments(index_type: Optional[str] = "hnsw") -> List[Dict[str, object]]:
@@ -56,12 +56,12 @@ def build_experiments(index_type: Optional[str] = "hnsw") -> List[Dict[str, obje
 
     return [
         {
-            "name": f"wiki_faiss_{t}_{size}_{ds}",
-            "overrides": [f"index=wiki_faiss_{t}_{size}", f"docstore=wiki_dpr_{size}_{ds}"],
+            "name": f"wiki_faiss_{t}_{size}_{ds_backend}",
+            "overrides": [f"index=wiki_faiss_{t}_{size}", f"docstore=wiki_dpr_{size}", f"docstore_backend={ds_backend}"],
         }
         for size, types in SUPPORTED_INDEX_TYPES.items()
         for t in types
-        for ds in SUPPORTED_DOCSTORES
+        for ds_backend in SUPPORTED_DOCSTORE_BACKENDS
         if index_type is None or t == index_type
     ]
 
