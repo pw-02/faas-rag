@@ -118,6 +118,8 @@ def build_index_size_experiments(
             exps.append(_make_experiment(index_type, size, docstore_backend, "index_size_exps"))
     return exps
 
+def build_experiment_for_concurrency_sweep() -> List[Dict[str, object]]:
+    return [_make_experiment("hnsw", "21m", "local_sqlite", "concurrency_exps")]
 
 def build_experiments(
     index_type: Optional[str] = "hnsw",
@@ -476,10 +478,11 @@ def main() -> None:
     # Choose which experiments to run:
     # experiments = build_experiments()
     # experiments = build_docstore_backend_experiments()
-    experiments = build_index_size_experiments()
+    # experiments = build_index_size_experiments()
     # experiments += build_index_type_experiments()
+    experiments = build_experiment_for_concurrency_sweep()
 
-    print(f"Total experiments to run: {len(experiments)}")
+    print(f"Total experiments to run: {len(experiments) * len(concurrency_levels)} ({len(experiments)} experiment configs x {len(concurrency_levels)} concurrency levels)")
     print(f"Concurrency levels: {concurrency_levels}")
     print("Experiments:")
     for idx, exp in enumerate(experiments):
