@@ -293,7 +293,7 @@ PromptType = Literal["no_retrieval", "with_context"]
 class TelemetryConfig:
     enabled: bool = False
     interval_s: float = 5.0
-    path: str = "resource_usage.jsonl"
+    dir: str = "logs"
 
 
 

@@ -175,48 +175,85 @@ def wait_for_service_ready_sync(target: str, timeout_s: float) -> None:
     """
     asyncio.run(_wait_for_service_ready(target, timeout_s=timeout_s))
 
+SIZES = [
+    "100k",
+    "500k",
+    "1m",
+    "2_5m",
+    "5m",
+    "10m",
+    "21m",
+]
 
+SUPPORTED_INDEX_TYPES = {
+    "100k": ["hnsw", "flat", "ivf"],
+    "500k": ["flat", "hnsw", "ivf"],
+    "1m": ["flat", "hnsw", "ivf"],
+    "2_5m": ["hnsw", "ivf"],
+    "5m": ["hnsw", "ivf"],
+    "10m": ["hnsw"],
+    "21m": ["hnsw"],
+}
 # -----------------------
 # Experiment definition
 # -----------------------
 
-def build_experiments() -> List[Dict[str, object]]:
+def build_experiments(index_type: Optional[str] = 'hnsw') -> List[Dict[str, object]]:
+    allowed = {t for ts in SUPPORTED_INDEX_TYPES.values() for t in ts}
+    if index_type and index_type not in allowed:
+        raise ValueError(f"Unknown index_type '{index_type}'. Supported: {sorted(allowed)}")
+
     return [
-        {"name": "wiki_faiss_flat_100k",  "overrides": ["index=wiki_faiss_flat_100k", "docstore=wiki_dpr_100k"]},
-        {"name": "wiki_faiss_ivf_100k",   "overrides": ["index=wiki_faiss_ivf_100k", "docstore=wiki_dpr_100k"]},
-        {"name": "wiki_faiss_hnsw_100k",  "overrides": ["index=wiki_faiss_hnsw_100k", "docstore=wiki_dpr_100k"]},
-        
-        {"name": "wiki_faiss_flat_500k",  "overrides": ["index=wiki_faiss_flat_500k", "docstore=wiki_dpr_500k"]},
-        {"name": "wiki_faiss_hnsw_500k",  "overrides": ["index=wiki_faiss_hnsw_500k", "docstore=wiki_dpr_500k"]},
-        {"name": "wiki_faiss_ivf_500k",  "overrides": ["index=wiki_faiss_ivf_500k", "docstore=wiki_dpr_500k"]},
-
-        {"name": "wiki_faiss_flat_1m",  "overrides": ["index=wiki_faiss_flat_1m", "docstore=wiki_dpr_1m"]},
-        {"name": "wiki_faiss_hnsw_1m",  "overrides": ["index=wiki_faiss_hnsw_1m", "docstore=wiki_dpr_1m"]},
-        {"name": "wiki_faiss_ivf_1m",  "overrides": ["index=wiki_faiss_ivf_1m", "docstore=wiki_dpr_1m"]},
-
-        {"name": "wiki_faiss_hnsw_2_5m",  "overrides": ["index=wiki_faiss_hnsw_2_5m", "docstore=wiki_dpr_2_5m"]},
-        {"name": "wiki_faiss_ivf_2_5m",  "overrides": ["index=wiki_faiss_ivf_2_5m", "docstore=wiki_dpr_2_5m"]},
-
-        
-        {"name": "wiki_faiss_hnsw_5m",  "overrides": ["index=wiki_faiss_hnsw_5m", "docstore=wiki_dpr_5m"]},
-        {"name": "wiki_faiss_ivf_5m",  "overrides": ["index=wiki_faiss_ivf_5m", "docstore=wiki_dpr_5m"]},
-        
-        {"name": "wiki_faiss_hnsw_10m",  "overrides": ["index=wiki_faiss_hnsw_10m", "docstore=wiki_dpr_10m"]},
-        {"name": "wiki_faiss_hnsw_21m",  "overrides": ["index=wiki_faiss_hnsw_21m", "docstore=wiki_dpr_21m"]},
-
-        #not yet created!
-
-        # {"name": "wiki_faiss_flat_5m",  "overrides": ["index=wiki_faiss_flat_5m", "docstore=wiki_dpr_5m"]},
-
-        # {"name": "wiki_faiss_flat_2_5m",  "overrides": ["index=wiki_faiss_flat_1m", "docstore=wiki_dpr_2_5m"]},
-
-        # {"name": "wiki_faiss_flat_10m",  "overrides": ["index=wiki_faiss_flat_10m", "docstore=wiki_dpr_10m"]},
-        # {"name": "wiki_faiss_ivf_10m",  "overrides": ["index=wiki_faiss_ivf_10m", "docstore=wiki_dpr_10m"]},
-
-        # {"name": "wiki_faiss_flat_21m",  "overrides": ["index=wiki_faiss_flat_21m", "docstore=wiki_dpr_21m"]},
-        # {"name": "wiki_faiss_ivf_21m",  "overrides": ["index=wiki_faiss_ivf_21m", "docstore=wiki_dpr_21m"]},
-
+        {
+            "name": f"wiki_faiss_{t}_{size}",
+            "overrides": [f"index=wiki_faiss_{t}_{size}", f"docstore=wiki_dpr_{size}"],
+        }
+        for size, types in SUPPORTED_INDEX_TYPES.items()
+        for t in types
+        if index_type is None or t == index_type
     ]
+
+# def build_experiments() -> List[Dict[str, object]]:
+#     return [
+
+#         #hnsw only
+#         {"name": "wiki_faiss_hnsw_100k",  "overrides": ["index=wiki_faiss_hnsw_100k", "docstore=wiki_dpr_100k"]},
+
+
+#         {"name": "wiki_faiss_flat_100k",  "overrides": ["index=wiki_faiss_flat_100k", "docstore=wiki_dpr_100k"]},
+#         {"name": "wiki_faiss_ivf_100k",   "overrides": ["index=wiki_faiss_ivf_100k", "docstore=wiki_dpr_100k"]},
+        
+#         {"name": "wiki_faiss_flat_500k",  "overrides": ["index=wiki_faiss_flat_500k", "docstore=wiki_dpr_500k"]},
+#         {"name": "wiki_faiss_hnsw_500k",  "overrides": ["index=wiki_faiss_hnsw_500k", "docstore=wiki_dpr_500k"]},
+#         {"name": "wiki_faiss_ivf_500k",  "overrides": ["index=wiki_faiss_ivf_500k", "docstore=wiki_dpr_500k"]},
+
+#         {"name": "wiki_faiss_flat_1m",  "overrides": ["index=wiki_faiss_flat_1m", "docstore=wiki_dpr_1m"]},
+#         {"name": "wiki_faiss_hnsw_1m",  "overrides": ["index=wiki_faiss_hnsw_1m", "docstore=wiki_dpr_1m"]},
+#         {"name": "wiki_faiss_ivf_1m",  "overrides": ["index=wiki_faiss_ivf_1m", "docstore=wiki_dpr_1m"]},
+
+#         {"name": "wiki_faiss_hnsw_2_5m",  "overrides": ["index=wiki_faiss_hnsw_2_5m", "docstore=wiki_dpr_2_5m"]},
+#         {"name": "wiki_faiss_ivf_2_5m",  "overrides": ["index=wiki_faiss_ivf_2_5m", "docstore=wiki_dpr_2_5m"]},
+
+        
+#         {"name": "wiki_faiss_hnsw_5m",  "overrides": ["index=wiki_faiss_hnsw_5m", "docstore=wiki_dpr_5m"]},
+#         {"name": "wiki_faiss_ivf_5m",  "overrides": ["index=wiki_faiss_ivf_5m", "docstore=wiki_dpr_5m"]},
+        
+#         {"name": "wiki_faiss_hnsw_10m",  "overrides": ["index=wiki_faiss_hnsw_10m", "docstore=wiki_dpr_10m"]},
+#         {"name": "wiki_faiss_hnsw_21m",  "overrides": ["index=wiki_faiss_hnsw_21m", "docstore=wiki_dpr_21m"]},
+
+#         #not yet created!
+
+#         # {"name": "wiki_faiss_flat_5m",  "overrides": ["index=wiki_faiss_flat_5m", "docstore=wiki_dpr_5m"]},
+
+#         # {"name": "wiki_faiss_flat_2_5m",  "overrides": ["index=wiki_faiss_flat_1m", "docstore=wiki_dpr_2_5m"]},
+
+#         # {"name": "wiki_faiss_flat_10m",  "overrides": ["index=wiki_faiss_flat_10m", "docstore=wiki_dpr_10m"]},
+#         # {"name": "wiki_faiss_ivf_10m",  "overrides": ["index=wiki_faiss_ivf_10m", "docstore=wiki_dpr_10m"]},
+
+#         # {"name": "wiki_faiss_flat_21m",  "overrides": ["index=wiki_faiss_flat_21m", "docstore=wiki_dpr_21m"]},
+#         # {"name": "wiki_faiss_ivf_21m",  "overrides": ["index=wiki_faiss_ivf_21m", "docstore=wiki_dpr_21m"]},
+
+#     ]
 
 
 # -----------------------
@@ -255,9 +292,9 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
 
     # readiness + telemetry wiring
-    ap.add_argument("--ready_timeout_s", type=float, default=120.0)
-    ap.add_argument("--enable_telemetry", action="store_true", default=False)
-    ap.add_argument("--skip_if_exists", action="store_true", default=True)
+    ap.add_argument("--ready_timeout_s", type=float, default=12000.0)
+    ap.add_argument("--enable_telemetry", action="store_true", default=True)
+    ap.add_argument("--skip_if_exists", action="store_true", default=False)
 
     args = ap.parse_args()
 
@@ -297,11 +334,11 @@ def main() -> None:
                     f.unlink()
 
         telemetry_overrides: List[str] = []
-        resource_usage_path = run_dir / "resource_usage.jsonl"
+        resource_usage_path = run_dir
         telemetry_overrides = [
             "telemetry.enabled=true",
             "telemetry.interval_s=2",
-            f"telemetry.path={resource_usage_path}",
+            f"telemetry.dir={run_dir}",
         ]
         service_cmd = (
             service_base

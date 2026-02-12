@@ -5,8 +5,10 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from anyio import Path
 import grpc
 import hydra
+from omegaconf import OmegaConf
 import torch
 from concurrent.futures import ThreadPoolExecutor
 
@@ -17,6 +19,9 @@ import faasrag.protos.rag_pb2_grpc as rag_pb2_grpc
 # Background resource sampler (writes resource_usage.jsonl every N seconds)
 from faasrag.core.resource_usage import resource_monitor_loop
 
+    
+def save_cfg(cfg, path: str = "resolved.yaml") -> None:
+    Path(path).write_text(OmegaConf.to_yaml(cfg, resolve=True))
 
 def setup_logger(
     name: str,
@@ -95,6 +100,10 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
 
         logger.info("Using embedder device: %s", cfg.embedder.device)
         logger.info("Using generator device: %s", cfg.generator.device)
+
+        if cfg.telemetry.enabled:
+            # logger.info("Telemetry enabled: writing resource usage logs to %s", cfg.telemetry.path)
+            save_cfg(cfg, path=str(cfg.telemetry.dir) + "/service_config.yaml")
 
         self.logger = logger
         self.rag_pipeline = RagPipeline(
@@ -283,7 +292,7 @@ async def _serve_async(cfg: RagServiceConfig):
     monitor_task: Optional[asyncio.Task] = None
     if cfg.telemetry is not None and cfg.telemetry.enabled:
         interval_s = float(cfg.telemetry.interval_s)
-        out_path = str(cfg.telemetry.path)
+        out_path = str(cfg.telemetry.dir) / "resource_usage.jsonl"
 
         monitor_task = asyncio.create_task(
             resource_monitor_loop(interval_s=interval_s, output_path=out_path)

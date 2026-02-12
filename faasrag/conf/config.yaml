@@ -24,7 +24,8 @@ max_ctx_chars: 4000
 telemetry:
   enabled: true
   interval_s: 3
-  path: logs/resource_usage.jsonl
+  dir: logs
+  
 
 hydra:
   run:
