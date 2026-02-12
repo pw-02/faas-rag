@@ -160,7 +160,7 @@ class HFCausalLMGenerator:
 Generator = Union[HFCausalLMGenerator, SyntheticGenerator]
 
 
-def build_generator(cfg: GeneratorConfig, device: str) -> Generator:
+def build_generator(cfg: GeneratorConfig) -> Generator:
     """
     Build a generator from the tagged-union GeneratorConfig wrapper.
 
@@ -184,7 +184,7 @@ def build_generator(cfg: GeneratorConfig, device: str) -> Generator:
     # LLaMA + Qwen both use the same runtime HF generator
     return HFCausalLMGenerator(
         model_name=sub.model_name,
-        device=device,
+        device=sub.device,
         temperature=sub.temperature,
         top_p=sub.top_p,
         top_k=sub.top_k,

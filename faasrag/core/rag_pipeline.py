@@ -42,7 +42,6 @@ class RagPipeline:
         artifact_dir: str,
         prompt_type: str,
         max_ctx_chars: int = 4000,
-        device: Optional[str] = None,
         cache_cfg: Optional[CacheConfig] = None,
         top_k: int = 5,
         logger: Optional[logging.Logger] = None,
@@ -52,7 +51,7 @@ class RagPipeline:
         self.logger = logger or logging.getLogger("rag_service")
 
         self.retrieve_only = bool(retrieve_only)
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        # self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
         self.top_k = int(top_k)
         if self.top_k < 0:
@@ -68,7 +67,7 @@ class RagPipeline:
         self.generator = None
 
         # 1) Embedder
-        self.embedder = build_embedder(embedder_cfg, device=self.device)
+        self.embedder = build_embedder(embedder_cfg)
 
         # 2) Index
         self.index = load_index(index_cfg, artifact_dir=artifact_dir)
@@ -85,7 +84,7 @@ class RagPipeline:
 
         # 6) Generator
         if not self.retrieve_only:
-            self.generator = build_generator(generator_cfg, device=self.device)
+            self.generator = build_generator(generator_cfg)
 
         self.logger.info(
             "RagPipeline initialized prompt=%s retrieve_only=%s top_k=%d device=%s",

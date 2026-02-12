@@ -96,6 +96,7 @@ class DPREmbedderConfig:
     passage_encoder_id: str = ""
     query_encoder_id: str = ""
     batch_size: int = 32
+    device: str = "auto"
 
     # Explicitly include the field that was referenced before.
     # DPR typically uses dot-product geometry, so don't normalize by default.
@@ -136,6 +137,7 @@ class GemmaEmbedderConfig:
     model_name: str = ""
     dim: int = 768
     name: str = "gemma_embedder"
+    device: str = "auto"
 
     def __post_init__(self) -> None:
         if not self.model_name:
@@ -180,6 +182,8 @@ class Qwen2_5InstructGeneratorConfig:
     top_k: int = 50
     do_sample: bool = False
     max_new_tokens: int = 256
+    device: str = "auto"
+
 
     use_4bit: bool = False
     hf_token: Optional[str] = None
@@ -319,7 +323,6 @@ class RagServiceConfig:
     telemetry: Optional[TelemetryConfig] = None
 
     top_k: int = 5
-    device: str = "auto"
     cache: Optional[CacheConfig] = None
     seed: Optional[int] = None
 

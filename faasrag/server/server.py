@@ -82,8 +82,12 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
         logger: Optional[logging.Logger] = None,
     ):
         self.cfg = cfg
-        device = cfg.device or "auto"
-        self.cfg.device = ("cuda" if torch.cuda.is_available() else "cpu") if device == "auto" else torch.device(device)
+        if not torch.cuda.is_available():
+            logger.warning("CUDA not available, running on CPU (this may be slow)")
+            cfg.embedder.device = "cpu"
+            cfg.generator.device = "cpu"
+        # device = cfg.device or "auto"
+        # self.cfg.device = ("cuda" if torch.cuda.is_available() else "cpu") if device == "auto" else torch.device(device)
         
         self.logger = logger
         
@@ -95,7 +99,7 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
             docstore_cfg=cfg.docstore,
             artifact_dir=cfg.artifact_dir,
             top_k=cfg.top_k,
-            device=self.cfg.device,
+            # device=self.cfg.device,
             retrieve_only=cfg.retrieve_only,
             prompt_type=cfg.prompt_type,
             max_ctx_chars=cfg.max_ctx_chars,

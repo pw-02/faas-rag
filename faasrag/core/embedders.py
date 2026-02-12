@@ -157,11 +157,11 @@ class GemmaEmbedder:
 Embedder = Union[DPREmbedder, SyntheticEmbedder, GemmaEmbedder]
 
 
-def build_embedder(cfg: EmbedderConfig, device: str) -> Embedder:
+def build_embedder(cfg: EmbedderConfig) -> Embedder:
     if cfg.type == "dpr":
         c: DPREmbedderConfig = cfg
         return DPREmbedder(
-            device=device,
+            device=c.device,
             query_encoder_id=c.query_encoder_id,
             passage_encoder_id=c.passage_encoder_id,
             batch_size=c.batch_size,
@@ -180,7 +180,7 @@ def build_embedder(cfg: EmbedderConfig, device: str) -> Embedder:
     if cfg.type == "gemma":
         c: GemmaEmbedderConfig = cfg
         return GemmaEmbedder(
-            device=device,
+            device=c.device,
             model_name=c.model_name,
         )
 

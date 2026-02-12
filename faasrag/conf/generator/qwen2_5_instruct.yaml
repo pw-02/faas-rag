@@ -7,3 +7,5 @@ do_sample: false
 max_new_tokens: 256
 use_4bit: false
 hf_token: null
+device: cuda:0
+device_index: 0

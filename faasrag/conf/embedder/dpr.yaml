@@ -3,6 +3,7 @@ type: dpr
 passage_encoder_id: sentence-transformers/facebook-dpr-ctx_encoder-single-nq-base
 query_encoder_id: sentence-transformers/facebook-dpr-question_encoder-single-nq-base
 batch_size: 32
+device: cuda:0
 # normalize_embeddings: false
 # metric: ip
 # dim: 768
