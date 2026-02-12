@@ -8,7 +8,9 @@ defaults:
   - override hydra/hydra_logging: disabled
   - _self_
 
-docstore_backend: jsonl_offsets # sqlite, jsonl_offsets, memory, sqlite, mmap
+
+
+docstore_backend: s3_jsonl_offsets # local_sqlite, local_jsonl_offsets, s3_jsonl_offsets, memory_jsonl
 host: localhost
 port: 50051
 top_k: 5 #k=0 => no retrieval, pure generation

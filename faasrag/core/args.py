@@ -268,7 +268,7 @@ class GeneratorConfig:
 # DocStore
 # -------------------------
 DocSourceFormat = Literal["jsonl"]
-DocBackendKind = Literal["sqlite", "jsonl_offsets", "memory"]
+DocBackendKind = Literal["local_sqlite", "local_jsonl_offsets", "s3_jsonl_offsets", "memory_jsonl"]
 
 
 @dataclass
@@ -326,7 +326,7 @@ class RagServiceConfig:
     top_k: int = 5
     cache: Optional[CacheConfig] = None
     seed: Optional[int] = None
-    docstore_backend: DocBackendKind = "memory"
+    docstore_backend: DocBackendKind = "memory_jsonl"
 
     def __post_init__(self) -> None:
         if not self.artifact_dir:
