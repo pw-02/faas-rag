@@ -86,8 +86,14 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
             logger.warning("CUDA not available, running on CPU (this may be slow)")
             cfg.embedder.device = "cpu"
             cfg.generator.device = "cpu"
-        # device = cfg.device or "auto"
-        # self.cfg.device = ("cuda" if torch.cuda.is_available() else "cpu") if device == "auto" else torch.device(device)
+        else:
+            if cfg.embedder.device == "auto":
+                cfg.embedder.device = "cuda:0"
+            if cfg.generator.device == "auto":
+                cfg.generator.device = "cuda:0"
+            logger.info("Using embedder device: %s", cfg.embedder.device)
+            logger.info("Using generator device: %s", cfg.generator.device)
+
         
         self.logger = logger
         
