@@ -3,3 +3,4 @@ path: s3://vectorindexes/wiki-dpr/faiss_wiki_dpr/hnsw_10m/index_psgs_w100_nq_no_
 use_gpu: false
 metric: ip
 ef_search: 64
+index_vector_count: 10000000

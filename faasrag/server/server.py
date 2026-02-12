@@ -104,6 +104,8 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
         logger.info("Using embedder device: %s", cfg.embedder.device)
         logger.info("Using generator device: %s", cfg.generator.device)
 
+        self.index_vector_count = getattr(cfg.index, "index_vector_count", None)
+
         if cfg.telemetry.enabled:
             # logger.info("Telemetry enabled: writing resource usage logs to %s", cfg.telemetry.path)
             save_cfg(cfg, path=os.path.join(cfg.telemetry.dir, "service_config.yaml"))
@@ -235,6 +237,7 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
                     completion_tokens=int(completion_tokens),
                     total_tokens=int(total_tokens),
                     retrieved_doc_ids=retrieved_doc_ids,
+                    index_vector_count=int(self.index_vector_count) if self.index_vector_count is not None else 0,
                 )
                 if not job.future.done():
                     job.future.set_result(rag_pb2.RAGResponse(answer=answer, trace=trace))

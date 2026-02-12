@@ -15,6 +15,7 @@ Metric = Literal["ip", "l2"]
 class IndexConfig:
     type: IndexType
     path: str
+    index_vector_count: int
     metric: Metric = "ip"
     use_gpu: bool = False
 
@@ -22,6 +23,7 @@ class IndexConfig:
     nprobe: int = 16
     # HNSW search-time
     ef_search: int = 64
+    
 
     # Optional reference name if you're selecting docstores by name in Hydra.
     # (The service still takes an actual DocStoreConfig; this is just a label/reference.)

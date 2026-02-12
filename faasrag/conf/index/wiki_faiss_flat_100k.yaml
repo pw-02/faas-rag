@@ -2,3 +2,4 @@ type: flat
 path: s3://vectorindexes/wiki-dpr/faiss_wiki_dpr/flat_100k/index_psgs_w100_nq_no_index_flat_ip_100000.faiss
 use_gpu: false
 metric: ip
+index_vector_count: 100000

@@ -4,3 +4,4 @@ path: s3://vectorindexes/wiki-dpr/faiss_wiki_dpr/ivf_1m/index_psgs_w100_nq_no_in
 metric: ip
 nprobe: 16
 use_gpu: false
+index_vector_count: 1000000

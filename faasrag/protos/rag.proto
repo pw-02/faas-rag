@@ -28,6 +28,8 @@ message Trace {
   int32 total_tokens = 8;
 
   repeated string retrieved_doc_ids = 9;
+
+  int32 index_vector_count = 10;
 }
 
 message RAGResponse {
