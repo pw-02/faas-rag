@@ -37,6 +37,7 @@ def trace_to_dict(trace: rag_pb2.Trace) -> Dict[str, Any]:
         "cache_misses": int(trace.cache_misses),
         "cache_used": bool(trace.cache_used),
         "k": int(trace.k),
+        "index_vector_count": int(trace.index_vector_count),
         "prompt_tokens": int(trace.prompt_tokens),
         "completion_tokens": int(trace.completion_tokens),
         "total_tokens": int(trace.total_tokens),

@@ -77,6 +77,13 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
     total = 0
     err_count = 0
 
+    # NEW: cache + token aggregates (successful only)
+    cache_hits_total = 0
+    cache_misses_total = 0
+    prompt_tokens_total = 0
+    completion_tokens_total = 0
+    total_tokens_total = 0
+
     it = iter_jsonl(results_path)
 
     # skip warmup records regardless of success/failure
@@ -96,7 +103,8 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
         if isinstance(lat, (int, float)):
             ok_lat.append(float(lat))
 
-        timings = ((rec.get("trace") or {}).get("timings_s")) or {}
+        trace = rec.get("trace") or {}
+        timings = trace.get("timings_s") or {}
 
         e2e = timings.get("e2e_s")
         if isinstance(e2e, (int, float)):
@@ -110,6 +118,24 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
             if isinstance(v, (int, float)):
                 stage_vals.setdefault(k, []).append(float(v))
 
+        # cache + tokens
+        ch = trace.get("cache_hits")
+        cm = trace.get("cache_misses")
+        if isinstance(ch, int):
+            cache_hits_total += ch
+        if isinstance(cm, int):
+            cache_misses_total += cm
+
+        pt = trace.get("prompt_tokens")
+        ct = trace.get("completion_tokens")
+        tt = trace.get("total_tokens")
+        if isinstance(pt, int):
+            prompt_tokens_total += pt
+        if isinstance(ct, int):
+            completion_tokens_total += ct
+        if isinstance(tt, int):
+            total_tokens_total += tt
+
     ok = total - err_count
     err_rate = (err_count / total) if total else 0.0
 
@@ -118,6 +144,13 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
     ok_queue.sort()
     for k in stage_vals:
         stage_vals[k].sort()
+
+    cache_total = cache_hits_total + cache_misses_total
+    cache_hit_rate = (cache_hits_total / cache_total) if cache_total else None
+
+    prompt_tokens_avg = (prompt_tokens_total / ok) if ok else None
+    completion_tokens_avg = (completion_tokens_total / ok) if ok else None
+    total_tokens_avg = (total_tokens_total / ok) if ok else None
 
     return {
         "total": total,
@@ -128,6 +161,16 @@ def collect_results_stats(results_path: Path, *, skip_first_n: int) -> Dict[str,
         "e2e": ok_e2e,
         "queue": ok_queue,
         "stages": stage_vals,
+        # NEW: cache + tokens
+        "cache_hits_total": cache_hits_total,
+        "cache_misses_total": cache_misses_total,
+        "cache_hit_rate": cache_hit_rate,
+        "prompt_tokens_total": prompt_tokens_total,
+        "completion_tokens_total": completion_tokens_total,
+        "total_tokens_total": total_tokens_total,
+        "prompt_tokens_avg": prompt_tokens_avg,
+        "completion_tokens_avg": completion_tokens_avg,
+        "total_tokens_avg": total_tokens_avg,
     }
 
 
@@ -174,6 +217,7 @@ def collect_run(
     return {
         "run_dir": str(run_dir),
         "run_name": meta.get("run_name", run_dir.name),
+        "index_vector_count": meta.get("index_vector_count", 0),
         "target": meta.get("target"),
         "wall_time_s": wall_time_s,
         "throughput_rps": throughput,
@@ -199,6 +243,8 @@ def print_table(rows: List[Dict[str, Any]]) -> None:
         "queue_p95",
         "rss_peak_gb",
         "gpu_mem_peak_gb",
+        "cache_hit_rate",
+        "tok_total_avg",
     ]
     print("| " + " | ".join(headers) + " |")
     print("|" + "|".join(["---"] * len(headers)) + "|")
@@ -226,6 +272,8 @@ def print_table(rows: List[Dict[str, Any]]) -> None:
                     fmt(q["p95"]),
                     fmt(r.get("proc_rss_gb_peak"), digits=3),
                     fmt(r.get("gpu_mem_used_gb_peak"), digits=3),
+                    fmt(r.get("cache_hit_rate"), digits=3),
+                    fmt(r.get("total_tokens_avg"), digits=2),
                 ]
             )
             + " |"
@@ -246,7 +294,7 @@ def print_stage_breakdown(best: Dict[str, Any], stage_keys: List[str]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runs_dir", default="runs/memory_hnsw", help="Directory containing run subdirectories")
+    ap.add_argument("--runs_dir", default="runs/sqlite_hnsw", help="Directory containing run subdirectories")
     ap.add_argument("--results_name", default="results.jsonl")
     ap.add_argument("--resource_name", default="resource_usage.jsonl")
     ap.add_argument("--skip_first_n", type=int, default=1, help="Skip first N records in each run as warmup")
@@ -283,8 +331,10 @@ def main() -> None:
         print(f"No runs found under {runs_dir} with {args.results_name}")
         return
 
-    # Union of stage keys across runs (for CSV columns)
-    all_stage_keys = sorted({k for r in runs for k in r["stages"].keys()})
+    # Keep preferred stage order first, then append any extras (stable)
+    preferred = [s.strip() for s in args.stage_keys.split(",") if s.strip()]
+    seen = {k for r in runs for k in r["stages"].keys()}
+    all_stage_keys = [k for k in preferred if k in seen] + sorted(seen - set(preferred))
 
     def sort_key(r: Dict[str, Any]) -> float:
         lat = summarize_sorted(r["lat"])
@@ -311,12 +361,24 @@ def main() -> None:
     out = Path(csv_out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    token_cache_headers = [
+        "cache_hits_total",
+        "cache_misses_total",
+        "cache_hit_rate",
+        "prompt_tokens_total",
+        "completion_tokens_total",
+        "total_tokens_total",
+        "prompt_tokens_avg",
+        "completion_tokens_avg",
+        "total_tokens_avg",
+    ]
+
     resource_headers = [
         "proc_rss_gb_peak",
-        # "gpu_mem_used_gb_peak",
-        # "gpu_util_percent_peak",
-        # "system_cpu_percent_peak",
-        # "system_mem_percent_peak",
+        "gpu_mem_used_gb_peak",
+        "gpu_util_percent_peak",
+        "system_cpu_percent_peak",
+        "system_mem_percent_peak",
         "system_mem_used_gb_peak",
     ]
     stage_headers = [f"{k}_mean_s" for k in all_stage_keys]
@@ -327,6 +389,7 @@ def main() -> None:
             [
                 "run_name",
                 "run_dir",
+                "index_vector_count",
                 "ok",
                 "total",
                 "err_rate",
@@ -342,6 +405,7 @@ def main() -> None:
                 "queue_p95",
                 "queue_p99",
             ]
+            + token_cache_headers
             + resource_headers
             + stage_headers
         )
@@ -360,6 +424,7 @@ def main() -> None:
                 [
                     r["run_name"],
                     r["run_dir"],
+                    r["index_vector_count"],
                     r["ok"],
                     r["total"],
                     r["err_rate"],
@@ -374,6 +439,17 @@ def main() -> None:
                     q["p50"],
                     q["p95"],
                     q["p99"],
+                    # tokens/cache
+                    r.get("cache_hits_total"),
+                    r.get("cache_misses_total"),
+                    r.get("cache_hit_rate"),
+                    r.get("prompt_tokens_total"),
+                    r.get("completion_tokens_total"),
+                    r.get("total_tokens_total"),
+                    r.get("prompt_tokens_avg"),
+                    r.get("completion_tokens_avg"),
+                    r.get("total_tokens_avg"),
+                    # peaks
                     r.get("proc_rss_gb_peak"),
                     r.get("gpu_mem_used_gb_peak"),
                     r.get("gpu_util_percent_peak"),
