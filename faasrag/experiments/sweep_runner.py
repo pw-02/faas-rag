@@ -519,7 +519,8 @@ def main() -> None:
     service_base = shlex.split(args.service_cmd)
     client_base = shlex.split(args.client_cmd)
 
-    experiments = build_experiments()
+    # experiments = build_experiments()
+    experiments = build_docstore_backend_experiments()
 
     #print out total number of experiments and names before starting
     print(f"Total experiments to run: {len(experiments)}")
