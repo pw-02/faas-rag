@@ -92,10 +92,10 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
         max_inflight: int,
         logger: Optional[logging.Logger] = None,
     ):
-       
+   
         cfg.embedder.device = resolve_device(cfg.embedder.device)
         cfg.generator.device = resolve_device(cfg.generator.device)
-
+        self.args = cfg
         if cfg.embedder.device == "cpu" or cfg.generator.device == "cpu":
             logger.warning("CUDA not available, running on CPU (this may be slow)")
 
