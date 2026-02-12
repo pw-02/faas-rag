@@ -87,16 +87,17 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
             cfg.embedder.device = "cpu"
             cfg.generator.device = "cpu"
         else:
+
             if cfg.embedder.device == "auto":
                 cfg.embedder.device = "cuda:0"
+
             if cfg.generator.device == "auto":
                 cfg.generator.device = "cuda:0"
+
             logger.info("Using embedder device: %s", cfg.embedder.device)
             logger.info("Using generator device: %s", cfg.generator.device)
 
-        
         self.logger = logger
-        
         self.rag_pipeline = RagPipeline(
             generator_cfg=cfg.generator,
             embedder_cfg=cfg.embedder,
