@@ -27,7 +27,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple,Iterable
 
 import grpc
 
@@ -44,53 +44,194 @@ SUPPORTED_INDEX_TYPES = {
     "21m": ["hnsw"],
 }
 
-SUPPORTED_DOCSTORE_BACKENDS = ["local_sqlite", "local_jsonl_offsets", "s3_jsonl_offsets", "memory_jsonl"]
+SUPPORTED_DOCSTORE_BACKENDS = [
+    "local_sqlite",
+    "local_jsonl_offsets",
+    "s3_jsonl_offsets",
+    "memory_jsonl",
+]
 
 ALL_INDEX_TYPES = sorted({t for types in SUPPORTED_INDEX_TYPES.values() for t in types})
 ALL_SIZES = sorted(SUPPORTED_INDEX_TYPES.keys())
+ALL_DOCSTORE_BACKENDS = list(SUPPORTED_DOCSTORE_BACKENDS)
 
+def _make_experiment(index_type: str, dataset_size: str, docstore_backend: str) -> Dict[str, object]:
+    return {
+        "name": f"wiki_faiss_{index_type}_{dataset_size}_{docstore_backend}",
+        "overrides": [
+            f"index=wiki_faiss_{index_type}_{dataset_size}",
+            f"docstore=wiki_dpr_{dataset_size}",
+            f"docstore_backend={docstore_backend}",
+        ],
+    }
+
+def _validate(index_type: str, dataset_size: str, docstore_backend: str) -> None:
+    if dataset_size not in SUPPORTED_INDEX_TYPES:
+        raise ValueError(f"Unknown dataset_size {dataset_size!r}. Supported: {ALL_SIZES}")
+    if docstore_backend not in ALL_DOCSTORE_BACKENDS:
+        raise ValueError(f"Unknown docstore_backend {docstore_backend!r}. Supported: {ALL_DOCSTORE_BACKENDS}")
+
+    allowed = SUPPORTED_INDEX_TYPES[dataset_size]
+    if index_type not in allowed:
+        raise ValueError(
+            f"index_type {index_type!r} is not supported for dataset_size {dataset_size!r}. "
+            f"Supported for {dataset_size}: {allowed}"
+        )
+
+# -------------------------
+# Simple “one-axis sweep” helpers
+# -------------------------
+
+def build_docstore_backend_experiments(
+    *,
+    index_type: str = "hnsw",
+    dataset_size: str = "21m",
+) -> List[Dict[str, object]]:
+    # Validate once (for each backend, index_type/dataset_size must still be valid)
+    if dataset_size not in SUPPORTED_INDEX_TYPES:
+        raise ValueError(f"Unknown dataset_size {dataset_size!r}. Supported: {ALL_SIZES}")
+    if index_type not in SUPPORTED_INDEX_TYPES[dataset_size]:
+        raise ValueError(
+            f"index_type {index_type!r} is not supported for dataset_size {dataset_size!r}. "
+            f"Supported for {dataset_size}: {SUPPORTED_INDEX_TYPES[dataset_size]}"
+        )
+
+    return [_make_experiment(index_type, dataset_size, b) for b in ALL_DOCSTORE_BACKENDS]
+
+
+def build_index_type_experiments(
+    *,
+    dataset_size: str = "21m",
+    docstore_backend: str = "local_jsonl_offsets",
+) -> List[Dict[str, object]]:
+    # Only generate index types that are valid for that dataset_size
+    if dataset_size not in SUPPORTED_INDEX_TYPES:
+        raise ValueError(f"Unknown dataset_size {dataset_size!r}. Supported: {ALL_SIZES}")
+    if docstore_backend not in ALL_DOCSTORE_BACKENDS:
+        raise ValueError(f"Unknown docstore_backend {docstore_backend!r}. Supported: {ALL_DOCSTORE_BACKENDS}")
+
+    types = SUPPORTED_INDEX_TYPES[dataset_size]
+    return [_make_experiment(t, dataset_size, docstore_backend) for t in types]
+
+
+def build_index_size_experiments(
+    *,
+    index_type: str = "hnsw",
+    docstore_backend: str = "local_jsonl_offsets",
+) -> List[Dict[str, object]]:
+    if index_type not in ALL_INDEX_TYPES:
+        raise ValueError(f"Unknown index_type {index_type!r}. Supported: {ALL_INDEX_TYPES}")
+    if docstore_backend not in ALL_DOCSTORE_BACKENDS:
+        raise ValueError(f"Unknown docstore_backend {docstore_backend!r}. Supported: {ALL_DOCSTORE_BACKENDS}")
+
+    exps: List[Dict[str, object]] = []
+    for size in ALL_SIZES:
+        if index_type in SUPPORTED_INDEX_TYPES[size]:
+            exps.append(_make_experiment(index_type, size, docstore_backend))
+    return exps
+
+
+def build_docstore_backend_experiments() -> List[Dict[str, object]]:
+    experiments = []
+    for ds_backend in ALL_DOCSTORE_BACKENDS:
+        experiments.append(
+            {
+                "name": f"wiki_faiss_hnsw_21m_{ds_backend}",
+                "overrides": [
+                    f"index=wiki_faiss_hnsw_21m",
+                    f"docstore=wiki_dpr_21m",
+                    f"docstore_backend={ds_backend}",
+                ],
+            }
+        )
+    return experiments
+
+# -------------------------
+# General cartesian builder (optional)
+# -------------------------
 
 def build_experiments(
     index_type: Optional[str] = "hnsw",
     dataset_size: Optional[str] = "21m",
+    docstore_backend: Optional[str] = None,
 ) -> List[Dict[str, object]]:
-    if index_type is not None and index_type not in ALL_INDEX_TYPES:
-        raise ValueError(f"Unknown index_type {index_type!r}. Supported: {ALL_INDEX_TYPES}")
+    # Determine candidate sets
+    sizes = [dataset_size] if dataset_size is not None else ALL_SIZES
+    backends = [docstore_backend] if docstore_backend is not None else ALL_DOCSTORE_BACKENDS
 
-    if dataset_size is not None and dataset_size not in SUPPORTED_INDEX_TYPES:
-        raise ValueError(f"Unknown dataset_size {dataset_size!r}. Supported: {ALL_SIZES}")
-
-    # Validate the pair if both are specified
-    if index_type is not None and dataset_size is not None:
-        allowed_for_size = SUPPORTED_INDEX_TYPES[dataset_size]
-        if index_type not in allowed_for_size:
-            raise ValueError(
-                f"index_type {index_type!r} is not supported for dataset_size {dataset_size!r}. "
-                f"Supported for {dataset_size}: {allowed_for_size}"
-            )
-
-    sizes = [dataset_size] if dataset_size is not None else list(SUPPORTED_INDEX_TYPES.keys())
-
-    experiments: List[Dict[str, object]] = []
+    exps: List[Dict[str, object]] = []
     for size in sizes:
+        if size not in SUPPORTED_INDEX_TYPES:
+            raise ValueError(f"Unknown dataset_size {size!r}. Supported: {ALL_SIZES}")
+
         types = SUPPORTED_INDEX_TYPES[size]
         if index_type is not None:
+            if index_type not in ALL_INDEX_TYPES:
+                raise ValueError(f"Unknown index_type {index_type!r}. Supported: {ALL_INDEX_TYPES}")
             types = [t for t in types if t == index_type]
 
         for t in types:
-            for ds_backend in SUPPORTED_DOCSTORE_BACKENDS:
-                experiments.append(
-                    {
-                        "name": f"wiki_faiss_{t}_{size}_{ds_backend}",
-                        "overrides": [
-                            f"index=wiki_faiss_{t}_{size}",
-                            f"docstore=wiki_dpr_{size}",
-                            f"docstore_backend={ds_backend}",
-                        ],
-                    }
-                )
+            for b in backends:
+                if b not in ALL_DOCSTORE_BACKENDS:
+                    raise ValueError(f"Unknown docstore_backend {b!r}. Supported: {ALL_DOCSTORE_BACKENDS}")
+                exps.append(_make_experiment(t, size, b))
 
-    return experiments
+    return exps
+
+
+
+# def build_experiments(
+#     index_type: Optional[str] = "hnsw",
+#     dataset_size: Optional[str] = "21m",
+#     docstore_backend: Optional[str] = None,
+# ) -> List[Dict[str, object]]:
+
+#     if index_type is not None and index_type not in ALL_INDEX_TYPES:
+#         raise ValueError(f"Unknown index_type {index_type!r}. Supported: {ALL_INDEX_TYPES}")
+
+#     if dataset_size is not None and dataset_size not in SUPPORTED_INDEX_TYPES:
+#         raise ValueError(f"Unknown dataset_size {dataset_size!r}. Supported: {ALL_SIZES}")
+
+#     if docstore_backend is not None and docstore_backend not in ALL_DOCSTORE_BACKENDS:
+#         raise ValueError(
+#             f"Unknown docstore_backend {docstore_backend!r}. "
+#             f"Supported: {ALL_DOCSTORE_BACKENDS}"
+#         )
+
+#     # Validate (index_type, dataset_size) pair
+#     if index_type is not None and dataset_size is not None:
+#         allowed_for_size = SUPPORTED_INDEX_TYPES[dataset_size]
+#         if index_type not in allowed_for_size:
+#             raise ValueError(
+#                 f"index_type {index_type!r} is not supported for dataset_size {dataset_size!r}. "
+#                 f"Supported for {dataset_size}: {allowed_for_size}"
+#             )
+
+#     sizes = [dataset_size] if dataset_size is not None else list(SUPPORTED_INDEX_TYPES.keys())
+#     backends = [docstore_backend] if docstore_backend is not None else ALL_DOCSTORE_BACKENDS
+
+#     experiments: List[Dict[str, object]] = []
+
+#     for size in sizes:
+#         types = SUPPORTED_INDEX_TYPES[size]
+#         if index_type is not None:
+#             types = [t for t in types if t == index_type]
+
+#         for t in types:
+#             for ds_backend in backends:
+#                 experiments.append(
+#                     {
+#                         "name": f"wiki_faiss_{t}_{size}_{ds_backend}",
+#                         "overrides": [
+#                             f"index=wiki_faiss_{t}_{size}",
+#                             f"docstore=wiki_dpr_{size}",
+#                             f"docstore_backend={ds_backend}",
+#                         ],
+#                     }
+#                 )
+
+#     return experiments
+
 
 
 # -----------------------
