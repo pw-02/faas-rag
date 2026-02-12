@@ -34,7 +34,6 @@ import grpc
 import faasrag.protos.rag_pb2 as rag_pb2
 import faasrag.protos.rag_pb2_grpc as rag_pb2_grpc
 
-
 SUPPORTED_INDEX_TYPES = {
     "100k": ["hnsw", "flat", "ivf"],
     "500k": ["flat", "hnsw", "ivf"],
@@ -47,23 +46,51 @@ SUPPORTED_INDEX_TYPES = {
 
 SUPPORTED_DOCSTORE_BACKENDS = ["local_sqlite", "local_jsonl_offsets", "s3_jsonl_offsets", "memory_jsonl"]
 
+ALL_INDEX_TYPES = sorted({t for types in SUPPORTED_INDEX_TYPES.values() for t in types})
+ALL_SIZES = sorted(SUPPORTED_INDEX_TYPES.keys())
 
-def build_experiments(index_type: Optional[str] = "hnsw") -> List[Dict[str, object]]:
 
-    allowed = {t for ts in SUPPORTED_INDEX_TYPES.values() for t in ts}
-    if index_type and index_type not in allowed:
-        raise ValueError(f"Unknown index_type '{index_type}'. Supported: {sorted(allowed)}")
+def build_experiments(
+    index_type: Optional[str] = "hnsw",
+    dataset_size: Optional[str] = "21m",
+) -> List[Dict[str, object]]:
+    if index_type is not None and index_type not in ALL_INDEX_TYPES:
+        raise ValueError(f"Unknown index_type {index_type!r}. Supported: {ALL_INDEX_TYPES}")
 
-    return [
-        {
-            "name": f"wiki_faiss_{t}_{size}_{ds_backend}",
-            "overrides": [f"index=wiki_faiss_{t}_{size}", f"docstore=wiki_dpr_{size}", f"docstore_backend={ds_backend}"],
-        }
-        for size, types in SUPPORTED_INDEX_TYPES.items()
-        for t in types
-        for ds_backend in SUPPORTED_DOCSTORE_BACKENDS
-        if index_type is None or t == index_type
-    ]
+    if dataset_size is not None and dataset_size not in SUPPORTED_INDEX_TYPES:
+        raise ValueError(f"Unknown dataset_size {dataset_size!r}. Supported: {ALL_SIZES}")
+
+    # Validate the pair if both are specified
+    if index_type is not None and dataset_size is not None:
+        allowed_for_size = SUPPORTED_INDEX_TYPES[dataset_size]
+        if index_type not in allowed_for_size:
+            raise ValueError(
+                f"index_type {index_type!r} is not supported for dataset_size {dataset_size!r}. "
+                f"Supported for {dataset_size}: {allowed_for_size}"
+            )
+
+    sizes = [dataset_size] if dataset_size is not None else list(SUPPORTED_INDEX_TYPES.keys())
+
+    experiments: List[Dict[str, object]] = []
+    for size in sizes:
+        types = SUPPORTED_INDEX_TYPES[size]
+        if index_type is not None:
+            types = [t for t in types if t == index_type]
+
+        for t in types:
+            for ds_backend in SUPPORTED_DOCSTORE_BACKENDS:
+                experiments.append(
+                    {
+                        "name": f"wiki_faiss_{t}_{size}_{ds_backend}",
+                        "overrides": [
+                            f"index=wiki_faiss_{t}_{size}",
+                            f"docstore=wiki_dpr_{size}",
+                            f"docstore_backend={ds_backend}",
+                        ],
+                    }
+                )
+
+    return experiments
 
 
 # -----------------------
