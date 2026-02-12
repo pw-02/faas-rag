@@ -45,19 +45,23 @@ SUPPORTED_INDEX_TYPES = {
     "21m": ["hnsw"],
 }
 
+SUPPORTED_DOCSTORES = ["local_sqlite", "local_jsonl_offsets", "s3_jsonl_offsets", "memory_jsonl"]
+
 
 def build_experiments(index_type: Optional[str] = "hnsw") -> List[Dict[str, object]]:
+
     allowed = {t for ts in SUPPORTED_INDEX_TYPES.values() for t in ts}
     if index_type and index_type not in allowed:
         raise ValueError(f"Unknown index_type '{index_type}'. Supported: {sorted(allowed)}")
 
     return [
         {
-            "name": f"wiki_faiss_{t}_{size}",
-            "overrides": [f"index=wiki_faiss_{t}_{size}", f"docstore=wiki_dpr_{size}"],
+            "name": f"wiki_faiss_{t}_{size}_{ds}",
+            "overrides": [f"index=wiki_faiss_{t}_{size}", f"docstore=wiki_dpr_{size}_{ds}"],
         }
         for size, types in SUPPORTED_INDEX_TYPES.items()
         for t in types
+        for ds in SUPPORTED_DOCSTORES
         if index_type is None or t == index_type
     ]
 
@@ -331,7 +335,7 @@ def main() -> None:
     ap.add_argument("--service_cmd", default="python -u -m faasrag.server.server")
     ap.add_argument("--client_cmd", default="python -u -m faasrag.client.nq_rag_client")
 
-    ap.add_argument("--runs_dir", default="runs/sqlite_hnsw", help="Directory to store run outputs")
+    ap.add_argument("--runs_dir", default="runs", help="Directory to store run outputs")
     ap.add_argument("--dataset_path", default="data/datasets/qa/nq/nq_dev.jsonl")
     ap.add_argument("--limit", type=int, default=500)
 

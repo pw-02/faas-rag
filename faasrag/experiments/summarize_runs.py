@@ -295,7 +295,7 @@ def print_stage_breakdown(best: Dict[str, Any], stage_keys: List[str]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runs_dir", default="runs/sqlite_hnsw", help="Directory containing run subdirectories")
+    ap.add_argument("--runs_dir", default="runs/jsonl_offsets_hnsw", help="Directory containing run subdirectories")
     ap.add_argument("--results_name", default="results.jsonl")
     ap.add_argument("--resource_name", default="resource_usage.jsonl")
     ap.add_argument("--skip_first_n", type=int, default=1, help="Skip first N records in each run as warmup")
