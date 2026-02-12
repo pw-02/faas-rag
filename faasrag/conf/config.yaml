@@ -14,7 +14,7 @@ port: 50051
 top_k: 5 #k=0 => no retrieval, pure generation
 num_workers: 1
 max_inflight: 100
-retrieve_only: True
+retrieve_only: False
 log_level: INFO
 artifact_dir: artifacts
 seed: 42
