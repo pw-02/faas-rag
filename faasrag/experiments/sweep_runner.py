@@ -2,27 +2,18 @@
 """
 sweep.py
 
-Run a sweep of RAG service configurations (e.g., different indexes), and for each:
-  1) start the service with Hydra overrides
-  2) wait until it is ready (Ping RPC)
-  3) run your NQ JSONL client to produce results.jsonl
-  4) stop the service
+For each experiment:
+  1) start service with Hydra overrides
+  2) wait until ready (Ping RPC)
+  3) run client to produce results.jsonl
+  4) stop service
   5) repeat
 
-Notes:
-- DOES NOT override service artifact_dir (per your request).
-- Writes per-run logs + client outputs under runs/<run_name>/.
-- Uses a unique port per run to avoid port-reuse issues.
-- Cross-platform process handling (Windows + POSIX).
-
-Example:
-  python sweep.py \
-    --service_cmd "python -m faasrag.server.server" \
-    --client_cmd "python -m faasrag.client.nq_rag_client" \
-    --dataset_path data/datasets/qa/nq/nq_dev.jsonl \
-    --limit 500 \
-    --runs_dir runs \
-    --base_port 50051
+Writes outputs under runs/<idx>_<name>/:
+  - service.log
+  - client.log
+  - results.jsonl
+  - meta.json
 """
 
 import argparse
@@ -33,6 +24,7 @@ import shlex
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -41,33 +33,62 @@ import grpc
 
 import faasrag.protos.rag_pb2 as rag_pb2
 import faasrag.protos.rag_pb2_grpc as rag_pb2_grpc
-import threading
 
 
-def _tee_stream(stream, logfile):
+SUPPORTED_INDEX_TYPES = {
+    "100k": ["hnsw", "flat", "ivf"],
+    "500k": ["flat", "hnsw", "ivf"],
+    "1m": ["flat", "hnsw", "ivf"],
+    "2_5m": ["hnsw", "ivf"],
+    "5m": ["hnsw", "ivf"],
+    "10m": ["hnsw"],
+    "21m": ["hnsw"],
+}
+
+
+def build_experiments(index_type: Optional[str] = "hnsw") -> List[Dict[str, object]]:
+    allowed = {t for ts in SUPPORTED_INDEX_TYPES.values() for t in ts}
+    if index_type and index_type not in allowed:
+        raise ValueError(f"Unknown index_type '{index_type}'. Supported: {sorted(allowed)}")
+
+    return [
+        {
+            "name": f"wiki_faiss_{t}_{size}",
+            "overrides": [f"index=wiki_faiss_{t}_{size}", f"docstore=wiki_dpr_{size}"],
+        }
+        for size, types in SUPPORTED_INDEX_TYPES.items()
+        for t in types
+        if index_type is None or t == index_type
+    ]
+
+
+# -----------------------
+# Subprocess helpers
+# -----------------------
+
+def _tee_stream(prefix: str, stream, logfile) -> None:
     for line in iter(stream.readline, ""):
-        sys.stdout.write(line)
+        msg = f"{prefix}{line}"
+        sys.stdout.write(msg)
         sys.stdout.flush()
-        logfile.write(line)
+        logfile.write(msg)
         logfile.flush()
     stream.close()
-# -----------------------
-# Process management
-# -----------------------
 
-def _popen_with_logs(
-    cmd,
+
+def popen_tee(
+    cmd: List[str],
     *,
-    stdout_path,
-    cwd=None,
-    env=None,
-):
-    stdout_path.parent.mkdir(parents=True, exist_ok=True)
-    log_f = open(stdout_path, "w", encoding="utf-8")
+    log_path: Path,
+    cwd: Optional[str] = None,
+    env: Optional[Dict[str, str]] = None,
+    prefix: str = "",
+) -> Tuple[subprocess.Popen, "object"]:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_f = open(log_path, "w", encoding="utf-8")
 
     preexec_fn = None
     creationflags = 0
-
     if os.name == "nt":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
@@ -85,53 +106,32 @@ def _popen_with_logs(
         creationflags=creationflags,
     )
 
+    assert proc.stdout is not None
     threading.Thread(
         target=_tee_stream,
-        args=(proc.stdout, log_f),
+        args=(prefix, proc.stdout, log_f),
         daemon=True,
     ).start()
 
     return proc, log_f
 
 
-# def _popen_with_logs(
-#     cmd: List[str],
-#     *,
-#     stdout_path: Path,
-#     cwd: Optional[str] = None,
-#     env: Optional[Dict[str, str]] = None,
-# ) -> Tuple[subprocess.Popen, "object"]:
-#     stdout_path.parent.mkdir(parents=True, exist_ok=True)
-#     log_f = open(stdout_path, "w", encoding="utf-8")
-
-#     preexec_fn = None
-#     creationflags = 0
-
-#     if os.name == "nt":
-#         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
-#     else:
-#         preexec_fn = os.setsid  # type: ignore[attr-defined]
-
-#     proc = subprocess.Popen(
-#         cmd,
-#         cwd=cwd,
-#         env=env,
-#         stdout=log_f,
-#         stderr=subprocess.STDOUT,
-#         text=True,
-#         bufsize=1,
-#         preexec_fn=preexec_fn,
-#         creationflags=creationflags,
-#     )
-#     return proc, log_f
+def run_tee(cmd: List[str], *, log_path: Path, prefix: str = "") -> int:
+    proc, log_f = popen_tee(cmd, log_path=log_path, prefix=prefix)
+    try:
+        return proc.wait()
+    finally:
+        try:
+            log_f.close()
+        except Exception:
+            pass
 
 
-def _stop_process_tree(proc: subprocess.Popen, *, grace_s: float = 10.0) -> None:
+def stop_process_tree(proc: subprocess.Popen, *, grace_s: float = 10.0) -> None:
     if proc.poll() is not None:
         return
 
     if os.name == "nt":
-        # Try graceful first (may be ignored depending on how it's launched)
         try:
             proc.send_signal(signal.CTRL_BREAK_EVENT)
         except Exception:
@@ -143,7 +143,6 @@ def _stop_process_tree(proc: subprocess.Popen, *, grace_s: float = 10.0) -> None
                 return
             time.sleep(0.2)
 
-        # Hard kill entire tree
         try:
             subprocess.run(
                 ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
@@ -156,9 +155,7 @@ def _stop_process_tree(proc: subprocess.Popen, *, grace_s: float = 10.0) -> None
                 proc.kill()
             except Exception:
                 pass
-
     else:
-        # POSIX
         try:
             pgid = os.getpgid(proc.pid)
             os.killpg(pgid, signal.SIGINT)
@@ -188,139 +185,147 @@ def _stop_process_tree(proc: subprocess.Popen, *, grace_s: float = 10.0) -> None
 # Readiness check (Ping)
 # -----------------------
 
-async def _wait_for_service_ready(target: str, timeout_s: float = 120.0) -> None:
-    """
-    Poll the service by calling Ping() with a short timeout until it responds with ok=True.
-    """
-    #set no timeout for now
-    
+async def wait_for_service_ready(target: str, timeout_s: float = 120.0) -> None:
     deadline = time.time() + timeout_s
     last_err: Optional[str] = None
-    
-    #set no timeout for now
-    while True: #time.time() < deadline:
+
+    while time.time() < deadline:
         try:
             async with grpc.aio.insecure_channel(target) as channel:
                 stub = rag_pb2_grpc.RAGServiceStub(channel)
                 resp = await stub.Ping(rag_pb2.PingRequest(), timeout=1.0)
-
                 if getattr(resp, "ok", False):
                     return
-
                 last_err = "Ping returned ok=false"
         except Exception as e:
             last_err = f"{type(e).__name__}: {e}"
-            await asyncio.sleep(5)
 
-    raise TimeoutError(
-        f"Service not ready at {target} after {timeout_s}s. Last error: {last_err}"
-    )
+        await asyncio.sleep(2)
+
+    raise TimeoutError(f"Service not ready at {target} after {timeout_s}s. Last error: {last_err}")
 
 
 def wait_for_service_ready_sync(target: str, timeout_s: float) -> None:
-    """
-    Synchronous wrapper (useful in environments where you don't want to manage an event loop).
-    """
-    asyncio.run(_wait_for_service_ready(target, timeout_s=timeout_s))
+    asyncio.run(wait_for_service_ready(target, timeout_s=timeout_s))
 
-SIZES = [
-    "100k",
-    "500k",
-    "1m",
-    "2_5m",
-    "5m",
-    "10m",
-    "21m",
-]
 
-SUPPORTED_INDEX_TYPES = {
-    "100k": ["hnsw", "flat", "ivf"],
-    "500k": ["flat", "hnsw", "ivf"],
-    "1m": ["flat", "hnsw", "ivf"],
-    "2_5m": ["hnsw", "ivf"],
-    "5m": ["hnsw", "ivf"],
-    "10m": ["hnsw"],
-    "21m": ["hnsw"],
-}
 # -----------------------
-# Experiment definition
+# Run one experiment
 # -----------------------
 
-def build_experiments(index_type: Optional[str] = 'hnsw') -> List[Dict[str, object]]:
-    allowed = {t for ts in SUPPORTED_INDEX_TYPES.values() for t in ts}
-    if index_type and index_type not in allowed:
-        raise ValueError(f"Unknown index_type '{index_type}'. Supported: {sorted(allowed)}")
+def run_experiment(
+    *,
+    idx: int,
+    name: str,
+    overrides: List[str],
+    args,
+    service_base: List[str],
+    client_base: List[str],
+    run_dir: Path,
+) -> None:
+    port = args.base_port + idx
+    target = f"{args.host}:{port}"
 
-    return [
-        {
-            "name": f"wiki_faiss_{t}_{size}",
-            "overrides": [f"index=wiki_faiss_{t}_{size}", f"docstore=wiki_dpr_{size}"],
+    service_log = run_dir / "service.log"
+    client_log = run_dir / "client.log"
+    results_path = run_dir / "results.jsonl"
+    meta_path = run_dir / "meta.json"
+
+    if args.skip_if_exists and results_path.exists():
+        print(f"\n=== SKIP {idx:02d}: {name} (results.jsonl exists) ===")
+        return
+
+    # Clean dir if rerunning a failed attempt
+    if run_dir.exists() and not results_path.exists():
+        for f in run_dir.iterdir():
+            if f.is_file():
+                f.unlink()
+
+    telemetry_overrides: List[str] = []
+    if args.enable_telemetry:
+        telemetry_overrides = [
+            "telemetry.enabled=true",
+            "telemetry.interval_s=2",
+            f"telemetry.dir={run_dir}",
+        ]
+
+    service_cmd = service_base + [f"host={args.host}", f"port={port}"] + telemetry_overrides + overrides
+
+    client_cmd = (
+        client_base
+        + ["--target", target]
+        + ["--dataset_path", args.dataset_path]
+        + ["--limit", str(args.limit)]
+        + ["--deadline_s", str(args.deadline_s)]
+        + ["--concurrency", str(args.concurrency)]
+        + ["--retries", str(args.retries)]
+        + ["--retry_backoff_s", str(args.retry_backoff_s)]
+        + ["--seed", str(args.seed)]
+        + ["--out", str(results_path)]
+    )
+    if args.shuffle:
+        client_cmd.append("--shuffle")
+
+    print(f"\n=== RUN {idx:02d}: {name} @ {target} ===")
+    print("SERVICE:", " ".join(service_cmd))
+    print("CLIENT: ", " ".join(client_cmd))
+
+    t_start = time.time()
+    service_proc, service_log_f = popen_tee(service_cmd, log_path=service_log, prefix="[SERVICE] ")
+
+    try:
+        wait_for_service_ready_sync(target, timeout_s=float(args.ready_timeout_s))
+
+        ret = run_tee(client_cmd, log_path=client_log, prefix="[CLIENT] ")
+        if ret != 0:
+            raise RuntimeError(f"Client failed with exit code {ret}")
+
+        wall_s = time.time() - t_start
+        meta = {
+            "run_name": name,
+            "run_index": idx,
+            "target": target,
+            "service_cmd": service_cmd,
+            "client_cmd": client_cmd,
+            "service_overrides": overrides,
+            "dataset_path": args.dataset_path,
+            "limit": args.limit,
+            "client_params": {
+                "deadline_s": args.deadline_s,
+                "concurrency": args.concurrency,
+                "retries": args.retries,
+                "retry_backoff_s": args.retry_backoff_s,
+                "shuffle": args.shuffle,
+                "seed": args.seed,
+            },
+            "telemetry": {"enabled": bool(args.enable_telemetry), "dir": str(run_dir) if args.enable_telemetry else None},
+            "wall_time_s": wall_s,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "outputs": {
+                "service_log": str(service_log),
+                "client_log": str(client_log),
+                "results_jsonl": str(results_path),
+            },
         }
-        for size, types in SUPPORTED_INDEX_TYPES.items()
-        for t in types
-        if index_type is None or t == index_type
-    ]
+        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
-# def build_experiments() -> List[Dict[str, object]]:
-#     return [
-
-#         #hnsw only
-#         {"name": "wiki_faiss_hnsw_100k",  "overrides": ["index=wiki_faiss_hnsw_100k", "docstore=wiki_dpr_100k"]},
-
-
-#         {"name": "wiki_faiss_flat_100k",  "overrides": ["index=wiki_faiss_flat_100k", "docstore=wiki_dpr_100k"]},
-#         {"name": "wiki_faiss_ivf_100k",   "overrides": ["index=wiki_faiss_ivf_100k", "docstore=wiki_dpr_100k"]},
-        
-#         {"name": "wiki_faiss_flat_500k",  "overrides": ["index=wiki_faiss_flat_500k", "docstore=wiki_dpr_500k"]},
-#         {"name": "wiki_faiss_hnsw_500k",  "overrides": ["index=wiki_faiss_hnsw_500k", "docstore=wiki_dpr_500k"]},
-#         {"name": "wiki_faiss_ivf_500k",  "overrides": ["index=wiki_faiss_ivf_500k", "docstore=wiki_dpr_500k"]},
-
-#         {"name": "wiki_faiss_flat_1m",  "overrides": ["index=wiki_faiss_flat_1m", "docstore=wiki_dpr_1m"]},
-#         {"name": "wiki_faiss_hnsw_1m",  "overrides": ["index=wiki_faiss_hnsw_1m", "docstore=wiki_dpr_1m"]},
-#         {"name": "wiki_faiss_ivf_1m",  "overrides": ["index=wiki_faiss_ivf_1m", "docstore=wiki_dpr_1m"]},
-
-#         {"name": "wiki_faiss_hnsw_2_5m",  "overrides": ["index=wiki_faiss_hnsw_2_5m", "docstore=wiki_dpr_2_5m"]},
-#         {"name": "wiki_faiss_ivf_2_5m",  "overrides": ["index=wiki_faiss_ivf_2_5m", "docstore=wiki_dpr_2_5m"]},
-
-        
-#         {"name": "wiki_faiss_hnsw_5m",  "overrides": ["index=wiki_faiss_hnsw_5m", "docstore=wiki_dpr_5m"]},
-#         {"name": "wiki_faiss_ivf_5m",  "overrides": ["index=wiki_faiss_ivf_5m", "docstore=wiki_dpr_5m"]},
-        
-#         {"name": "wiki_faiss_hnsw_10m",  "overrides": ["index=wiki_faiss_hnsw_10m", "docstore=wiki_dpr_10m"]},
-#         {"name": "wiki_faiss_hnsw_21m",  "overrides": ["index=wiki_faiss_hnsw_21m", "docstore=wiki_dpr_21m"]},
-
-#         #not yet created!
-
-#         # {"name": "wiki_faiss_flat_5m",  "overrides": ["index=wiki_faiss_flat_5m", "docstore=wiki_dpr_5m"]},
-
-#         # {"name": "wiki_faiss_flat_2_5m",  "overrides": ["index=wiki_faiss_flat_1m", "docstore=wiki_dpr_2_5m"]},
-
-#         # {"name": "wiki_faiss_flat_10m",  "overrides": ["index=wiki_faiss_flat_10m", "docstore=wiki_dpr_10m"]},
-#         # {"name": "wiki_faiss_ivf_10m",  "overrides": ["index=wiki_faiss_ivf_10m", "docstore=wiki_dpr_10m"]},
-
-#         # {"name": "wiki_faiss_flat_21m",  "overrides": ["index=wiki_faiss_flat_21m", "docstore=wiki_dpr_21m"]},
-#         # {"name": "wiki_faiss_ivf_21m",  "overrides": ["index=wiki_faiss_ivf_21m", "docstore=wiki_dpr_21m"]},
-
-#     ]
+    finally:
+        stop_process_tree(service_proc)
+        try:
+            service_log_f.close()
+        except Exception:
+            pass
 
 
 # -----------------------
-# Runner
+# Main
 # -----------------------
 
 def main() -> None:
     ap = argparse.ArgumentParser()
 
-    ap.add_argument(
-        "--service_cmd",
-        default="python -m faasrag.server.server",
-        help='Command to start service (Hydra app), e.g. "python -m faasrag.server.server"',
-    )
-    ap.add_argument(
-        "--client_cmd",
-        default="python -m faasrag.client.nq_rag_client",
-        help='Command to start client, e.g. "python -m faasrag.client.nq_rag_client"',
-    )
+    ap.add_argument("--service_cmd", default="python -u -m faasrag.server.server")
+    ap.add_argument("--client_cmd", default="python -u -m faasrag.client.nq_rag_client")
 
     ap.add_argument("--runs_dir", default="runs")
     ap.add_argument("--dataset_path", default="data/datasets/qa/nq/nq_dev.jsonl")
@@ -329,7 +334,6 @@ def main() -> None:
     ap.add_argument("--base_port", type=int, default=50051)
     ap.add_argument("--host", default="127.0.0.1")
 
-    # client knobs (forwarded)
     ap.add_argument("--deadline_s", type=float, default=3000.0)
     ap.add_argument("--concurrency", type=int, default=1)
     ap.add_argument("--retries", type=int, default=1)
@@ -337,7 +341,6 @@ def main() -> None:
     ap.add_argument("--shuffle", action="store_true", default=False)
     ap.add_argument("--seed", type=int, default=0)
 
-    # readiness + telemetry wiring
     ap.add_argument("--ready_timeout_s", type=float, default=12000.0)
     ap.add_argument("--enable_telemetry", action="store_true", default=True)
     ap.add_argument("--skip_if_exists", action="store_true", default=False)
@@ -359,112 +362,15 @@ def main() -> None:
         run_dir = runs_dir / f"{idx:02d}_{name}"
         run_dir.mkdir(parents=True, exist_ok=True)
 
-
-        port = args.base_port + idx
-        target = f"{args.host}:{port}"
-
-        service_log = run_dir / "service.log"
-        client_log = run_dir / "client.log"
-        results_path = run_dir / "results.jsonl"
-        meta_path = run_dir / "meta.json"
-
-        #if results json already exists, skip (allows resuming partial sweeps without re-running completed ones)
-        if args.skip_if_exists and results_path.exists():
-            print(f"\n=== SKIP {idx:02d}: {name} (results.jsonl exists) ===")
-            continue
-
-        #if folder already exists but results json doesn't, clear out contents (allows re-running failed runs without affecting others)
-        if run_dir.exists() and not results_path.exists():
-            for f in run_dir.iterdir():
-                if f.is_file():
-                    f.unlink()
-
-        telemetry_overrides: List[str] = []
-        resource_usage_path = run_dir
-        telemetry_overrides = [
-            "telemetry.enabled=true",
-            "telemetry.interval_s=2",
-            f"telemetry.dir={run_dir}",
-        ]
-        service_cmd = (
-            service_base
-            + [f"host={args.host}", f"port={port}"]
-            + telemetry_overrides
-            + overrides
+        run_experiment(
+            idx=idx,
+            name=name,
+            overrides=overrides,
+            args=args,
+            service_base=service_base,
+            client_base=client_base,
+            run_dir=run_dir,
         )
-
-        print(f"\n=== RUN {idx:02d}: {name} @ {target} ===")
-        print("SERVICE:", " ".join(service_cmd))
-
-        service_proc, service_log_f = _popen_with_logs(service_cmd, stdout_path=service_log)
-
-        t_start = time.time()
-        try:
-            # Use the sync wrapper (avoids creating/tearing down event loops in some debuggers)
-            wait_for_service_ready_sync(target, timeout_s=float(args.ready_timeout_s))
-
-            client_cmd = (
-                client_base
-                + ["--target", target]
-                + ["--dataset_path", args.dataset_path]
-                + ["--limit", str(args.limit)]
-                + ["--deadline_s", str(args.deadline_s)]
-                + ["--concurrency", str(args.concurrency)]
-                + ["--retries", str(args.retries)]
-                + ["--retry_backoff_s", str(args.retry_backoff_s)]
-                + ["--seed", str(args.seed)]
-                + ["--out", str(results_path)]
-            )
-            if args.shuffle:
-                client_cmd.append("--shuffle")
-
-            print("CLIENT:", " ".join(client_cmd))
-
-            with open(client_log, "w", encoding="utf-8") as f:
-                ret = subprocess.call(client_cmd, stdout=f, stderr=subprocess.STDOUT)
-            if ret != 0:
-                raise RuntimeError(f"Client failed with exit code {ret}")
-
-            wall_s = time.time() - t_start
-
-            meta = {
-                "run_name": name,
-                "run_index": idx,
-                "target": target,
-                "service_cmd": service_cmd,
-                "client_cmd": client_cmd,
-                "service_overrides": overrides,
-                "dataset_path": args.dataset_path,
-                "limit": args.limit,
-                "client_params": {
-                    "deadline_s": args.deadline_s,
-                    "concurrency": args.concurrency,
-                    "retries": args.retries,
-                    "retry_backoff_s": args.retry_backoff_s,
-                    "shuffle": args.shuffle,
-                    "seed": args.seed,
-                },
-                "telemetry": {
-                    "enabled": bool(args.enable_telemetry),
-                    "path": str(resource_usage_path) if args.enable_telemetry else None,
-                },
-                "wall_time_s": wall_s,
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "outputs": {
-                    "service_log": str(service_log),
-                    "client_log": str(client_log),
-                    "results_jsonl": str(results_path),
-                },
-            }
-            with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump(meta, f, indent=2)
-
-        finally:
-            _stop_process_tree(service_proc)
-            try:
-                service_log_f.close()
-            except Exception:
-                pass
 
     print("\n✅ Sweep complete.")
 
