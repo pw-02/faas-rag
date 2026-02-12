@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -103,7 +104,7 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
 
         if cfg.telemetry.enabled:
             # logger.info("Telemetry enabled: writing resource usage logs to %s", cfg.telemetry.path)
-            save_cfg(cfg, path=str(cfg.telemetry.dir) + "/service_config.yaml")
+            save_cfg(cfg, path=os.path.join(cfg.telemetry.dir, "service_config.yaml"))
 
         self.logger = logger
         self.rag_pipeline = RagPipeline(
@@ -292,7 +293,7 @@ async def _serve_async(cfg: RagServiceConfig):
     monitor_task: Optional[asyncio.Task] = None
     if cfg.telemetry is not None and cfg.telemetry.enabled:
         interval_s = float(cfg.telemetry.interval_s)
-        out_path = str(cfg.telemetry.dir) / "resource_usage.jsonl"
+        out_path = os.path.join(cfg.telemetry.dir, "resource_usage.jsonl")
 
         monitor_task = asyncio.create_task(
             resource_monitor_loop(interval_s=interval_s, output_path=out_path)
