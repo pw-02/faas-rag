@@ -21,7 +21,6 @@ def main(cfg: RagServiceConfig):
         cache_cfg=cfg.cache if hasattr(cfg, "cache") else None,
         top_k=cfg.top_k,
         retrieve_only=cfg.retrieve_only,
-        device=cfg.device,
         seed=cfg.seed,
     )
 
