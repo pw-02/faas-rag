@@ -359,7 +359,7 @@ def main():
     ap.add_argument("--dpr_q_model", default="sentence-transformers/facebook-dpr-question_encoder-single-nq-base")
     ap.add_argument("--device", default=None)
     ap.add_argument("--batch_size", type=int, default=64)
-    ap.add_argument("--max_questions", type=int, default=100_000)
+    ap.add_argument("--max_questions", type=int, default=None)
 
     # retrieval
     ap.add_argument(
