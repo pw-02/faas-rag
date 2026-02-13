@@ -1,5 +1,6 @@
 import csv
 import json
+import math
 import os
 import subprocess
 import sys
@@ -12,7 +13,7 @@ from typing import Optional
 PY = sys.executable
 SCRIPT = "build_wikidpr_fiass_index.py"
 
-ROOT_OUT_DIR = Path("faiss_wiki_dpr")
+ROOT_OUT_DIR = Path("artifacts/wiki-dpr/faiss_wiki_dpr")
 MANIFEST_PATH = ROOT_OUT_DIR / "manifest.csv"
 
 DATASET_NAME = "psgs_w100.nq.no_index"
@@ -41,8 +42,9 @@ JOBS: list[tuple[str, list[str]]] = []
 #     if n <= 1_000_000:
 #         JOBS.append((f"flat_{tag}", ["--index_type", "flat_ip", "--n_vectors", str(n)]))
 
-# HNSW for all sizes
+# ---------------- HNSW params ----------------
 def hnsw_params(n: int) -> tuple[str, str]:
+    # NOTE: These are the values you already had; consider whether batch_size is for add() vs search().
     if n <= 100_000:
         return "16384", "64"
     if n <= 500_000:
@@ -57,50 +59,60 @@ def hnsw_params(n: int) -> tuple[str, str]:
         return "32768", "256"
     return "32768", "320"
 
-for tag, n in SIZES:
-    batch, ef_search = hnsw_params(n)
-    # JOBS.append((
-    #     f"hnsw_{tag}",
-    #     [
-    #         "--index_type", "hnsw_ip",
-    #         "--n_vectors", str(n),
-    #         "--batch_size", batch,
-    #         "--n_neighbors", "32",
-    #         "--ef_construction", "200",
-    #         "--ef_search", ef_search,
-    #     ],
-    # ))
+# for tag, n in SIZES:
+#     batch, ef_search = hnsw_params(n)
+#     JOBS.append((
+#         f"hnsw_{tag}",
+#         [
+#             "--index_type", "hnsw_ip",
+#             "--n_vectors", str(n),
+#             "--batch_size", batch,
+#             "--n_neighbors", "32",
+#             "--ef_construction", "200",
+#             "--ef_search", ef_search,
+#         ],
+#     ))
 
-# IVF for all sizes
+# ---------------- IVF params (updated) ----------------
 def ivf_params(n: int) -> tuple[str, str, str, str]:
-    if n <= 100_000:
-        return "1024", "50000", "16", "16384"
-    if n <= 500_000:
-        return "2048", "100000", "24", "16384"
-    if n <= 1_000_000:
-        return "4096", "100000", "32", "16384"
-    if n <= 2_500_000:
-        return "8192", "200000", "48", "32768"
-    if n <= 5_000_000:
-        return "16384", "300000", "64", "32768"
-    if n <= 10_000_000:
-        return "32768", "500000", "96", "65536"
-    return "65536", "800000", "128", "65536"
+    """
+    Returns (n_lists, train_size, nprobe, batch_size) as strings for CLI args.
+
+    Heuristics (FAISS IVF_IP):
+      - n_lists (nlist) ~ 4*sqrt(n), clamped [1024, 65536], snapped to power-of-two
+      - train_size ~ 100 samples per list, capped to [100k, 2M] and <= n
+      - nprobe ~ 0.5% of nlist, clamped [16, 256]
+      - batch_size: assumes build/add batching (larger for larger n)
+    """
+    # nlist ~ 4*sqrt(n), clamp, then snap to power-of-two
+    target = 4.0 * math.sqrt(n)
+    target = max(1024.0, min(65536.0, target))
+    nlist = int(2 ** round(math.log2(target)))
+
+    # training points ~ 100 per centroid, with caps
+    train_size = min(n, max(100_000, min(2_000_000, 100 * nlist)))
+
+    # probe about 0.5% of lists, clamped
+    nprobe = int(max(16, min(256, round(0.005 * nlist))))
+
+    # batch size: treat as add/build batching
+    batch = 16384 if n <= 1_000_000 else 32768
+
+    return str(nlist), str(train_size), str(nprobe), str(batch)
 
 for tag, n in SIZES:
     n_lists, train_size, nprobe, batch = ivf_params(n)
-    if n>=10_000_000:
-        JOBS.append((
-            f"ivf_{tag}",
-            [
-                "--index_type", "ivf_ip",
-                "--n_vectors", str(n),
-                "--batch_size", batch,
-                "--n_lists", n_lists,
-                "--train_size", train_size,
-                "--nprobe", nprobe,
-            ],
-        ))
+    JOBS.append((
+        f"ivf_{tag}",
+        [
+            "--index_type", "ivf_ip",
+            "--n_vectors", str(n),
+            "--batch_size", batch,
+            "--n_lists", n_lists,
+            "--train_size", train_size,
+            "--nprobe", nprobe,
+        ],
+    ))
 
 # ---------------- metrics helpers ----------------
 
@@ -188,7 +200,6 @@ def run_and_track(cmd: list[str]) -> RunResult:
 
 # ---------------- config extraction ----------------
 
-# These become explicit manifest columns (add more if your script supports them)
 CONFIG_KEYS = [
     "index_type",
     "n_vectors",
@@ -215,7 +226,6 @@ def parse_config(extra_args: list[str]) -> dict:
         tok = extra_args[i]
         if tok.startswith("--"):
             key = tok[2:]
-            # assume next token is value unless next is also a flag
             val: str = "true"
             if i + 1 < len(extra_args) and not extra_args[i + 1].startswith("--"):
                 val = extra_args[i + 1]
@@ -227,21 +237,16 @@ def parse_config(extra_args: list[str]) -> dict:
 # ---------------- manifest writing ----------------
 
 MANIFEST_FIELDS = [
-    # identity + paths
     "job_name",
     "dataset_name",
     "out_dir",
-    # explicit config columns
     *CONFIG_KEYS,
-    # full config + command (for reproducibility)
     "config_json",
     "cmd",
-    # timings + status
     "start_time_utc",
     "end_time_utc",
     "elapsed_sec",
     "returncode",
-    # sizes
     "disk_bytes",
     "disk_human",
     "peak_rss_bytes",
@@ -285,18 +290,13 @@ def run_job(job_name: str, extra_args: list[str]):
         "job_name": job_name,
         "dataset_name": DATASET_NAME,
         "out_dir": str(job_out_dir),
-
-        # explicit config columns (blank if not present)
         **{k: cfg.get(k, "") for k in CONFIG_KEYS},
-
         "config_json": json.dumps(cfg, sort_keys=True),
         "cmd": " ".join(cmd),
-
         "start_time_utc": start,
         "end_time_utc": end,
         "elapsed_sec": f"{result.elapsed_sec:.3f}",
         "returncode": str(result.returncode),
-
         "disk_bytes": str(disk),
         "disk_human": bytes_human(disk),
         "peak_rss_bytes": "" if result.peak_rss_bytes is None else str(result.peak_rss_bytes),
