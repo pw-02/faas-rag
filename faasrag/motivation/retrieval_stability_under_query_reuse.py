@@ -524,7 +524,7 @@ def main():
 
     args = ap.parse_args()
 
-    args._resolved_device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
+    args._resolved_device = args.device or ("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Load indices ONCE (shared across datasets)
     doc_index = faiss.read_index(args.doc_index)
