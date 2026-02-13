@@ -1,11 +1,8 @@
 from __future__ import annotations
-
 import logging
 import time
 from typing import Any, Optional
-
 import numpy as np
-import torch
 
 from faasrag.core.args import (
     GeneratorConfig,
@@ -20,7 +17,8 @@ from faasrag.core.embedders import build_embedder
 from faasrag.core.generators import build_generator
 from faasrag.core.docstores import load_docstore
 from faasrag.core.indexes import load_index
-from faasrag.core.prompts import get_prompt_strategy, extract_short_answer
+from faasrag.core.prompts import PromptBuildMethodType, build_rag_prompt
+from faasrag.core.utils import extract_short_answer
 from contextlib import contextmanager
 
 
@@ -29,7 +27,6 @@ def timed(store: dict, key: str):
     t0 = time.perf_counter()
     yield
     store[key] = time.perf_counter() - t0
-
 
 class RagPipeline:
     def __init__(
@@ -41,7 +38,7 @@ class RagPipeline:
         docstore_cfg: DocStoreConfig,
         docstore_backend: str,
         artifact_dir: str,
-        prompt_type: str,
+        prompt_build_method: str,
         max_ctx_chars: int = 4000,
         cache_cfg: Optional[CacheConfig] = None,
         top_k: int = 5,
@@ -57,13 +54,18 @@ class RagPipeline:
         self.top_k = int(top_k)
         if self.top_k < 0:
             raise ValueError("top_k must be >= 0")
+        
+        if prompt_build_method.upper() == "QA_STRICT":
+            self.prompt_build_method = PromptBuildMethodType.QA_STRICT
+        elif prompt_build_method.upper() == "QA_OPEN":
+            self.prompt_build_method = PromptBuildMethodType.QA_OPEN
+        elif prompt_build_method.upper() == "FEW_SHOT":
+            self.prompt_build_method = PromptBuildMethodType.FEW_SHOT
+        else:
+            raise ValueError(f"Invalid prompt_build_method {prompt_build_method}")    
 
-        self.prompt_type = prompt_type
         self.max_ctx_chars = int(max_ctx_chars)
-        self.prompt_fn = get_prompt_strategy(self.prompt_type)
-
         self.seed = seed
-
         self.cache = None
         self.generator = None
 
@@ -89,7 +91,7 @@ class RagPipeline:
 
         self.logger.info(
             "RagPipeline initialized prompt=%s retrieve_only=%s top_k=%d embedder_device=%s generator_device=%s",
-            self.prompt_type,
+            self.prompt_build_method,
             self.retrieve_only,
             self.top_k,
             getattr(self.embedder, "device", "unknown"),
@@ -113,12 +115,12 @@ class RagPipeline:
     # ------------------------------------------------
     # Main entry point (used by gRPC)
     # ------------------------------------------------
-    def run(self, query: str) -> dict[str, Any]:
-        query = (query or "").strip()
-        if not query:
-            raise ValueError("query must be non-empty")
+    def run(self, question: str) -> dict[str, Any]:
+        question = (question or "").strip()
+        if not question:
+            raise ValueError("question must be non-empty")
         
-        no_retrieval = (self.top_k == 0) or (self.prompt_type == "no_retrieval")
+        no_retrieval = (self.top_k == 0)
         passages: list[Passage] = []
         retrieved_doc_ids: list[str] = []
         timings: dict[str, float] = {}
@@ -133,12 +135,13 @@ class RagPipeline:
             timings.update({"embed_s": 0.0, "ann_s": 0.0, "docstore_s": 0.0})
         else:     
             with timed(timings, "embed_s"):
-                qvec = self.embedder.embed_queries([query])
+                qvec = self.embedder.embed_queries([question])
                 if hasattr(qvec, "detach"):
                     qvec = qvec.detach().cpu().numpy()
                 qvec = np.asarray(qvec, dtype=np.float32)
 
             cache_stats: dict[str, Any] | None = None
+            
             with timed(timings, "ann_s"):
                 if self.cache is not None:
                     cache_used = True
@@ -190,16 +193,13 @@ class RagPipeline:
         # Prompt construction
         # -------------------------
         with timed(timings, "prompt_s"):
-            if no_retrieval:
-                messages = get_prompt_strategy("no_retrieval")(query)
-            else:
-                messages = self.prompt_fn(query, passages, self.max_ctx_chars)
-        
+             prompt, _ = build_rag_prompt(question, passages, self.prompt_build_method)
+
         # -------------------------
         # Generation
         # -------------------------
         with timed(timings, "decode_s"):
-            answer, prompt_tokens, completion_tokens, total_tokens = self.generator.generate_messages(messages)
+            answer, prompt_tokens, completion_tokens, total_tokens = self.generator.generate(prompt)
         
         return {
         # "answer": answer,
@@ -213,4 +213,3 @@ class RagPipeline:
         "cache_hits": cache_hits,
         "cache_misses": cache_misses,
     }
-

@@ -209,7 +209,18 @@ class SyntheticGeneratorConfig:
 
     def __post_init__(self) -> None:
         if self.sleep_time < 0:
+        
+        
             raise ValueError("sleep_time must be >= 0")
+@dataclass
+class vLLMOpenAIGeneratorConfig:
+    type: str  # "hf" or "vllm"
+    model: str
+    base_url: str = "http://localhost:8000/v1"
+    api_key: str = "EMPTY"
+    temperature: float = 0.0
+    max_tokens: int = 64
+
 
 
 @dataclass
@@ -247,12 +258,14 @@ class GeneratorConfig:
     llama3_instruct: Optional[Llama3InstructGeneratorConfig] = None
     qwen2_5_instruct: Optional[Qwen2_5InstructGeneratorConfig] = None
     synthetic: Optional[SyntheticGeneratorConfig] = None
+    vllm : Optional[vLLMOpenAIGeneratorConfig] = None
 
     def __post_init__(self) -> None:
         mapping = {
             "llama3_instruct": self.llama3_instruct,
             "qwen2_5_instruct": self.qwen2_5_instruct,
             "synthetic": self.synthetic,
+            "vllm": self.vllm,
         }
 
         chosen = mapping.get(self.type)
@@ -288,7 +301,7 @@ class DocStoreConfig:
 # -------------------------
 # Prompting
 # -------------------------
-PromptType = Literal["no_retrieval", "with_context"]
+
 
 
 @dataclass
@@ -319,7 +332,10 @@ class RagServiceConfig:
     port: int = 50051
     log_level: str = "INFO"
 
-    prompt_type: PromptType = "with_context"
+    prompt_build_method: str = "QA"
+    system_prompt: str = ""
+    query_prompt: str = ""
+    separator: str = ""
     max_ctx_chars: int = 4000
     telemetry: Optional[TelemetryConfig] = None
 

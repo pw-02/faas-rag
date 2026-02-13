@@ -15,3 +15,5 @@ nvidia-ml-py
 omegaconf
 maturin
 # hf auth login
+openai
+vllm

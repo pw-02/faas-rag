@@ -18,6 +18,14 @@ from tqdm import tqdm
 import pandas as pd
 import matplotlib.pyplot as plt
 
+""" If I take a query q1 and instead of running retrieval for it, I reuse the top-k retrieval results from its nearest-neighbor query q2, how much retrieval mismatch do I get? 
+How often do the retrieved doc IDs differ from those of q1? 
+This tests a core assumption behind semantic query caching for RAG: 
+that if two queries are close in embedding space, they retrieve essentially the same documents, 
+so you can safely reuse cached retrieval results. 
+
+We: - Embed real QA queries (DPR). - Pair each query with near neighbors and bin by cosine similarity. - For each pair, retrieve top-k docs for q1 and q2 and compare: overlap / mismatch / jaccard + rank-sensitive RBO. - Additionally report: how many pairs and how many unique queries fall into each similarity bin (a crude proxy for cache hit rate at that threshold/bin). """
+
 
 # -----------------------------
 # Helpers

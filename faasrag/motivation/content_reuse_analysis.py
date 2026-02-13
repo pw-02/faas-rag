@@ -20,17 +20,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-"""
-Chunk / Doc-ID reuse analysis for RAG retrieval.
-
-UPDATED: supports multiple datasets and writes outputs under:
-  <out_dir>/<dataset_name>/
-    chunk_reuse_summary.csv
-    chunk_reuse_freq.csv
-    chunk_reuse_coverage_curve.csv
-    chunk_reuse_coverage_curve.png
-    chunk_reuse_rank_freq_loglog.png
-"""
+""" Chunk / Doc-ID reuse analysis for RAG retrieval. Goal: - Across a QA dataset, run retrieval for each query and measure how
+concentrated retrieval traffic is: - How many unique retrieved IDs (chunks/docs) are used at top-k? -
+ What fraction of the corpus is that? - What fraction of total retrieval events are covered by the top X% most-frequent IDs? - 
+ Frequency distribution / heavy-tail evidence. This supports the claim: caching text chunks (content objects) can be high-leverage because retrieval traffic is concentrated, even if query-neighbor reuse is brittle. Assumptions: - Your FAISS doc index returns integer IDs that are stable across searches. - If you built FAISS without IndexIDMap, IDs are 0..N-1 in add order. """
 
 
 # -----------------------------

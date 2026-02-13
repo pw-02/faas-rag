@@ -1,5 +1,5 @@
 defaults:
-  - generator: llama3_8b_instruct #qwen2_5_instruct, llama3_8b_instruct, synthetic
+  - generator: synthetic #qwen2_5_instruct, llama3_8b_instruct, synthetic
   - embedder: dpr
   - index: wiki_faiss_hnsw_100k
   - docstore: wiki_dpr_100k
@@ -8,19 +8,21 @@ defaults:
   - override hydra/hydra_logging: disabled
   - _self_
 
-docstore_backend: s3_jsonl_offsets # local_sqlite, local_jsonl_offsets, s3_jsonl_offsets, memory_jsonl
 host: localhost
 port: 50051
-top_k: 5 #k=0 => no retrieval, pure generation
 num_workers: 8
 max_inflight: 8
-retrieve_only: False
 log_level: INFO
 artifact_dir: artifacts
 seed: 42
-prompt_type: rag_strict   # "llm_only", "rag_strict", "rag_open"
 
+#retrieval
+docstore_backend: s3_jsonl_offsets # local_sqlite, local_jsonl_offsets, s3_jsonl_offsets, memory_jsonl
+top_k: 5 #k=0 => no retrieval, pure generation
+retrieve_only: False
+prompt_build_method: QA_STRICT #QA_STRICT, QA_OPEN, FEW_SHOT
 max_ctx_chars: 4000
+
 telemetry:
   enabled: true
   interval_s: 3

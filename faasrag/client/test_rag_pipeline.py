@@ -17,7 +17,7 @@ def main(cfg: RagServiceConfig):
         docstore_cfg=cfg.docstore,
         docstore_backend=cfg.docstore_backend,
         artifact_dir=cfg.artifact_dir,
-        prompt_type=cfg.prompt_type,
+        prompt_build_method=cfg.prompt_build_method,
         max_ctx_chars=cfg.max_ctx_chars,
         cache_cfg=cfg.cache if hasattr(cfg, "cache") else None,
         top_k=cfg.top_k,

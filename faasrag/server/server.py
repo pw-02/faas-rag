@@ -12,7 +12,6 @@ import hydra
 from omegaconf import OmegaConf
 import torch
 from concurrent.futures import ThreadPoolExecutor
-
 from faasrag.core.rag_pipeline import RagPipeline
 from faasrag.core.args import RagServiceConfig
 import faasrag.protos.rag_pb2 as rag_pb2
@@ -121,7 +120,7 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
             artifact_dir=cfg.artifact_dir,
             top_k=cfg.top_k,
             retrieve_only=cfg.retrieve_only,
-            prompt_type=cfg.prompt_type,
+            build_prompt_method=cfg.prompt_build_method,
             max_ctx_chars=cfg.max_ctx_chars,
             seed=cfg.seed,
             logger=self.logger,

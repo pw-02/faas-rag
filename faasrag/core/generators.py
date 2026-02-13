@@ -1,13 +1,68 @@
 from __future__ import annotations
 
 import time
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from faasrag.core.args import GeneratorConfig, Llama3InstructGeneratorConfig, Qwen2_5InstructGeneratorConfig, SyntheticGeneratorConfig
-from faasrag.core.prompts import extract_short_answer
+from faasrag.core.args import (GeneratorConfig, Llama3InstructGeneratorConfig, 
+                               Qwen2_5InstructGeneratorConfig, SyntheticGeneratorConfig,
+                                 vLLMOpenAIGeneratorConfig)
+
+import openai
+
+class VLLMOpenAIGenerator:
+    """
+    Calls a vLLM OpenAI-compatible server.
+    Keeps the same interface as your HF generator: generate(prompt:str) -> (text, prompt_tokens, completion_tokens, total_tokens)
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str = "EMPTY",
+        model: str,
+        temperature: float = 0.0,
+        max_tokens: int = 64,
+        timeout_s: float = 60.0,
+        use_chat_completions: bool = True,
+    ):
+        self.client = openai.OpenAI(api_key=api_key, base_url=base_url, timeout=timeout_s)
+        self.model = model
+        self.temperature = float(temperature)
+        self.max_tokens = int(max_tokens)
+        self.use_chat_completions = bool(use_chat_completions)
+
+    def generate(self, prompt: str) -> Tuple[str, int, int, int]:
+        if self.use_chat_completions:
+            # Treat your whole prompt as a single user message (works fine for string prompts)
+            resp = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+            text = (resp.choices[0].message.content or "").strip()
+        else:
+            # Legacy completions endpoint (some servers/models)
+            resp = self.client.completions.create(
+                model=self.model,
+                prompt=prompt,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+            text = (resp.choices[0].text or "").strip()
+
+        usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        total_tokens = int(getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens))
+
+        return text, prompt_tokens, completion_tokens, total_tokens
+
+
 
 
 # -------------------------
@@ -36,9 +91,6 @@ class SyntheticGenerator:
 
         return text, prompt_tokens, completion_tokens, total_tokens
 
-    def generate_messages(self, messages: list[dict[str, str]]) -> tuple[str, int, int, int]:
-        prompt = "\n".join(f'{m["role"]}: {m["content"]}' for m in messages) + "\nassistant:"
-        return self.generate(prompt)
 
 class HFCausalLMGenerator:
     def __init__(
@@ -123,20 +175,6 @@ class HFCausalLMGenerator:
         text = self.tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
         return text, int(prompt_tokens), int(completion_tokens), int(total_tokens)
 
-    @torch.no_grad()
-    def generate_messages(
-        self, messages: list[dict[str, str]]
-    ) -> tuple[str, int, int, int]:
-        if hasattr(self.tokenizer, "apply_chat_template") and getattr(self.tokenizer, "chat_template", None):
-            prompt = self.tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
-            )
-        else:
-            prompt = (
-                "\n".join(f'{m["role"]}: {m["content"]}' for m in messages)
-                + "\nassistant:"
-            )
-        return self.generate(prompt)
 
     # ---- Added for exact-length microbench ----
     @torch.no_grad()
@@ -170,104 +208,6 @@ class HFCausalLMGenerator:
 
 
 
-
-
-# class HFCausalLMGenerator:
-#     def __init__(
-#         self,
-#         model_name: str,
-#         device: str,
-#         temperature: float,
-#         top_p: float,
-#         top_k: int,
-#         do_sample: bool,
-#         max_new_tokens: int,
-#         use_4bit: bool = False,
-#         hf_token: Optional[str] = None,
-#     ):
-#         self.model_name = model_name
-#         self.device = device
-#         self.temperature = float(temperature)
-#         self.top_p = float(top_p)
-#         self.top_k = int(top_k)
-#         self.do_sample = bool(do_sample)
-#         self.max_new_tokens = int(max_new_tokens)
-#         self.use_4bit = bool(use_4bit)
-#         self.hf_token = hf_token
-
-#         self.tokenizer = AutoTokenizer.from_pretrained(
-#             model_name, use_fast=True, token=hf_token
-#         )
-#         if self.tokenizer.pad_token is None:
-#             self.tokenizer.pad_token = self.tokenizer.eos_token
-
-#         kwargs: dict = {}
-
-#         is_cuda = device.startswith("cuda")
-
-#         # 4-bit quantization (CUDA-only in practice)
-#         if self.use_4bit:
-#             if not is_cuda:
-#                 raise ValueError("use_4bit=True is intended for CUDA devices only.")
-#             try:
-#                 from transformers import BitsAndBytesConfig
-#                 kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
-#             except Exception as e:
-#                 raise RuntimeError(
-#                     "use_4bit=True requires bitsandbytes. Install with `pip install bitsandbytes`."
-#                 ) from e
-#         else:
-#             # dtype only when not quantized
-#             kwargs["torch_dtype"] = torch.float16 if is_cuda else torch.float32
-
-#         # Pin model to a specific device (e.g., cuda:0)
-#         if is_cuda:
-#             kwargs["device_map"] = {"": device}
-
-#         self.model = AutoModelForCausalLM.from_pretrained(
-#             model_name, token=hf_token, **kwargs
-#         )
-#         self.model.eval()
-
-#     def _move_inputs_to_model_device(self, inputs: dict) -> dict:
-#         # Single-device assumption (cuda:0 or cpu)
-#         model_device = next(self.model.parameters()).device
-#         return {k: v.to(model_device) for k, v in inputs.items()}
-
-#     @torch.no_grad()
-#     def generate(self, prompt: str) -> tuple[str, int, int, int]:
-#         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True)
-#         inputs = self._move_inputs_to_model_device(inputs)
-
-#         out = self.model.generate(
-#             **inputs,
-#             max_new_tokens=self.max_new_tokens,
-#             do_sample=self.do_sample,
-#             temperature=self.temperature if self.do_sample else 0.0,
-#             top_p=self.top_p if self.do_sample else 1.0,
-#             top_k=self.top_k if self.do_sample else 0,
-#             pad_token_id=self.tokenizer.eos_token_id,
-#             eos_token_id=self.tokenizer.eos_token_id,
-#         )
-
-#         prompt_tokens = inputs["input_ids"].shape[-1]
-#         total_tokens = out.shape[-1]
-#         completion_tokens = total_tokens - prompt_tokens
-#         gen_ids = out[0][prompt_tokens:]
-#         text = self.tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
-#         return text, int(prompt_tokens), int(completion_tokens), int(total_tokens)
-
-#     @torch.no_grad()
-#     def generate_messages(self, messages: list[dict[str, str]]) -> tuple[str, int, int, int]:
-#         if hasattr(self.tokenizer, "apply_chat_template") and getattr(self.tokenizer, "chat_template", None):
-#             prompt = self.tokenizer.apply_chat_template(
-#                 messages, tokenize=False, add_generation_prompt=True
-#             )
-#         else:
-#             prompt = "\n".join(f'{m["role"]}: {m["content"]}' for m in messages) + "\nassistant:"
-#         return self.generate(prompt)
-
-
 # -------------------------
 # Builder
 # -------------------------
@@ -292,6 +232,8 @@ def build_generator(cfg: GeneratorConfig) -> Generator:
         sub: Llama3InstructGeneratorConfig = cfg
     elif cfg.type == "qwen2_5_instruct":
         sub: Qwen2_5InstructGeneratorConfig = cfg
+    elif cfg.type == "vllm":
+        sub: vLLMOpenAIGeneratorConfig = cfg
     else:
         raise ValueError(f"Unknown GeneratorConfig.type: {cfg.type!r}")
 
