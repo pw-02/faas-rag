@@ -53,11 +53,11 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
 
     safe_cfg = args.dataset_name.replace(".", "_")
-    index_path = os.path.join(args.out_dir, f"{args.index_type}_{args.n_vectors}", f"index_{safe_cfg}_{args.index_type}_{args.n_vectors}.faiss")
+    index_path = os.path.join(args.out_dir, f"index_{safe_cfg}_{args.index_type}_{args.n_vectors}.faiss")
     if args.store_text:
-        meta_path  = os.path.join(args.out_dir, f"{args.index_type}_{args.n_vectors}", f"meta_{safe_cfg}_{args.n_vectors}_text.jsonl")
+        meta_path  = os.path.join(args.out_dir, f"meta_{safe_cfg}_{args.n_vectors}_text.jsonl")
     else:
-        meta_path  = os.path.join(args.out_dir, f"{args.index_type}_{args.n_vectors}", f"meta_{safe_cfg}_{args.n_vectors}.jsonl")
+        meta_path  = os.path.join(args.out_dir, f"meta_{safe_cfg}_{args.n_vectors}.jsonl")
 
     print("=== Config ===")
     print("dataset      :", args.dataset)
