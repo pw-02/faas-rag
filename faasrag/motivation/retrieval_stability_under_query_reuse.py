@@ -503,7 +503,7 @@ def main():
     # pairing
     ap.add_argument("--neighbors_per_query", type=int, default=3)
     ap.add_argument("--min_sim", type=float, default=0.90)
-    ap.add_argument("--max_pairs", type=int, default=50000)
+    ap.add_argument("--max_pairs", type=int, default=100_000)
     ap.add_argument("--pair_metric", choices=["ip", "cosine"], default="cosine")
     ap.add_argument("--bins", default="0.90-0.93,0.93-0.96,0.96-0.98,0.98-1.001")
 
@@ -532,7 +532,7 @@ def main():
 
     dataset_paths = [
         "data/datasets/qa/nq/nq_train.jsonl",
-        "data/datasets/qa/wikiqa/wikiqa_train.jsonl",
+        "data/datasets/qa/triviaqa/triviaqa_train.jsonl",
         "data/datasets/multiple_choice/openbookqa/openbookqa_train.jsonl",
         "data/datasets/mmlu/all/auxiliary_train.jsonl"
     ]
