@@ -4,10 +4,11 @@ import argparse
 import csv
 import json
 import math
+import os
+import re
 import time
 from collections import Counter
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 import faiss
@@ -22,19 +23,13 @@ import matplotlib.pyplot as plt
 """
 Chunk / Doc-ID reuse analysis for RAG retrieval.
 
-Goal:
-- Across a QA dataset, run retrieval for each query and measure how concentrated retrieval traffic is:
-  - How many unique retrieved IDs (chunks/docs) are used at top-k?
-  - What fraction of the corpus is that?
-  - What fraction of total retrieval events are covered by the top X% most-frequent IDs?
-  - Frequency distribution / heavy-tail evidence.
-
-This supports the claim: caching text chunks (content objects) can be high-leverage because retrieval traffic is concentrated,
-even if query-neighbor reuse is brittle.
-
-Assumptions:
-- Your FAISS doc index returns integer IDs that are stable across searches.
-- If you built FAISS without IndexIDMap, IDs are 0..N-1 in add order.
+UPDATED: supports multiple datasets and writes outputs under:
+  <out_dir>/<dataset_name>/
+    chunk_reuse_summary.csv
+    chunk_reuse_freq.csv
+    chunk_reuse_coverage_curve.csv
+    chunk_reuse_coverage_curve.png
+    chunk_reuse_rank_freq_loglog.png
 """
 
 
@@ -90,8 +85,20 @@ def faiss_topk(index: faiss.Index, q: np.ndarray, k: int) -> np.ndarray:
 # -----------------------------
 # Analysis helpers
 # -----------------------------
+def dataset_name_from_path(path: str) -> str:
+    """
+    Make a safe directory name from the dataset filename.
+    Examples:
+      /a/b/nq_dev.jsonl -> nq_dev
+      triviaqa.jsonl    -> triviaqa
+    """
+    base = os.path.basename(path)
+    name = re.sub(r"\.jsonl$", "", base, flags=re.IGNORECASE)
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_")
+    return name or "dataset"
+
+
 def get_faiss_ntotal(index: faiss.Index) -> Optional[int]:
-    # Works for most indexes. If not available, returns None.
     try:
         return int(index.ntotal)
     except Exception:
@@ -118,13 +125,12 @@ def gini_from_counts(counts: np.ndarray) -> float:
     counts = np.sort(counts)
     n = counts.size
     cum = np.cumsum(counts)
-    # Gini = (n+1 - 2*sum_i (cum_i)/cum_n) / n
     return float((n + 1 - 2.0 * np.sum(cum) / cum[-1]) / n)
 
 
 def top_fraction_coverage(counts_sorted_desc: np.ndarray, frac: float) -> float:
     """
-    Given counts sorted descending, compute fraction of total events covered by top frac of IDs.
+    Fraction of total events covered by top frac of IDs.
     frac in (0,1], e.g. 0.01 = top 1% IDs.
     """
     n = counts_sorted_desc.size
@@ -156,9 +162,6 @@ def save_summary_csv(summary: Dict[str, float], out_path: str) -> None:
 
 
 def save_frequency_csv(counter: Counter, out_path: str) -> None:
-    """
-    Save per-id frequency counts.
-    """
     with open(out_path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["id", "count"])
@@ -172,21 +175,17 @@ def save_curve_csv(
     steps: int = 200,
 ) -> None:
     """
-    Save "coverage curve": fraction of IDs vs fraction of events covered.
-    We sample the curve at `steps` points (by number of IDs).
+    Coverage curve: fraction of IDs vs fraction of events covered.
     """
     n = counts_sorted_desc.size
     total = counts_sorted_desc.sum()
-    if n == 0 or total <= 0:
-        with open(out_path, "w", newline="") as f:
-            w = csv.writer(f)
-            w.writerow(["id_frac", "event_coverage"])
-        return
-
-    cum = np.cumsum(counts_sorted_desc) / total  # coverage after top i IDs
     with open(out_path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["id_frac", "event_coverage"])
+        if n == 0 or total <= 0:
+            return
+
+        cum = np.cumsum(counts_sorted_desc) / total
         for t in range(1, steps + 1):
             i = int(round(t * n / steps))
             i = max(1, min(i, n))
@@ -198,7 +197,8 @@ def save_curve_csv(
 def plot_coverage_curve(curve_csv: str, out_png: str) -> None:
     df = pd.read_csv(curve_csv)
     if df.empty:
-        raise SystemExit(f"No rows in {curve_csv}")
+        print(f"Skipping plot (no rows): {curve_csv}")
+        return
     plt.figure(figsize=(7, 5))
     plt.plot(df["id_frac"].values, df["event_coverage"].values, marker=None)
     plt.xlabel("Fraction of unique IDs cached (top by frequency)")
@@ -212,16 +212,12 @@ def plot_coverage_curve(curve_csv: str, out_png: str) -> None:
 
 
 def plot_loglog_rank_freq(freq_csv: str, out_png: str, max_points: int = 200000) -> None:
-    """
-    Zipf-like plot: rank vs frequency on log-log axes.
-    """
     df = pd.read_csv(freq_csv)
     if df.empty:
-        raise SystemExit(f"No rows in {freq_csv}")
+        print(f"Skipping plot (no rows): {freq_csv}")
+        return
 
-    # already sorted in save_frequency_csv (most_common), but ensure:
     df = df.sort_values("count", ascending=False).reset_index(drop=True)
-
     if len(df) > max_points:
         df = df.iloc[:max_points].copy()
 
@@ -243,81 +239,62 @@ def plot_loglog_rank_freq(freq_csv: str, out_png: str, max_points: int = 200000)
 
 
 # -----------------------------
-# Main experiment
+# Per-dataset run
 # -----------------------------
-def main():
-    ap = argparse.ArgumentParser()
+def run_one_dataset(
+    *,
+    questions_jsonl: str,
+    retrieval_index: faiss.Index,
+    ntotal: Optional[int],
+    dpr_q_model: str,
+    batch_size: int,
+    device: str,
+    max_questions: int,
+    k: int,
+    out_dir: str,
+    make_plots: bool,
+) -> None:
+    dname = dataset_name_from_path(questions_jsonl)
+    ds_out = os.path.join(out_dir, dname)
+    os.makedirs(ds_out, exist_ok=True)
 
-    # data / models
-    ap.add_argument("--questions_jsonl", default="data/datasets/qa/nq/nq_dev.jsonl")
-    ap.add_argument("--dpr_q_model", default="sentence-transformers/facebook-dpr-question_encoder-single-nq-base")
-    ap.add_argument("--device", default=None)
-    ap.add_argument("--batch_size", type=int, default=64)
-    ap.add_argument("--max_questions", type=int, default=50000)
+    out_summary_csv = os.path.join(ds_out, "chunk_reuse_summary.csv")
+    out_freq_csv = os.path.join(ds_out, "chunk_reuse_freq.csv")
+    out_curve_csv = os.path.join(ds_out, "chunk_reuse_coverage_curve.csv")
+    out_curve_png = os.path.join(ds_out, "chunk_reuse_coverage_curve.png")
+    out_rank_png = os.path.join(ds_out, "chunk_reuse_rank_freq_loglog.png")
 
-    # retrieval
-    ap.add_argument(
-        "--doc_index",
-        default="artifacts/wiki-dpr/faiss_wiki_dpr/hnsw_100k/index_psgs_w100_nq_no_index_hnsw_ip_100000.faiss",
-        help="Main ANN index used for retrieval (simulates production index)",
-    )
-    ap.add_argument("--truth_index", default=None, help="Optional higher-accuracy index for retrieval (FlatIP or tuned ANN)")
-    ap.add_argument("--use_truth_index", action="store_true", default=False, help="If set and --truth_index provided, use truth_index for retrieval instead of doc_index")
-    ap.add_argument("--k", type=int, default=20, help="Top-k retrieved per query")
-
-    # outputs
-    ap.add_argument("--out_prefix", default="chunk_reuse")
-    ap.add_argument("--make_plots", action="store_true", default=True)
-
-    # misc
-    ap.add_argument("--seed", type=int, default=0)
-
-    args = ap.parse_args()
-
-    rng = np.random.default_rng(args.seed)
-    device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
+    print("\n" + "=" * 90)
+    print(f"DATASET: {dname}")
+    print(f"INPUT : {questions_jsonl}")
+    print(f"OUTDIR: {ds_out}")
+    print("=" * 90)
 
     # Load questions
-    questions = load_questions_from_jsonl(args.questions_jsonl, max_q=args.max_questions)
+    questions = load_questions_from_jsonl(questions_jsonl, max_q=max_questions)
     if len(questions) < 1:
-        raise SystemExit("Need at least 1 question.")
-    print(f"Loaded {len(questions)} questions from {args.questions_jsonl}")
-
-    # Load indices
-    doc_index = faiss.read_index(args.doc_index)
-    truth_index = faiss.read_index(args.truth_index) if args.truth_index else None
-    if args.use_truth_index and truth_index is None:
-        raise SystemExit("--use_truth_index set but no --truth_index provided.")
-
-    retrieval_index = truth_index if args.use_truth_index and truth_index is not None else doc_index
-    retrieval_index_name = "truth_index" if retrieval_index is truth_index else "doc_index"
-    print(f"Using {retrieval_index_name} for retrieval.")
-
-    ntotal = get_faiss_ntotal(retrieval_index)
-    if ntotal is not None:
-        print(f"Index ntotal = {ntotal}")
+        print(f"Skipping {questions_jsonl}: no questions.")
+        return
+    print(f"Loaded {len(questions)} questions")
 
     # Embed queries
     t0 = time.time()
     qvecs = embed_questions(
         questions=questions,
-        model_name=args.dpr_q_model,
-        batch_size=args.batch_size,
+        model_name=dpr_q_model,
+        batch_size=batch_size,
         device=device,
     )
     print(f"Embedded queries: shape={qvecs.shape} in {time.time()-t0:.1f}s")
 
     # Retrieve and count IDs
-    k = int(args.k)
     total_queries = qvecs.shape[0]
     total_events = total_queries * k
-
     id_counter: Counter = Counter()
 
     t1 = time.time()
-    for i in tqdm(range(total_queries), desc=f"retrieving top-{k}"):
+    for i in tqdm(range(total_queries), desc=f"{dname}: retrieving top-{k}"):
         ids = faiss_topk(retrieval_index, qvecs[i], k)
-        # FAISS can return -1 for missing entries in some configs; ignore those
         for doc_id in ids.tolist():
             if int(doc_id) >= 0:
                 id_counter[int(doc_id)] += 1
@@ -329,6 +306,7 @@ def main():
     counts_sorted_desc = np.sort(counts)[::-1]
 
     summary: Dict[str, float] = {}
+    summary["dataset"] = dname  # useful for quick greps
     summary["num_queries"] = float(total_queries)
     summary["k"] = float(k)
     summary["total_retrieval_events"] = float(total_events)
@@ -343,7 +321,7 @@ def main():
         summary["index_ntotal"] = float(ntotal)
         summary["fraction_of_corpus_touched"] = safe_float(unique_ids_used / max(1, ntotal))
 
-    # Coverage by top fractions of IDs
+    # Coverage by top fractions of IDs (permil = per thousand)
     for frac in [0.001, 0.005, 0.01, 0.02, 0.05, 0.10]:
         summary[f"event_coverage_top_{int(frac*1000)}permil_ids"] = top_fraction_coverage(counts_sorted_desc, frac)
 
@@ -351,39 +329,99 @@ def main():
     for topn in [10, 50, 100, 500, 1000, 5000]:
         summary[f"event_coverage_top_{topn}_ids"] = top_k_ids_coverage(counts_sorted_desc, topn)
 
-    # Print a compact summary
-    print("\n=== Chunk/Doc reuse summary ===")
-    print(f"Queries: {total_queries}   k: {k}   total events: {total_events}")
-    print(f"Unique IDs used: {unique_ids_used}   avg reuse/event per unique ID: {summary['avg_reuse_per_id']:.2f}")
-    if ntotal is not None:
-        print(f"Corpus touched: {unique_ids_used}/{ntotal} = {100.0*summary['fraction_of_corpus_touched']:.2f}%")
-    print(f"Gini (concentration): {summary['gini_count']:.3f}")
-    print("Event coverage by top IDs:")
-    for frac in [0.01, 0.05, 0.10]:
-        key = f"event_coverage_top_{int(frac*1000)}permil_ids"
-        print(f"  Top {int(frac*100)}% IDs cover {100.0*summary[key]:.2f}% of events")
-    for topn in [100, 1000, 5000]:
-        key = f"event_coverage_top_{topn}_ids"
-        print(f"  Top {topn} IDs cover {100.0*summary[key]:.2f}% of events")
-
     # Write outputs
-    prefix = args.out_prefix
-    out_summary_csv = f"{prefix}_summary.csv"
-    out_freq_csv = f"{prefix}_freq.csv"
-    out_curve_csv = f"{prefix}_coverage_curve.csv"
-
     save_summary_csv(summary, out_summary_csv)
     save_frequency_csv(id_counter, out_freq_csv)
     save_curve_csv(counts_sorted_desc, out_curve_csv, steps=250)
 
-    print(f"\nSaved: {out_summary_csv}")
+    print(f"Saved: {out_summary_csv}")
     print(f"Saved: {out_freq_csv}")
     print(f"Saved: {out_curve_csv}")
 
-    # Plots
-    if args.make_plots:
-        plot_coverage_curve(out_curve_csv, f"{prefix}_coverage_curve.png")
-        plot_loglog_rank_freq(out_freq_csv, f"{prefix}_rank_freq_loglog.png")
+    if make_plots:
+        plot_coverage_curve(out_curve_csv, out_curve_png)
+        plot_loglog_rank_freq(out_freq_csv, out_rank_png)
+
+
+# -----------------------------
+# Main
+# -----------------------------
+def main():
+    ap = argparse.ArgumentParser()
+
+    # data / models
+    ap.add_argument(
+        "--questions_jsonl",
+        nargs="+",
+        required=False,
+        help="One or more JSONL files. Example: --questions_jsonl a.jsonl b.jsonl c.jsonl",
+    )
+    ap.add_argument("--dpr_q_model", default="sentence-transformers/facebook-dpr-question_encoder-single-nq-base")
+    ap.add_argument("--device", default=None)
+    ap.add_argument("--batch_size", type=int, default=64)
+    ap.add_argument("--max_questions", type=int, default=100_000)
+
+    # retrieval
+    ap.add_argument(
+        "--doc_index",
+        required=False,
+        default="artifacts/wiki-dpr/faiss_wiki_dpr/hnsw_21m/index_psgs_w100_nq_no_index_hnsw_ip_21000000.faiss",
+        help="FAISS index used for retrieval",
+    )
+    ap.add_argument("--truth_index", default=None, help="Optional higher-accuracy index for retrieval")
+    ap.add_argument("--use_truth_index", action="store_true", default=False, help="If set and --truth_index provided, use truth_index for retrieval")
+    ap.add_argument("--k", type=int, default=20, help="Top-k retrieved per query")
+
+    # outputs
+    ap.add_argument("--out_dir", default="runs/chunk_reuse", help="Base output directory")
+    ap.add_argument("--make_plots", action="store_true", default=True)
+
+    # misc
+    ap.add_argument("--seed", type=int, default=0)
+
+    args = ap.parse_args()
+    
+    dataset_paths = [
+        "data/datasets/qa/nq/nq_train.jsonl",
+        "data/datasets/qa/triviaqa/triviaqa_train.jsonl",
+        "data/datasets/multiple_choice/openbookqa/openbookqa_train.jsonl",
+        "data/datasets/mmlu/all/auxiliary_train.jsonl"
+    ]
+    args.questions_jsonl = dataset_paths
+
+    # deterministic-ish (only used if you add sampling later)
+    np.random.default_rng(args.seed)
+
+    device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Load indices once
+    doc_index = faiss.read_index(args.doc_index)
+    truth_index = faiss.read_index(args.truth_index) if args.truth_index else None
+    if args.use_truth_index and truth_index is None:
+        raise SystemExit("--use_truth_index set but no --truth_index provided.")
+
+    retrieval_index = truth_index if args.use_truth_index and truth_index is not None else doc_index
+    retrieval_index_name = "truth_index" if retrieval_index is truth_index else "doc_index"
+    print(f"Using {retrieval_index_name} for retrieval.")
+
+    ntotal = get_faiss_ntotal(retrieval_index)
+    if ntotal is not None:
+        print(f"Index ntotal = {ntotal}")
+
+    # Run each dataset
+    for path in args.questions_jsonl:
+        run_one_dataset(
+            questions_jsonl=path,
+            retrieval_index=retrieval_index,
+            ntotal=ntotal,
+            dpr_q_model=args.dpr_q_model,
+            batch_size=args.batch_size,
+            device=device,
+            max_questions=args.max_questions,
+            k=int(args.k),
+            out_dir=args.out_dir,
+            make_plots=bool(args.make_plots),
+        )
 
 
 if __name__ == "__main__":
