@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 PY = sys.executable
-SCRIPT = "build_wikidpr_fiass_index.py"
+SCRIPT = "data/indexes/wiki-dpr/build_wikidpr_fiass_index.py"
 
 ROOT_OUT_DIR = Path("artifacts/wiki-dpr/faiss_wiki_dpr")
 MANIFEST_PATH = ROOT_OUT_DIR / "manifest.csv"
