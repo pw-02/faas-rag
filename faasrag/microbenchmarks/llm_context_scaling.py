@@ -153,19 +153,17 @@ def bench(generator: HFCausalLMGenerator,
 
         if measure_prefill and prefill_times:
             print(
-                f"L={L:5d} | prefill mean={row['mean_prefill_s']:.3f}s "
-                f"| gen mean={mean_gen:.3f}s p95={p95_gen:.3f}s "
-                f"| comp_tok/s={comp_tok_s:.1f}"
-            )
-        else:
-                        print(
                 f"L={L:5d} | prefill={row['mean_prefill_s']:.3f}s "
                 f"| gen={row['mean_generate_s']:.3f}s "
                 f"| decode~={row['mean_decode_s_est']:.3f}s "
                 f"| comp_tok/s(total)={row['completion_tok_per_s']:.1f} "
                 f"| comp_tok/s(decode~)={row['decode_tok_per_s_est']:.1f}"
             )
-
+        else:
+            print(
+                f"L={L:5d} | gen mean={mean_gen:.3f}s p95={p95_gen:.3f}s "
+                f"| comp_tok/s={comp_tok_s:.1f}"
+            )
 
     return results
 
