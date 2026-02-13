@@ -179,7 +179,7 @@ def main():
     # - "gpt2" (quick test)
     # - "meta-llama/Meta-Llama-3.1-8B-Instruct" (if you have access)
     config = GeneratorConfig(
-        model_name="gpt2",
+        model_name="meta-llama/Meta-Llama-3.1-8B-Instruct",
         temperature=0.0,
         top_p=1.0,
         top_k=0,
