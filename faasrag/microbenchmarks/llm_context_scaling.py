@@ -180,13 +180,13 @@ def main():
     # - "meta-llama/Meta-Llama-3.1-8B-Instruct" (if you have access)
     config = GeneratorConfig(
         model_name="meta-llama/Meta-Llama-3.1-8B-Instruct",
-        temperature=0.0,
-        top_p=1.0,
-        top_k=0,
-        do_sample=False,
-        max_new_tokens=128,
-        use_4bit=False,
-        hf_token=None,
+        temperature=0.0, #Only used if do_sample=True. For benchmarking, we usually want deterministic output, so temp=0 and do_sample=False.
+        top_p=1.0, #Only used if sampling. Limits sampling to tokens covering top P probability mass.
+        top_k=0, #Only used if sampling. Limits sampling to top K tokens by probability. 0 means no limit.
+        do_sample=False, #False is greedy decoding (always pick max logit), which is faster and more stable for benchmarking.
+        max_new_tokens=128, #Maximum number of tokens generated. Total compute = prompt tokens + max_new_tokens, so adjust accordingly for longer inputs.
+        use_4bit=False,  #loads model in 4-bit quantized form (via bitsandbytes). Faster and less memory but can be less stable and slightly less performant
+        hf_token=None, 
     )
 
     generator = HFCausalLMGenerator(
@@ -202,7 +202,7 @@ def main():
     )
 
     # Sweep input lengths (tokens). Adjust upper bound to your GPU memory.
-    lengths = [64, 128, 256, 512, 1024, 2048]
+    lengths = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 12288, 16384, 20480, 24576, 28672, 32768]
 
     # Run benchmark
     results = bench(
