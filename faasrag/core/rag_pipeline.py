@@ -3,6 +3,8 @@ import logging
 import time
 from typing import Any, Optional
 import numpy as np
+from datetime import datetime, timezone
+
 
 from faasrag.core.args import (
     GeneratorConfig,
@@ -18,8 +20,10 @@ from faasrag.core.generators import build_generator
 from faasrag.core.docstores import load_docstore
 from faasrag.core.indexes import load_index
 from faasrag.core.prompts import PromptBuildMethodType, build_rag_prompt
-from faasrag.core.utils import extract_short_answer
+from faasrag.core.utils import extract_short_answer, append_csv_row
 from contextlib import contextmanager
+
+
 
 
 @contextmanager
@@ -45,12 +49,13 @@ class RagPipeline:
         logger: Optional[logging.Logger] = None,
         retrieve_only: bool = False,
         seed: Optional[int] = None,
+        always_log_results: bool = False,
     ):
         self.logger = logger or logging.getLogger("rag_service")
 
         self.retrieve_only = bool(retrieve_only)
         # self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-
+        self.always_log_results = bool(always_log_results)
         self.top_k = int(top_k)
         if self.top_k < 0:
             raise ValueError("top_k must be >= 0")
@@ -199,17 +204,58 @@ class RagPipeline:
         # Generation
         # -------------------------
         with timed(timings, "decode_s"):
-            answer, prompt_tokens, completion_tokens, total_tokens = self.generator.generate(prompt)
+            gen = self.generator.generate(prompt)
         
-        return {
-        # "answer": answer,
-        "answer": extract_short_answer(answer, max_chars=10),
-        "retrieved_doc_ids": retrieved_doc_ids,
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "total_tokens": total_tokens,
-        "timings_s": timings,
-        "cache_used": cache_used,
-        "cache_hits": cache_hits,
-        "cache_misses": cache_misses,
-    }
+        answer = gen.text
+        prompt_tokens = gen.prompt_tokens
+        completion_tokens = gen.completion_tokens
+        total_tokens = gen.total_tokens
+
+        # Add vLLM streaming metrics into timings / metadata
+        timings["ttft_s"] = gen.metrics.get("ttft_s") or 0.0
+        # timings["total_s"] = gen.metrics.get("total_s") or 0.0
+        timings["prefill_tps"] = gen.metrics.get("prefill_tps") or 0.0
+        timings["decode_tps"] = gen.metrics.get("decode_tps") or 0.0
+        finish_reason = gen.metrics.get("finish_reason")
+        
+        reesult = {
+            "question": question,
+            "answer": extract_short_answer(answer, max_chars=10),
+            "retrieved_doc_ids": retrieved_doc_ids,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "finish_reason": finish_reason,
+            "timings_s": timings,
+            "cache_used": cache_used,
+            "cache_hits": cache_hits,
+            "cache_misses": cache_misses,
+        }
+
+        if self.always_log_results:
+            self.log_result(reesult)
+            
+        return reesult
+    
+    def log_result(self, result: dict[str, Any], log_path: Optional[str] = None):
+
+        append_csv_row(log_path, {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "question": result.get("question", ""),
+            "top_k": self.top_k,
+            "prompt_tokens": result.get("prompt_tokens", 0),
+            "completion_tokens": result.get("completion_tokens", 0),
+            "total_tokens": result.get("total_tokens", 0),
+            "ttft_s": result.get("timings_s", {}).get("ttft_s", 0.0),
+            "total_s": result.get("timings_s", {}).get("total_s", 0.0),
+            "prefill_tps": result.get("timings_s", {}).get("prefill_tps", 0.0),
+            "decode_tps": result.get("timings_s", {}).get("decode_tps", 0.0),
+            "embed_s": result.get("timings_s", {}).get("embed_s", 0.0),
+            "ann_s": result.get("timings_s", {}).get("ann_s", 0.0),
+            "docstore_s": result.get("timings_s", {}).get("docstore_s", 0.0),
+            "prompt_build_s": result.get("timings_s", {}).get("prompt_s", 0.0),
+            "finish_reason": result.get("finish_reason", ""),
+            "cache_used": result.get("cache_used", 0),
+            "cache_hits": result.get("cache_hits", 0),
+            "cache_misses": result.get("cache_misses", 0),
+        })

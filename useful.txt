@@ -4,9 +4,8 @@ vllm serve --config hydra/conf/vllm_server.yaml
 
 http://134.197.95.82:8000/v1/chat/completions
 
-
-
 CUDA_VISIBLE_DEVICES=0 vllm serve --config faasrag/conf/vllm_server.yaml
+
 export PYTHONPATH=".:$PYTHONPATH"
 python data/datasets/download.py
 python faasrag/experiments/sweep_runner.py

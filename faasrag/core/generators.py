@@ -12,6 +12,122 @@ from faasrag.core.args import (GeneratorConfig, Llama3InstructGeneratorConfig,
 
 import openai
 
+
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict, Tuple, Optional
+import time
+import openai
+
+
+@dataclass
+class GenResult:
+    text: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    metrics: Dict[str, Any]  # ttft_s, total_s, prefill_tps, decode_tps, finish_reason
+
+
+class VLLMStreamingGenerator:
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        model: str,
+        temperature: float = 0.0,
+        max_tokens: int = 64,
+        timeout_s: float = 60.0,
+    ):
+        self.client = openai.OpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            timeout=timeout_s,
+        )
+        self.model = model
+        self.temperature = float(temperature)
+        self.max_tokens = int(max_tokens)
+
+    def generate(self, prompt: str) -> GenResult:
+        start_time = time.time()
+        first_token_time: Optional[float] = None
+
+        stream = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            stream=True,
+            stream_options={"include_usage": True},
+        )
+
+        full_text = ""
+        usage = None
+        finish_reason = None
+
+        for chunk in stream:
+            if chunk.choices:
+                choice = chunk.choices[0]
+                finish_reason = getattr(choice, "finish_reason", finish_reason)
+
+                delta = choice.delta.content
+                if delta:
+                    if first_token_time is None:
+                        first_token_time = time.time()
+                    full_text += delta
+
+            if getattr(chunk, "usage", None) is not None:
+                usage = chunk.usage
+
+        end_time = time.time()
+
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        total_tokens = int(getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens))
+
+        ttft_s = (first_token_time - start_time) if first_token_time else None
+        total_s = end_time - start_time
+
+        # Derived rates
+        prefill_tps = None
+        decode_tps = None
+
+        if ttft_s is not None and ttft_s > 0 and prompt_tokens > 0:
+            prefill_tps = prompt_tokens / ttft_s
+
+        if ttft_s is not None:
+            decode_time_s = max(total_s - ttft_s, 1e-9)
+            if completion_tokens > 0:
+                decode_tps = completion_tokens / decode_time_s
+
+        metrics = {
+            "ttft_s": ttft_s,
+            "total_s": total_s,
+            "prefill_tps": prefill_tps,
+            "decode_tps": decode_tps,
+            "finish_reason": finish_reason,
+        }
+
+        return GenResult(
+            text=full_text.strip(),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            metrics=metrics,
+        )
+
+
+
+
+
+
+
+
+
+
 class VLLMOpenAIGenerator:
     """
     Calls a vLLM OpenAI-compatible server.

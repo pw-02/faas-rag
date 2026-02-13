@@ -4,12 +4,22 @@ import json
 import logging
 import re
 import string
+import csv
+import os
 
 # Third Party
 # from rouge_score import rouge_scorer
 # ============================================================
 # Output Normalization
 # ============================================================
+def append_csv_row(path: str, row: dict):
+    exists = os.path.exists(path)
+    with open(path, "a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list(row.keys()))
+        if not exists:
+            w.writeheader()
+        w.writerow(row)
+
 
 def extract_short_answer(text: str, max_chars: int | None = None) -> str:
     """
