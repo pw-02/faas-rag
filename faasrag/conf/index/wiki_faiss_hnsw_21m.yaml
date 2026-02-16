@@ -2,5 +2,5 @@ type: hnsw
 path: s3://vectorindexes/wiki-dpr/faiss_wiki_dpr/hnsw_21m/index_psgs_w100_nq_no_index_hnsw_ip_21000000.faiss
 use_gpu: false
 metric: ip
-ef_search: 64
+ef_search: 128
 index_vector_count: 21000000
