@@ -19,7 +19,7 @@ from faasrag.core.embedders import build_embedder
 from faasrag.core.generators import build_generator
 from faasrag.core.docstores import load_docstore
 from faasrag.core.indexes import load_index
-from faasrag.core.prompts import PromptBuildMethodType, build_rag_prompt
+from faasrag.core.prompts import PromptBuildMethodType, build_rag_messages
 from faasrag.core.utils import extract_short_answer, append_csv_row
 from contextlib import contextmanager
 
@@ -202,14 +202,14 @@ class RagPipeline:
         # Prompt construction
         # -------------------------
         with timed(timings, "prompt_s"):
-             prompt, _ = build_rag_prompt(question, passages, self.prompt_build_method)
+             messages, _ = build_rag_messages(question, passages, self.prompt_build_method)
 
         # -------------------------
         # Generation
         # -------------------------
    
         with timed(timings, "decode_s"):
-            gen = self.generator.generate(prompt)
+            gen = self.generator.generate_chat(messages)
         
         answer = gen.text
         prompt_tokens = gen.prompt_tokens
