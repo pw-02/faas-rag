@@ -204,19 +204,22 @@ class RagPipeline:
         # Generation
         # -------------------------
         with timed(timings, "decode_s"):
-            gen = self.generator.generate(prompt)
+             answer, prompt_tokens, completion_tokens, total_tokens = self.generator.generate(prompt)
+        # with timed(timings, "decode_s"):
+        #     gen = self.generator.generate(prompt)
         
-        answer = gen.text
-        prompt_tokens = gen.prompt_tokens
-        completion_tokens = gen.completion_tokens
-        total_tokens = gen.total_tokens
+        # answer = gen.text
+        # prompt_tokens = gen.prompt_tokens
+        # completion_tokens = gen.completion_tokens
+        # total_tokens = gen.total_tokens
 
         # Add vLLM streaming metrics into timings / metadata
-        timings["ttft_s"] = gen.metrics.get("ttft_s") or 0.0
+     
+        # timings["ttft_s"] = gen.metrics.get("ttft_s") or 0.0
         # timings["total_s"] = gen.metrics.get("total_s") or 0.0
-        timings["prefill_tps"] = gen.metrics.get("prefill_tps") or 0.0
-        timings["decode_tps"] = gen.metrics.get("decode_tps") or 0.0
-        finish_reason = gen.metrics.get("finish_reason")
+        # timings["prefill_tps"] = gen.metrics.get("prefill_tps") or 0.0
+        # timings["decode_tps"] = gen.metrics.get("decode_tps") or 0.0
+        # finish_reason = gen.metrics.get("finish_reason")
         
         reesult = {
             "question": question,
@@ -225,7 +228,7 @@ class RagPipeline:
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
             "total_tokens": total_tokens,
-            "finish_reason": finish_reason,
+            "finish_reason": "",
             "timings_s": timings,
             "cache_used": cache_used,
             "cache_hits": cache_hits,
