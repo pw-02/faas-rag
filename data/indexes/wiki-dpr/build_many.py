@@ -114,6 +114,13 @@ for tag, n in SIZES:
         ],
     ))
 
+print("Planned jobs:")
+for name, args in JOBS:
+    print(f"  {name}: {' '.join(args)}")
+
+
+
+
 # ---------------- metrics helpers ----------------
 
 def utc_now_iso() -> str:

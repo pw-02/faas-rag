@@ -3,5 +3,5 @@ type: ivf
 path: s3://vectorindexes/wiki-dpr/faiss_wiki_dpr/ivf_500k/index_psgs_w100_nq_no_index_ivf_ip_500000.faiss
 use_gpu: false
 metric: ip
-nprobe: 16
+nprobe: 32
 index_vector_count : 500000 # This is the number of vectors in the index, not the number of clusters.

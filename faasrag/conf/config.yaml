@@ -1,5 +1,5 @@
 defaults:
-  - generator: synthetic #qwen2_5_instruct, llama3_8b_instruct, synthetic
+  - generator: llama3_8b_instruct #qwen2_5_instruct, llama3_8b_instruct, synthetic
   - embedder: dpr
   - index: wiki_faiss_hnsw_100k
   - docstore: wiki_dpr_100k

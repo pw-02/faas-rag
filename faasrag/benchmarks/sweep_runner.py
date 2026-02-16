@@ -45,8 +45,8 @@ SUPPORTED_INDEX_TYPES = {
     "1m": ["flat", "hnsw", "ivf"],
     "2_5m": ["hnsw", "ivf"],
     "5m": ["hnsw", "ivf"],
-    "10m": ["hnsw"],
-    "21m": ["hnsw"],
+    "10m": ["hnsw", "ivf"],
+    "21m": ["hnsw", "ivf"],
 }
 
 SUPPORTED_DOCSTORE_BACKENDS = [
@@ -104,8 +104,8 @@ def build_index_type_experiments(
 
 def build_index_size_experiments(
     *,
-    index_type: str = "hnsw",
-    docstore_backend: str = "local_jsonl_offsets",
+    index_type: str = "ivf",
+    docstore_backend: str = "memory_jsonl",
 ) -> List[Dict[str, object]]:
     if index_type not in ALL_INDEX_TYPES:
         raise ValueError(f"Unknown index_type {index_type!r}. Supported: {ALL_INDEX_TYPES}")
@@ -478,9 +478,9 @@ def main() -> None:
     # Choose which experiments to run:
     # experiments = build_experiments()
     # experiments = build_docstore_backend_experiments()
-    # experiments = build_index_size_experiments()
+    experiments = build_index_size_experiments()
     # experiments += build_index_type_experiments()
-    experiments = build_experiment_for_concurrency_sweep()
+    # experiments = build_experiment_for_concurrency_sweep()
 
     print(f"Total experiments to run: {len(experiments) * len(concurrency_levels)} ({len(experiments)} experiment configs x {len(concurrency_levels)} concurrency levels)")
     print(f"Concurrency levels: {concurrency_levels}")
