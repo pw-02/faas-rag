@@ -219,7 +219,7 @@ class RagPipeline:
         # Add vLLM streaming metrics into timings / metadata
      
         timings["ttft_s"] = gen.metrics.get("ttft_s") or 0.0
-        timings["total_s"] = gen.metrics.get("total_s") or 0.0
+        # timings["total_s"] = gen.metrics.get("total_s") or 0.0
         timings["prefill_tps"] = gen.metrics.get("prefill_tps") or 0.0
         timings["decode_tps"] = gen.metrics.get("decode_tps") or 0.0
         finish_reason = gen.metrics.get("finish_reason") or ""

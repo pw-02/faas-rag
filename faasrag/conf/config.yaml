@@ -20,7 +20,7 @@ seed: 42
 docstore_backend: s3_jsonl_offsets # local_sqlite, local_jsonl_offsets, s3_jsonl_offsets, memory_jsonl
 top_k: 5 #k=0 => no retrieval, pure generation
 retrieve_only: False
-prompt_build_method: LLM_ONLY #QA_STRICT, QA_OPEN, FEW_SHOT
+prompt_build_method: QA_OPEN #QA_STRICT, QA_OPEN, FEW_SHOT
 max_ctx_chars: 4000
 
 telemetry:
