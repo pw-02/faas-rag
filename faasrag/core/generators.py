@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Optional, Tuple, Union
+from typing import Any, Dict, Tuple, Optional
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -9,12 +9,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from faasrag.core.args import (GeneratorConfig, Llama3InstructGeneratorConfig, 
                                Qwen2_5InstructGeneratorConfig, SyntheticGeneratorConfig,
                                  vLLMOpenAIGeneratorConfig)
-
-import openai
-
-
-
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, Tuple, Optional
