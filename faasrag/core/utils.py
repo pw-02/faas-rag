@@ -1,17 +1,12 @@
-from logging import Logger
 import collections
-import json
-import logging
-import re
-import string
 import csv
 import os
+import re
+import string
+from collections import Counter
+from typing import Iterable, Optional
 
-# Third Party
-# from rouge_score import rouge_scorer
-# ============================================================
-# Output Normalization
-# ============================================================
+
 def append_csv_row(path: str, row: dict):
     exists = os.path.exists(path)
     with open(path, "a", newline="", encoding="utf-8") as f:
@@ -21,73 +16,87 @@ def append_csv_row(path: str, row: dict):
         w.writerow(row)
 
 
-def extract_short_answer(text: str, max_chars: int | None = None) -> str:
-    """
-    Normalize model output for QA-style evaluation:
-    - first line
-    - first sentence
-    - strip quotes
-    """
-    t = text.strip()
-
-    # first line
+def extract_short_answer(text: str, max_chars: Optional[int] = None) -> str:
+    t = (text or "").strip()
     t = t.split("\n")[0].strip()
-
-    # first sentence
+    # optional heuristic: first sentence (can be brittle)
     t = t.split(".")[0].strip()
-
-    # clean quotes
     t = t.strip('"').strip("'").strip()
-
     if max_chars is not None:
         t = t[:max_chars].strip()
-
     return t
 
 
-def normalize_answer(s):
-    def remove_articles(text):
+def normalize_answer(s: str) -> str:
+    if s is None:
+        return ""
+
+    def remove_articles(text: str) -> str:
         return re.sub(r"\b(a|an|the)\b", " ", text)
 
-    def white_space_fix(text):
+    def white_space_fix(text: str) -> str:
         return " ".join(text.split())
 
-    def remove_punc(text):
+    def remove_punc(text: str) -> str:
         exclude = set(string.punctuation)
         return "".join(ch for ch in text if ch not in exclude)
 
-    def lower(text):
+    def lower(text: str) -> str:
         return text.lower()
 
     return white_space_fix(remove_articles(remove_punc(lower(s))))
 
 
-def parse_generation(s):
-    s = s.lstrip("\n").split("\n")[0]
-    if s.startswith("Yes") or s.startswith("yes"):
-        s = "Yes"
-    elif (s.split()[0]).startswith("No") or (s.split()[0]).startswith("no"):
-        s = "No"
-    return s
+def exact_match_score(prediction: str, ground_truth: str) -> int:
+    return int(normalize_answer(prediction) == normalize_answer(ground_truth))
 
-def compute_f1(a_pred, a_gold, tokenizer):
-    a_pred = parse_generation(a_pred)
-    gold_toks = tokenizer.encode(normalize_answer(a_gold))[1:]
-    pred_toks = tokenizer.encode(normalize_answer(a_pred))[1:]
-    common = collections.Counter(gold_toks) & collections.Counter(pred_toks)
+
+def f1_score(prediction: str, ground_truth: str) -> float:
+    pred_tokens = normalize_answer(prediction).split()
+    gold_tokens = normalize_answer(ground_truth).split()
+
+    if not pred_tokens and not gold_tokens:
+        return 1.0
+    if not pred_tokens or not gold_tokens:
+        return 0.0
+
+    common = Counter(pred_tokens) & Counter(gold_tokens)
     num_same = sum(common.values())
-    if len(gold_toks) == 0 or len(pred_toks) == 0:
-        # If either is no-answer, then F1 is 1 if they agree, 0 otherwise
-        return int(gold_toks == pred_toks)
     if num_same == 0:
-        return 0
-    precision = 1.0 * num_same / len(pred_toks)
-    recall = 1.0 * num_same / len(gold_toks)
-    f1 = (2 * precision * recall) / (precision + recall)
-    return f1
+        return 0.0
+
+    precision = num_same / len(pred_tokens)
+    recall = num_same / len(gold_tokens)
+    return (2 * precision * recall) / (precision + recall)
 
 
-# def compute_rl(pred, gold):
-#     scorer = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
-#     rougeL = scorer.score(gold, pred)["rougeL"].fmeasure
-#     return rougeL
+def metric_max_over_ground_truths(metric_fn, prediction: str, ground_truths: Iterable[str]):
+    gts = list(ground_truths) if ground_truths is not None else [""]
+    if not gts:
+        gts = [""]
+    return max(metric_fn(prediction, gt) for gt in gts)
+
+
+def f1_score(prediction: str, ground_truth: str) -> float:
+    pred_tokens = normalize_answer(prediction).split()
+    gold_tokens = normalize_answer(ground_truth).split()
+    if not pred_tokens and not gold_tokens:
+        return 1.0
+    if not pred_tokens or not gold_tokens:
+        return 0.0
+
+    common = Counter(pred_tokens) & Counter(gold_tokens)
+    num_same = sum(common.values())
+    if num_same == 0:
+        return 0.0
+
+    precision = num_same / len(pred_tokens)
+    recall = num_same / len(gold_tokens)
+    return (2 * precision * recall) / (precision + recall)
+
+def metric_max_over_ground_truths(metric_fn, prediction: str, ground_truths: Iterable[str]):
+    ground_truths = list(ground_truths) if ground_truths is not None else [""]
+    if len(ground_truths) == 0:
+        ground_truths = [""]
+    scores = [metric_fn(prediction, gt) for gt in ground_truths]
+    return max(scores)
