@@ -73,6 +73,12 @@ def evaluate(
 
     pbar = tqdm(subset, total=len(subset), desc="Evaluating", dynamic_ncols=True)
 
+    if out_csv:
+        #delete existing file to avoid appending to old results
+        with open(out_csv, "w", encoding="utf-8") as f:
+            f.write("")
+    
+
     for ex in pbar:
         ex_id = ex.get("id", "")
         q, golds = get_question_and_answers(ex)
@@ -205,7 +211,7 @@ def evaluate(
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl", help="Path to dataset (jsonl)")
-    parser.add_argument("--limit", type=int, default=200, help="Optional limit for quick runs (0 = all)")
+    parser.add_argument("--limit", type=int, default=0, help="Optional limit for quick runs (0 = all)")
     parser.add_argument("--out_csv", type=str, default="dataset_eval_results.csv", help="CSV path for per-example results (empty disables)")
     parser.add_argument("--print_first_n", type=int, default=10, help="Print first N examples")
     parser.add_argument("--tqdm_update_every", type=int, default=10, help="Update tqdm postfix every N examples (0 disables)")
