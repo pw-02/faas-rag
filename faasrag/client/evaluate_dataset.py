@@ -6,6 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
+from tqdm.auto import tqdm
 
 from faasrag.core.args import RagServiceConfig
 from faasrag.core.utils import (
@@ -30,6 +31,10 @@ def load_jsonl(path: str) -> List[Dict[str, Any]]:
 
 
 def get_question_and_answers(ex: Dict[str, Any]) -> Tuple[str, List[str]]:
+    """
+    Expected dataset format:
+      {"id": "...", "question": "...", "golden_answers": ["...", ...]}
+    """
     q = (ex.get("question") or "").strip()
     golds = ex.get("golden_answers") or []
     if not isinstance(golds, list):
@@ -38,21 +43,13 @@ def get_question_and_answers(ex: Dict[str, Any]) -> Tuple[str, List[str]]:
     return q, golds
 
 
-def safe_get(d: Dict[str, Any], path: List[str], default=0.0):
-    cur: Any = d
-    for k in path:
-        if not isinstance(cur, dict) or k not in cur:
-            return default
-        cur = cur[k]
-    return cur
-
-
 def evaluate(
     pipeline: RagPipeline,
     examples: List[Dict[str, Any]],
     limit: Optional[int] = None,
     print_first_n: int = 10,
     out_csv: Optional[str] = None,
+    tqdm_update_every: int = 10,
 ) -> Dict[str, float]:
     n = 0
     em_sum = 0.0
@@ -74,7 +71,9 @@ def evaluate(
 
     subset = examples[:limit] if limit else examples
 
-    for ex in subset:
+    pbar = tqdm(subset, total=len(subset), desc="Evaluating", dynamic_ncols=True)
+
+    for ex in pbar:
         ex_id = ex.get("id", "")
         q, golds = get_question_and_answers(ex)
         if not q:
@@ -82,6 +81,7 @@ def evaluate(
 
         out = pipeline.run(q)
 
+        # IMPORTANT: use RAW answer for metrics (do not truncate)
         pred = (out.get("raw_answer") or out.get("answer") or "").strip()
 
         em = metric_max_over_ground_truths(exact_match_score, pred, golds)
@@ -127,18 +127,25 @@ def evaluate(
         ttft_sum += ttft_s
         total_s_sum += total_s
 
+        # Show first few examples (use tqdm.write so bar stays clean)
         if n <= print_first_n:
-            print("\n---")
-            print(f"id: {ex_id}")
-            print(f"Q: {q}")
-            print(f"PRED: {pred}")
-            print(f"GOLDS: {golds}")
-            print(f"EM={em} F1={f1:.3f}")
-            print(f"tokens: prompt={prompt_tokens} completion={completion_tokens} total={total_tokens}")
-            print(f"timings_s: total={total_s:.3f} ttft={ttft_s:.3f} decode={decode_s:.3f}")
+            tqdm.write("\n---")
+            tqdm.write(f"id: {ex_id}")
+            tqdm.write(f"Q: {q}")
+            tqdm.write(f"PRED: {pred}")
+            tqdm.write(f"GOLDS: {golds}")
+            tqdm.write(f"EM={em} F1={f1:.3f}")
+            tqdm.write(f"tokens: prompt={prompt_tokens} completion={completion_tokens} total={total_tokens}")
+            tqdm.write(f"timings_s: total={total_s:.3f} ttft={ttft_s:.3f} decode={decode_s:.3f}")
 
-        if n % 50 == 0:
-            print(f"[{n}] running EM={em_sum/n:.3f} F1={f1_sum/n:.3f} total_s={total_s_sum/n:.3f}")
+        # Update tqdm postfix occasionally (avoid slowing loop)
+        if tqdm_update_every > 0 and n % tqdm_update_every == 0:
+            pbar.set_postfix({
+                "EM": f"{em_sum/n:.3f}",
+                "F1": f"{f1_sum/n:.3f}",
+                "tot_s": f"{total_s_sum/n:.2f}",
+                "tok": f"{total_tok_sum/n:.0f}",
+            })
 
         # write per-example CSV row
         append_csv_row(out_csv, {
@@ -172,7 +179,6 @@ def evaluate(
             "cache_misses": cache_misses,
         })
 
-    # final means
     def mean(x: float) -> float:
         return x / n if n else 0.0
 
@@ -199,13 +205,16 @@ def evaluate(
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl", help="Path to dataset (jsonl)")
-    parser.add_argument("--limit", type=int, default=200, help="Optional limit for quick runs")
-    parser.add_argument("--out_csv", type=str, default="dataset_eval_results.csv", help="Optional CSV path for per-example results")
+    parser.add_argument("--limit", type=int, default=200, help="Optional limit for quick runs (0 = all)")
+    parser.add_argument("--out_csv", type=str, default="dataset_eval_results.csv", help="CSV path for per-example results (empty disables)")
+    parser.add_argument("--print_first_n", type=int, default=10, help="Print first N examples")
+    parser.add_argument("--tqdm_update_every", type=int, default=10, help="Update tqdm postfix every N examples (0 disables)")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("evaluate_dataset")
 
+    # MODEL-ONLY baseline: set top_k=0 so retrieval is skipped.
     pipeline = RagPipeline(
         generator_cfg=cfg.generator,
         embedder_cfg=cfg.embedder,
@@ -216,7 +225,7 @@ def main(cfg: RagServiceConfig):
         prompt_build_method=cfg.prompt_build_method,
         max_ctx_chars=cfg.max_ctx_chars,
         cache_cfg=None,
-        top_k=0,  # model-only
+        top_k=0,
         logger=logger,
         retrieve_only=False,
         always_log_results=False,
@@ -227,7 +236,9 @@ def main(cfg: RagServiceConfig):
         pipeline,
         examples,
         limit=(args.limit if args.limit > 0 else None),
+        print_first_n=args.print_first_n,
         out_csv=(args.out_csv.strip() or None),
+        tqdm_update_every=args.tqdm_update_every,
     )
 
     print("\n==== FINAL ====")
