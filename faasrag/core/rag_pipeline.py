@@ -59,7 +59,7 @@ class RagPipeline:
         self.top_k = int(top_k)
         if self.top_k < 0:
             raise ValueError("top_k must be >= 0")
-        if self.top_k == 0 and self.retrieve_only:
+        if self.top_k == 0 or self.retrieve_only:
             self.logger.warning("top_k=0 with retrieve_only=True means no retrieval will be performed, pipeline will rely entirely on the generator's prior knowledge.")
         
         if prompt_build_method.upper() == "QA_STRICT":
