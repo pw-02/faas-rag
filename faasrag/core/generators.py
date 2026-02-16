@@ -144,7 +144,7 @@ class VLLMOpenAIGenerator:
         self.max_tokens = int(max_tokens)
         self.use_chat_completions = bool(use_chat_completions)
 
-    def generate(self, prompt: str) -> Tuple[str, int, int, int]:
+    def generate(self, prompt: str) -> GenResult:
         if self.use_chat_completions:
             # Treat your whole prompt as a single user message (works fine for string prompts)
             resp = self.client.chat.completions.create(
@@ -169,7 +169,13 @@ class VLLMOpenAIGenerator:
         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
         total_tokens = int(getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens))
 
-        return text, prompt_tokens, completion_tokens, total_tokens
+        return GenResult(
+            text=text,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            metrics={},  # vLLM OpenAI-compatible endpoint doesn't currently return timing metrics in the response, so we leave this empty for now.
+        )
 
 
 
@@ -187,7 +193,7 @@ class SyntheticGenerator:
         s = s or ""
         return max(1, len(s) // 4) if s else 0
 
-    def generate(self, prompt: str) -> tuple[str, int, int, int]:
+    def generate(self, prompt: str) -> GenResult:
         if self.sleep_seconds > 0:
             time.sleep(self.sleep_seconds)
 
@@ -198,7 +204,13 @@ class SyntheticGenerator:
         completion_tokens = max(0, completion_tokens)
         total_tokens = prompt_tokens + completion_tokens
 
-        return text, prompt_tokens, completion_tokens, total_tokens
+        return GenResult(
+            text=text,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            metrics={},
+        )
 
 
 class HFCausalLMGenerator:
@@ -262,7 +274,7 @@ class HFCausalLMGenerator:
         return {k: v.to(model_device) for k, v in inputs.items()}
 
     @torch.no_grad()
-    def generate(self, prompt: str) -> tuple[str, int, int, int]:
+    def generate(self, prompt: str) -> GenResult:
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True)
         inputs = self._move_inputs_to_model_device(inputs)
 
@@ -282,7 +294,13 @@ class HFCausalLMGenerator:
         completion_tokens = total_tokens - prompt_tokens
         gen_ids = out[0][prompt_tokens:]
         text = self.tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
-        return text, int(prompt_tokens), int(completion_tokens), int(total_tokens)
+        return GenResult(
+            text=text,
+            prompt_tokens=int(prompt_tokens),
+            completion_tokens=int(completion_tokens),
+            total_tokens=int(total_tokens),
+            metrics={},
+        )
 
 
     # ---- Added for exact-length microbench ----
