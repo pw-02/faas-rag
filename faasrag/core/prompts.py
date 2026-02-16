@@ -12,6 +12,7 @@ from faasrag.core.args import Passage
 class PromptBuildMethodType(Enum):
     QA_STRICT = auto()
     QA_OPEN = auto()
+    LLM_ONLY = auto()
     FEW_SHOT = auto()
 
 
@@ -32,7 +33,11 @@ OPEN_SYSTEM = (
     "Output ONLY the answer (max 5 words)."
 )
 
-
+LLM_ONLY_SYSTEM = (
+    "Answer the question using general knowledge. "
+    "Do not mention passages or retrieval. "
+    "Output ONLY the answer (max 5 words)."
+)
 
 # ============================================================
 # Helpers
@@ -111,6 +116,17 @@ def build_fewshot_prompt(passages: List[Passage]) -> str:
     )
 
 
+def build_llm_only_prompt(question: str) -> str:
+    q = normalize_question(question)
+    return (
+        "system:\n"
+        f"{LLM_ONLY_SYSTEM}\n\n"
+        "user:\n"
+        f"Question: {q}\n\n"
+        "assistant:"
+    )
+
+
 # ============================================================
 # Unified Entry Point
 # ============================================================
@@ -136,6 +152,10 @@ def build_rag_prompt(
             max_ctx_chars=max_ctx_chars,
             strict=False,
         )
+
+    elif prompt_build_method == PromptBuildMethodType.LLM_ONLY:
+        prompt = build_llm_only_prompt(question=question)
+        passages = []  # important: ensure no context is passed along
 
     elif prompt_build_method == PromptBuildMethodType.FEW_SHOT:
         prompt = build_fewshot_prompt(passages)

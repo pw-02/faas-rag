@@ -59,6 +59,8 @@ class RagPipeline:
         self.top_k = int(top_k)
         if self.top_k < 0:
             raise ValueError("top_k must be >= 0")
+        if self.top_k == 0 and self.retrieve_only:
+            self.logger.warning("top_k=0 with retrieve_only=True means no retrieval will be performed, pipeline will rely entirely on the generator's prior knowledge.")
         
         if prompt_build_method.upper() == "QA_STRICT":
             self.prompt_build_method = PromptBuildMethodType.QA_STRICT
@@ -66,6 +68,8 @@ class RagPipeline:
             self.prompt_build_method = PromptBuildMethodType.QA_OPEN
         elif prompt_build_method.upper() == "FEW_SHOT":
             self.prompt_build_method = PromptBuildMethodType.FEW_SHOT
+        elif prompt_build_method.upper() == "LLM_ONLY":
+            self.prompt_build_method = PromptBuildMethodType.LLM_ONLY
         else:
             raise ValueError(f"Invalid prompt_build_method {prompt_build_method}")    
 
