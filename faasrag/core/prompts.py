@@ -42,10 +42,12 @@ OPEN_SYSTEM = (
 )
 
 LLM_ONLY_SYSTEM = (
-    "Answer the question using general knowledge. "
-    "Do not mention passages or retrieval. "
-    "Output ONLY the answer (max 5 words)."
+    "Answer using general knowledge. "
+    "Return ONLY the answer. "
+    "No extra words. No punctuation. "
+    "Maximum 5 words."
 )
+
 
 FEWSHOT_SYSTEM = "Summarize the dialogue into a few short sentences."
 
