@@ -164,7 +164,7 @@ class ScheduledRAGService(rag_pb2_grpc.RAGServiceServicer):
         """
         Run pipeline synchronously in a worker thread.
         """
-        result = self.rag_pipeline.run(query=query)
+        result = self.rag_pipeline.run(question=query)
 
         if isinstance(result, dict):
             return result
