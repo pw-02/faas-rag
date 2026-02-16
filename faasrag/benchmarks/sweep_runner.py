@@ -452,7 +452,7 @@ def main() -> None:
 
     ap.add_argument("--deadline_s", type=float, default=3000.0)
     ap.add_argument("--concurrency_levels", type=str, default="1,2,4,8,16",
-                    help="Comma-separated client concurrency levels to sweep (e.g. '1,2,4,8,16')")
+                    help="Comma-separated client concurrency levels to sweep (e.g. '1')")
 
     ap.add_argument("--retries", type=int, default=1)
     ap.add_argument("--retry_backoff_s", type=float, default=0.5)

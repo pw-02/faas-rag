@@ -10,8 +10,8 @@ defaults:
 
 host: localhost
 port: 50051
-num_workers: 8
-max_inflight: 8
+num_workers: 1
+max_inflight: 1
 log_level: INFO
 artifact_dir: artifacts
 seed: 42
