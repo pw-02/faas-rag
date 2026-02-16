@@ -199,7 +199,7 @@ def evaluate(
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl", help="Path to dataset (jsonl)")
-    parser.add_argument("--limit", type=int, default=0, help="Optional limit for quick runs")
+    parser.add_argument("--limit", type=int, default=200, help="Optional limit for quick runs")
     parser.add_argument("--out_csv", type=str, default="dataset_eval_results.csv", help="Optional CSV path for per-example results")
     args = parser.parse_args()
 

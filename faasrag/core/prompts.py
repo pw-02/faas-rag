@@ -28,7 +28,7 @@ STRICT_SYSTEM = (
 
 OPEN_SYSTEM = (
     "Answer the question using the provided passages if relevant, but you may also rely on general knowledge. "
-    "Prefer answers grounded in the passages. "
+    # "Prefer answers grounded in the passages. "
     "Output ONLY the answer (max 5 words)."
 )
 
