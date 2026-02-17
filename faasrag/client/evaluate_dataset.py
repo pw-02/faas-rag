@@ -116,6 +116,8 @@ def evaluate(
 
     subset = examples[:limit] if limit else examples
     pbar = tqdm(subset, total=len(subset), desc=f"Evaluating ({mode})", dynamic_ncols=True)
+    # Stage-1 diagnostics (stage1 stores these in out["extra"])
+  
 
     if out_csv:
         with open(out_csv, "w", encoding="utf-8") as f:
@@ -168,6 +170,12 @@ def evaluate(
         prompt_tokens = int(out.get("prompt_tokens", 0) or 0)
         completion_tokens = int(out.get("completion_tokens", 0) or 0)
         total_tokens = int(out.get("total_tokens", 0) or 0)
+
+        extra = out.get("extra") or {}
+        candidates = out.get("candidates") or extra.get("candidates") or []
+        best = out.get("best_candidate") or extra.get("best_candidate") or ""
+
+
         num_candidates_scored = len(candidates) if isinstance(candidates, list) else 0
 
         mean_tokens_per_candidate = 0.0
@@ -198,11 +206,7 @@ def evaluate(
 
         stage1_mine_sum += mine_s
         stage1_score_sum += cand_score_s
-
-        # Stage-1 diagnostics
-        extra = out.get("extra") or {}
-        candidates = out.get("candidates") or extra.get("candidates") or []
-        best = out.get("best_candidate") or extra.get("best_candidate") or ""
+        
 
         has_gold = False
         selected_gold = False
