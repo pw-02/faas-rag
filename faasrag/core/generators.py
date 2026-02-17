@@ -48,194 +48,6 @@ class SparseAddBiasProcessor(LogitsProcessor):
         scores[:, self.token_ids] += self.alpha * self.bias_vals
         return scores
 
-class VLLMStreamingGenerator:
-    def __init__(
-        self,
-        *,
-        base_url: str,
-        api_key: str,
-        model: str,
-        temperature: float = 0.0,
-        max_tokens: int = 64,
-        timeout_s: float = 60.0,
-    ):
-        self.client = openai.OpenAI(
-            base_url=base_url,
-            api_key=api_key,
-            timeout=timeout_s,
-        )
-        self.model = model
-        self.temperature = float(temperature)
-        self.max_tokens = int(max_tokens)
-
-    def generate(self, prompt: str) -> GenResult:
-        start_time = time.time()
-        first_token_time: Optional[float] = None
-
-        stream = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            stream=True,
-            stream_options={"include_usage": True},
-        )
-
-        full_text = ""
-        usage = None
-        finish_reason = None
-
-        for chunk in stream:
-            if chunk.choices:
-                choice = chunk.choices[0]
-                finish_reason = getattr(choice, "finish_reason", finish_reason)
-
-                delta = choice.delta.content
-                if delta:
-                    if first_token_time is None:
-                        first_token_time = time.time()
-                    full_text += delta
-
-            if getattr(chunk, "usage", None) is not None:
-                usage = chunk.usage
-
-        end_time = time.time()
-
-        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        total_tokens = int(getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens))
-
-        ttft_s = (first_token_time - start_time) if first_token_time else None
-        total_s = end_time - start_time
-
-        # Derived rates
-        prefill_tps = None
-        decode_tps = None
-
-        if ttft_s is not None and ttft_s > 0 and prompt_tokens > 0:
-            prefill_tps = prompt_tokens / ttft_s
-
-        if ttft_s is not None:
-            decode_time_s = max(total_s - ttft_s, 1e-9)
-            if completion_tokens > 0:
-                decode_tps = completion_tokens / decode_time_s
-
-        metrics = {
-            "ttft_s": ttft_s,
-            "total_s": total_s,
-            "prefill_tps": prefill_tps,
-            "decode_tps": decode_tps,
-            "finish_reason": finish_reason,
-        }
-
-        return GenResult(
-            text=full_text.strip(),
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            metrics=metrics,
-        )
-
-
-
-
-
-
-
-
-
-
-class VLLMOpenAIGenerator:
-    """
-    Calls a vLLM OpenAI-compatible server.
-    Keeps the same interface as your HF generator: generate(prompt:str) -> (text, prompt_tokens, completion_tokens, total_tokens)
-    """
-
-    def __init__(
-        self,
-        *,
-        base_url: str,
-        api_key: str = "EMPTY",
-        model: str,
-        temperature: float = 0.0,
-        max_tokens: int = 64,
-        timeout_s: float = 60.0,
-        use_chat_completions: bool = True,
-    ):
-        self.client = openai.OpenAI(api_key=api_key, base_url=base_url, timeout=timeout_s)
-        self.model = model
-        self.temperature = float(temperature)
-        self.max_tokens = int(max_tokens)
-        self.use_chat_completions = bool(use_chat_completions)
-
-    def generate(self, prompt: str) -> GenResult:
-        if self.use_chat_completions:
-            # Treat your whole prompt as a single user message (works fine for string prompts)
-            resp = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            )
-            text = (resp.choices[0].message.content or "").strip()
-        else:
-            # Legacy completions endpoint (some servers/models)
-            resp = self.client.completions.create(
-                model=self.model,
-                prompt=prompt,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            )
-            text = (resp.choices[0].text or "").strip()
-
-        usage = getattr(resp, "usage", None)
-        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        total_tokens = int(getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens))
-
-        return GenResult(
-            text=text,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            metrics={},  # vLLM OpenAI-compatible endpoint doesn't currently return timing metrics in the response, so we leave this empty for now.
-        )
-
-
-
-
-# -------------------------
-# Runtime generators
-# -------------------------
-class SyntheticGenerator:
-    def __init__(self, sleep_seconds: float, response_prefix: str):
-        self.sleep_seconds = float(sleep_seconds)
-        self.response_prefix = response_prefix
-
-    def _approx_tokens(self, s: str) -> int:
-        # cheap, stable heuristic: ~4 chars/token (very rough)
-        s = s or ""
-        return max(1, len(s) // 4) if s else 0
-
-    def generate(self, prompt: str) -> GenResult:
-        if self.sleep_seconds > 0:
-            time.sleep(self.sleep_seconds)
-
-        text = f"{self.response_prefix} {prompt}"
-
-        prompt_tokens = self._approx_tokens(prompt)
-        completion_tokens = self._approx_tokens(text) - prompt_tokens
-        completion_tokens = max(0, completion_tokens)
-        total_tokens = prompt_tokens + completion_tokens
-
-        return GenResult(
-            text=text,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            metrics={},
-        )
-
 
 # assume GenResult exists
 
@@ -526,6 +338,194 @@ class HFCausalLMGenerator:
         return self.score(prompt, completion, length_normalize=length_normalize)
 
 
+
+class VLLMStreamingGenerator:
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        model: str,
+        temperature: float = 0.0,
+        max_tokens: int = 64,
+        timeout_s: float = 60.0,
+    ):
+        self.client = openai.OpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            timeout=timeout_s,
+        )
+        self.model = model
+        self.temperature = float(temperature)
+        self.max_tokens = int(max_tokens)
+
+    def generate(self, prompt: str) -> GenResult:
+        start_time = time.time()
+        first_token_time: Optional[float] = None
+
+        stream = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            stream=True,
+            stream_options={"include_usage": True},
+        )
+
+        full_text = ""
+        usage = None
+        finish_reason = None
+
+        for chunk in stream:
+            if chunk.choices:
+                choice = chunk.choices[0]
+                finish_reason = getattr(choice, "finish_reason", finish_reason)
+
+                delta = choice.delta.content
+                if delta:
+                    if first_token_time is None:
+                        first_token_time = time.time()
+                    full_text += delta
+
+            if getattr(chunk, "usage", None) is not None:
+                usage = chunk.usage
+
+        end_time = time.time()
+
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        total_tokens = int(getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens))
+
+        ttft_s = (first_token_time - start_time) if first_token_time else None
+        total_s = end_time - start_time
+
+        # Derived rates
+        prefill_tps = None
+        decode_tps = None
+
+        if ttft_s is not None and ttft_s > 0 and prompt_tokens > 0:
+            prefill_tps = prompt_tokens / ttft_s
+
+        if ttft_s is not None:
+            decode_time_s = max(total_s - ttft_s, 1e-9)
+            if completion_tokens > 0:
+                decode_tps = completion_tokens / decode_time_s
+
+        metrics = {
+            "ttft_s": ttft_s,
+            "total_s": total_s,
+            "prefill_tps": prefill_tps,
+            "decode_tps": decode_tps,
+            "finish_reason": finish_reason,
+        }
+
+        return GenResult(
+            text=full_text.strip(),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            metrics=metrics,
+        )
+
+
+
+
+
+
+
+
+
+
+class VLLMOpenAIGenerator:
+    """
+    Calls a vLLM OpenAI-compatible server.
+    Keeps the same interface as your HF generator: generate(prompt:str) -> (text, prompt_tokens, completion_tokens, total_tokens)
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str = "EMPTY",
+        model: str,
+        temperature: float = 0.0,
+        max_tokens: int = 64,
+        timeout_s: float = 60.0,
+        use_chat_completions: bool = True,
+    ):
+        self.client = openai.OpenAI(api_key=api_key, base_url=base_url, timeout=timeout_s)
+        self.model = model
+        self.temperature = float(temperature)
+        self.max_tokens = int(max_tokens)
+        self.use_chat_completions = bool(use_chat_completions)
+
+    def generate(self, prompt: str) -> GenResult:
+        if self.use_chat_completions:
+            # Treat your whole prompt as a single user message (works fine for string prompts)
+            resp = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+            text = (resp.choices[0].message.content or "").strip()
+        else:
+            # Legacy completions endpoint (some servers/models)
+            resp = self.client.completions.create(
+                model=self.model,
+                prompt=prompt,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+            text = (resp.choices[0].text or "").strip()
+
+        usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        total_tokens = int(getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens))
+
+        return GenResult(
+            text=text,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            metrics={},  # vLLM OpenAI-compatible endpoint doesn't currently return timing metrics in the response, so we leave this empty for now.
+        )
+
+
+
+
+# -------------------------
+# Runtime generators
+# -------------------------
+class SyntheticGenerator:
+    def __init__(self, sleep_seconds: float, response_prefix: str):
+        self.sleep_seconds = float(sleep_seconds)
+        self.response_prefix = response_prefix
+
+    def _approx_tokens(self, s: str) -> int:
+        # cheap, stable heuristic: ~4 chars/token (very rough)
+        s = s or ""
+        return max(1, len(s) // 4) if s else 0
+
+    def generate(self, prompt: str) -> GenResult:
+        if self.sleep_seconds > 0:
+            time.sleep(self.sleep_seconds)
+
+        text = f"{self.response_prefix} {prompt}"
+
+        prompt_tokens = self._approx_tokens(prompt)
+        completion_tokens = self._approx_tokens(text) - prompt_tokens
+        completion_tokens = max(0, completion_tokens)
+        total_tokens = prompt_tokens + completion_tokens
+
+        return GenResult(
+            text=text,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            metrics={},
+        )
 
 # -------------------------
 # Builder

@@ -929,7 +929,6 @@ class RagPipeline:
             if hybrid_prompt:
                 messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
             else:
-                # messages = [{"role": "user", "content": q}]
                 messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
 
         
