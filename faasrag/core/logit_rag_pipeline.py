@@ -347,7 +347,7 @@ class RagPipeline:
                     passages,
                     top_n=self.logit_top_n,
                     per_passage_max_tokens=self.logit_passage_max_tokens,
-                    clamp_negative=True,
+                    clamp_negative=False,  # allow negative scores, letting the generator's LM head decide how to use them
                 )
                 print(f"Computed logit bias for {len(bias)} tokens from top-{len(passages)} passages. Sample bias: {list(bias.items())[:10]}")
 
