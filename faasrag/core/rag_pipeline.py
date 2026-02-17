@@ -26,6 +26,11 @@ from faasrag.core.indexes import load_index
 from faasrag.core.prompts import PromptBuildMethodType, build_rag_messages, build_stage1_scoring_messages
 from faasrag.core.utils import append_csv_row
 
+# Put these imports at the top of your rag_pipeline.py
+import torch
+from transformers import AutoTokenizer, AutoModelForQuestionAnswering
+
+
 
 @contextmanager
 def timed(store: dict, key: str):
@@ -96,6 +101,20 @@ class RagPipeline:
 
         self.logger.info("Loading docstore...")
         self.docstore = load_docstore(docstore_cfg, artifact_dir=artifact_dir, backend=docstore_backend)
+
+        self.reader_name = getattr(generator_cfg, "reader_name", None) or "deepset/roberta-base-squad2"
+        self.reader_device = getattr(generator_cfg, "reader_device", None) or getattr(self.generator, "device", "cpu")
+
+        self.logger.info("Initializing reader model for candidate mining: %s", self.reader_name)
+        self.reader_tokenizer = AutoTokenizer.from_pretrained(self.reader_name, use_fast=True)
+        self.reader_model = AutoModelForQuestionAnswering.from_pretrained(self.reader_name)
+        self.reader_model.eval()
+
+        # Move reader to device
+        if isinstance(self.reader_device, str) and self.reader_device.startswith("cuda"):
+            self.reader_model.to(self.reader_device)
+        else:
+            self.reader_model.to("cpu")
 
         if cache_cfg is not None:
             self.cache = build_cache(cache_cfg, dim=dim, seed=self.seed)
@@ -182,114 +201,221 @@ class RagPipeline:
         retrieved_doc_ids = [str(p.pid) for p in passages]
         return passages, retrieved_doc_ids, timings, cache_info
     
-    def _mine_candidates(self, passages: list[Passage], max_candidates: int = 50) -> list[tuple[str, float]]:
+
+    def _mine_candidates_qa(
+        self,
+        question: str,
+        passages: list[Passage],
+        *,
+        max_candidates: int = 50,
+        per_passage_nbest: int = 5,
+        max_answer_chars: int = 80,
+        max_seq_len: int = 384,
+        doc_stride: int = 128,
+    ) -> list[tuple[str, float]]:
         """
-        Cheap candidate miner for Stage-1:
-        - capitalized phrases (1-4 words)
-        - numbers (incl. years)
-        - basic date patterns
+        Reader-based candidate miner:
+        - Runs an extractive QA reader over each retrieved passage
+        - Collects top-N answer spans per passage (nbest)
+        - Aggregates/dedups spans across passages into (candidate, prior_score)
 
-        Returns list of (candidate_string, prior_score) sorted descending.
+        prior_score here is a blend of:
+        - passage relevance weight (rank + FAISS IP similarity via Passage.score)
+        - reader confidence (span logit score)
 
-        This version uses BOTH:
-        (a) rank prior (earlier passages weigh more)
-        (b) FAISS closeness prior using Passage.score
-            - for DPR + METRIC_INNER_PRODUCT: larger score = more similar
-            - we turn passage scores into weights via a softmax
+        Returns: list[(candidate_string, prior_score)] sorted desc, truncated to max_candidates.
         """
-        import collections
-        import re
-        import math
+        question = (question or "").strip()
+        if not question:
+            return []
 
+        if not hasattr(self, "reader_model") or self.reader_model is None:
+            raise RuntimeError("Reader model not initialized (self.reader_model missing).")
+
+        # -----------------------------
+        # Passage relevance weights
+        # -----------------------------
+        # DPR/IP: Passage.score is similarity (higher better).
+        # Convert to stable weights via softmax over similarities.
+        sims = [float(getattr(p, "score", 0.0) or 0.0) for p in passages]
+        if sims:
+            m = max(sims)
+            exps = [math.exp(s - m) for s in sims]
+            Z = sum(exps) or 1.0
+            sim_w = [e / Z for e in exps]  # sums to 1
+        else:
+            sim_w = [1.0 / max(1, len(passages))] * len(passages)
+
+        # rank prior still helps as a weak fallback
+        rank_w = [1.0 / (1.0 + i) for i in range(len(passages))]
+
+        # combine into passage weight; normalize-ish scale so weights aren’t tiny
+        # (you can tune this, but it works well as a default)
+        passage_w = []
+        for i in range(len(passages)):
+            # sim_w is ~1/k, multiply by k for a more useful scale
+            w = rank_w[i] * (0.2 + 0.8 * sim_w[i] * len(passages))
+            passage_w.append(float(w))
+
+        # -----------------------------
+        # Helper: normalize & filter spans
+        # -----------------------------
+        ws_re = re.compile(r"\s+")
+        def clean_span(s: str) -> str:
+            s = (s or "").strip()
+            s = ws_re.sub(" ", s)
+            # strip quotes / trailing punctuation that often appears in spans
+            s = s.strip(" \t\r\n\"'`.,;:()[]{}")
+            return s
+
+        def is_bad_span(s: str) -> bool:
+            if not s:
+                return True
+            if len(s) < 2:
+                return True
+            if len(s) > max_answer_chars:
+                return True
+            # avoid extremely non-informative answers
+            if s.lower() in {"the", "a", "an", "it", "they", "he", "she", "this", "that"}:
+                return True
+            # drop spans that are only punctuation or whitespace
+            if all((not ch.isalnum()) for ch in s):
+                return True
+            return False
+
+        # -----------------------------
+        # Run reader over passages
+        # -----------------------------
         cand_scores: dict[str, float] = collections.defaultdict(float)
 
-        cap_phrase = re.compile(r"\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b")
-        num_pat = re.compile(r"\b\d{1,4}\b")
-        year_pat = re.compile(r"\b(1[5-9]\d{2}|20\d{2})\b")
-        month_pat = re.compile(
-            r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
-            r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b",
-            re.IGNORECASE,
-        )
+        device = next(self.reader_model.parameters()).device
 
-        # -----------------------------
-        # Passage-level closeness weights
-        # -----------------------------
-        # For METRIC_INNER_PRODUCT, Passage.score is similarity (higher better).
-        # We convert similarities into a stable probability-like weight via softmax.
-        scores = [float(getattr(p, "score", 0.0) or 0.0) for p in passages]
-        if scores:
-            m = max(scores)
-            # temperature controls how sharp the weighting is; 1.0 is usually fine.
-            temp = 1.0
-            exps = [math.exp((s - m) / temp) for s in scores]
-            Z = sum(exps) or 1.0
-            sim_wts = [e / Z for e in exps]  # sums to 1
-        else:
-            sim_wts = []
-
-        # -----------------------------
-        # Mine candidates with combined weight
-        # -----------------------------
-        for rank, p in enumerate(passages):
-            # rank prior: passage 0 > passage 1 > ...
-            rank_w = 1.0 / (1.0 + rank)
-
-            # similarity prior: based on FAISS IP score
-            sim_w = sim_wts[rank] if rank < len(sim_wts) else 0.0
-
-            # combine them; you can tune this, but multiplication is a nice default
-            passage_w = rank_w * (0.5 + 0.5 * sim_w * len(passages))
-            # Explanation:
-            # - sim_w is ~1/k, so multiply by k to make it not tiny
-            # - (0.5 + 0.5*...) keeps a floor so rank still matters
-
-            text = ((p.title or "") + "\n" + (p.text or ""))[:20000]
-
-            # Capitalized phrases
-            for m0 in cap_phrase.findall(text):
-                c = m0.strip()
-                if len(c) < 3:
+        with torch.no_grad():
+            for i, p in enumerate(passages):
+                # Build text; keep it bounded to avoid extreme cases
+                ctx = ((p.title or "") + "\n" + (p.text or ""))[:20000]
+                if not ctx.strip():
                     continue
-                if c in {"The", "A", "An"}:
-                    continue
-                cand_scores[c] += 1.0 * passage_w
 
-            # Numbers / years
-            for m0 in num_pat.findall(text):
-                cand_scores[m0] += 0.5 * passage_w
-
-            for m0 in year_pat.findall(text):
-                cand_scores[m0] += 1.0 * passage_w
-
-            # Month-date patterns
-            if month_pat.search(text):
-                date_pat = re.compile(
-                    r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
-                    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
-                    r"\s+\d{1,2}(?:,?\s+\d{4})?\b",
-                    re.IGNORECASE,
+                # Tokenize with sliding window
+                enc = self.reader_tokenizer(
+                    question,
+                    ctx,
+                    truncation="only_second",
+                    max_length=max_seq_len,
+                    stride=doc_stride,
+                    return_overflowing_tokens=True,
+                    return_offsets_mapping=True,
+                    padding=False,
+                    return_tensors="pt",
                 )
-                for m0 in date_pat.findall(text):
-                    cand_scores[m0.strip()] += 1.0 * passage_w
 
-        # Dedup with light normalization: collapse whitespace
-        normalized_map: dict[str, str] = {}
+                # Move to device
+                input_ids = enc["input_ids"].to(device)
+                attn = enc["attention_mask"].to(device)
+
+                # offset mappings tell us where each token maps into the context string
+                # For fast tokenizers, offset_mapping is in CPU; keep it there
+                offset_mapping = enc["offset_mapping"]
+                # sequence_ids helps identify which tokens are context (vs question/special)
+                # In transformers, for overflow, we can reconstruct via tokenizer methods:
+                # Use enc.sequence_ids(overflow_index) if available (fast tokenizers).
+                # Some versions provide enc.sequence_ids as a method.
+                sequence_ids_fn = getattr(enc, "sequence_ids", None)
+
+                out = self.reader_model(input_ids=input_ids, attention_mask=attn)
+                start_logits = out.start_logits  # [num_windows, seq_len]
+                end_logits = out.end_logits      # [num_windows, seq_len]
+
+                num_windows = start_logits.size(0)
+
+                for widx in range(num_windows):
+                    s_logits = start_logits[widx].detach().cpu()
+                    e_logits = end_logits[widx].detach().cpu()
+
+                    # figure out which tokens correspond to context (sequence_id == 1)
+                    if callable(sequence_ids_fn):
+                        seq_ids = sequence_ids_fn(widx)
+                    else:
+                        # fallback: assume second sequence is context; mask with offset_mapping != (0,0)
+                        seq_ids = [0] * len(offset_mapping[widx])
+
+                    # Build a mask of valid context tokens
+                    valid = []
+                    for tidx, off in enumerate(offset_mapping[widx]):
+                        # token is context if seq_id==1, and offset is non-null
+                        if seq_ids[tidx] == 1 and off is not None:
+                            valid.append(tidx)
+
+                    if not valid:
+                        # fallback: allow offsets with non-zero spans
+                        valid = [tidx for tidx, off in enumerate(offset_mapping[widx]) if off is not None and off[1] > off[0]]
+
+                    # Get top-k start and end positions among valid tokens
+                    # (small k keeps it fast)
+                    k = max(10, per_passage_nbest * 5)
+                    valid_s = s_logits[valid]
+                    valid_e = e_logits[valid]
+
+                    top_s = torch.topk(valid_s, k=min(k, valid_s.numel()))
+                    top_e = torch.topk(valid_e, k=min(k, valid_e.numel()))
+
+                    top_s_idx = [valid[int(ix)] for ix in top_s.indices.tolist()]
+                    top_e_idx = [valid[int(ix)] for ix in top_e.indices.tolist()]
+
+                    # Enumerate candidate spans from (start,end) pairs
+                    # keep only reasonable span lengths
+                    spans = []
+                    for si in top_s_idx:
+                        for ei in top_e_idx:
+                            if ei < si:
+                                continue
+                            if (ei - si) > 30:
+                                continue
+                            score = float(s_logits[si] + e_logits[ei])
+                            spans.append((si, ei, score))
+
+                    spans.sort(key=lambda x: x[2], reverse=True)
+                    spans = spans[:per_passage_nbest]
+
+                    for si, ei, span_score in spans:
+                        off_s = offset_mapping[widx][si]
+                        off_e = offset_mapping[widx][ei]
+                        if off_s is None or off_e is None:
+                            continue
+                        start_char = int(off_s[0])
+                        end_char = int(off_e[1])
+                        if end_char <= start_char:
+                            continue
+
+                        span_text = clean_span(ctx[start_char:end_char])
+                        if is_bad_span(span_text):
+                            continue
+
+                        # Aggregate: passage relevance weight × reader confidence
+                        cand_scores[span_text] += passage_w[i] * (1.0 + span_score)
+
+        # -----------------------------
+        # Dedup with light normalization
+        # -----------------------------
+        def norm_key(s: str) -> str:
+            return " ".join(s.lower().split())
+
         merged: dict[str, float] = collections.defaultdict(float)
-        for c, s in cand_scores.items():
-            key = " ".join(c.split())
-            if key not in normalized_map:
-                normalized_map[key] = c
-            merged[key] += float(s)
+        surface: dict[str, str] = {}
 
-        items = sorted(
-            ((normalized_map[k], v) for k, v in merged.items()),
-            key=lambda x: x[1],
-            reverse=True,
-        )
+        for c, s in cand_scores.items():
+            k = norm_key(c)
+            if k not in surface:
+                surface[k] = c
+            merged[k] += float(s)
+
+        items = sorted(((surface[k], v) for k, v in merged.items()), key=lambda x: x[1], reverse=True)
         return items[:max_candidates]
 
-    def _mine_candidates2(self, passages: list[Passage], max_candidates: int = 50) -> list[tuple[str, float]]:
+
+
+    def _mine_candidates(self, passages: list[Passage], max_candidates: int = 50) -> list[tuple[str, float]]:
         """
         Cheap candidate miner for Stage-1:
           - capitalized phrases (1-4 words)
@@ -408,7 +534,12 @@ class RagPipeline:
 
         # Candidate mining
         with timed(timings, "candidate_mine_s"):
-            mined = self._mine_candidates(passages, max_candidates=max_candidates)
+            # mined = self._mine_candidates_(passages, max_candidates=max_candidates)
+            mined = self._mine_candidates_qa(
+                question=question,
+                passages=passages,
+                max_candidates=max_candidates)
+
 
 
         if not mined:
