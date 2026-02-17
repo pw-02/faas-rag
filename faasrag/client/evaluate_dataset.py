@@ -290,11 +290,11 @@ def main(cfg: RagServiceConfig):
         cfg.prompt_build_method = "LLM_ONLY"
     elif args.mode == "prompt":
         top_k = 5
-        cfg.prompt_build_method = "QA_OPEN"  # for fairness vs stage-1
+        cfg.prompt_build_method = "QA_STRICT"  # for fairness vs stage-1
     elif args.mode == "logit":
         top_k = 10
         # prompt_build_method isn't used for stage-1, but keep it consistent
-        cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
+        cfg.prompt_build_method = "QA_STRICT"
     else:
         raise ValueError(f"Invalid mode {args.mode}")
 
