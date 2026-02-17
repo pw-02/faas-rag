@@ -324,7 +324,8 @@ class RagPipeline:
             with timed(timings, "prompt_s"):
                 # simplest: only user question, no passages
                 # (keeps your chat template behavior)
-                messages = [{"role": "user", "content": question}]
+                # messages = [{"role": "user", "content": question}]
+                messages, _ = build_rag_messages(question, passages, self.prompt_build_method)
 
             # 2) Compute bias ONLINE from retrieved passages
             with timed(timings, "bias_s"):
