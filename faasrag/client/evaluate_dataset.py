@@ -476,12 +476,12 @@ def main(cfg: RagServiceConfig):
 
     # Stage-2 knobs
     parser.add_argument("--stage2_alpha", type=float, default=0.2)
-    parser.add_argument("--stage2_alpha_sweep", type=str, default=" 0.1, 0.2, 0.4, 0.8, 1.2, 1.5, 2.0, 2.5, 3, 4,8")  # <-- NEW 0.1,0.2,0.4,0.8
+    parser.add_argument("--stage2_alpha_sweep", type=str, default="8,10,12,15,20")  # <-- NEW 0.1,0.2,0.4,0.8
     parser.add_argument("--stage2_max_phrases", type=int, default=20)
     parser.add_argument("--stage2_hybrid_prompt", action="store_true")
 
     # Optional: write one summary row per sweep setting
-    parser.add_argument("--sweep_out_jsonl", type=str, default="stage2_alpha_sweep.jsonl")  # <-- NEW
+    parser.add_argument("--sweep_out_jsonl", type=str, default="stage2_alpha_sweep.csv")  # <-- NEW
 
     args = parser.parse_args()
 

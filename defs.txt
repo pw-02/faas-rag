@@ -1,0 +1,3 @@
+gold_in_mined_rate --> In what fraction of questions does the mined candidate set already contain the correct answer?
+oracle_em_from_mined --> What EM would you get if you always selected the correct mined candidate whenever it exists?
+selection_accuracy_given_gold_in_mined --> When the correct answer exists in mined candidates, how often does the model actually choose it?
