@@ -267,7 +267,7 @@ def evaluate(
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, default="prompt_rag", choices=["llm", "prompt_rag", "logit_rag_stage1"])
+    parser.add_argument("--mode", type=str, default="logit_rag_stage1", choices=["llm", "prompt_rag", "logit_rag_stage1"])
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl", help="Path to dataset (jsonl)")
     parser.add_argument("--limit", type=int, default=1000, help="Optional limit for quick runs (0 = all)")
     parser.add_argument("--out_csv", type=str, default="dataset_eval.csv", help="CSV path (empty disables)")
