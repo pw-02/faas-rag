@@ -405,7 +405,10 @@ class RagPipeline:
         else:
             sim_w = [1.0 / max(1, len(passages))] * len(passages)
 
-        rank_w = [1.0 / (1.0 + i) for i in range(len(passages))]
+        # rank_w = [1.0 / (1.0 + i) for i in range(len(passages))]
+        rank_w = [1.0 / math.sqrt(1.0 + i) for i in range(len(passages))]  # softer decay
+        
+        #rank_w = [1.0] * len(passages) #no decay based on rank at all. This is to test whether the similarity weighting alone is sufficient to differentiate passage importance, without the need for an additional rank-based decay.
 
         # Blend: rank weighting plus similarity weighting
         passage_w: list[float] = []
