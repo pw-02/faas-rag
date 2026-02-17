@@ -89,6 +89,7 @@ def evaluate(
     stage2_alpha: float = 0.8,
     stage2_hybrid_prompt: bool = False,
     stage2_max_phrases: int = 30,
+    save_to_file = False,
 ) -> Dict[str, float]:
     mode = (mode or "").strip().lower()
     valid = {"llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"}
@@ -142,7 +143,7 @@ def evaluate(
     subset = examples[:limit] if limit else examples
     pbar = tqdm(subset, total=len(subset), desc=f"Evaluating ({mode})", dynamic_ncols=True)
 
-    if out_csv:
+    if out_csv and save_to_file:
         with open(out_csv, "w", encoding="utf-8") as f:
             f.write("")
 
@@ -403,8 +404,8 @@ def evaluate(
             # NEW per-row fields
             row["oracle_em_from_mined"] = int(oracle_em_from_mined)
             row["selected_gold_given_gold_in_mined"] = int(selected_gold_given_oracle)
-
-        append_csv_row(out_csv, row)
+        if save_to_file:
+            append_csv_row(out_csv, row)
 
     summary: Dict[str, float] = {
         "mode": mode,

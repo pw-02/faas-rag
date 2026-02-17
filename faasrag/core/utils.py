@@ -8,19 +8,6 @@ from typing import Iterable, List, Optional, Tuple
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 def append_csv_row(path: str, row: dict):
     exists = os.path.exists(path)
     with open(path, "a", newline="", encoding="utf-8") as f:
