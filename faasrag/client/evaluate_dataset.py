@@ -331,10 +331,6 @@ def main(cfg: RagServiceConfig):
         print_first_n=args.print_first_n,
         out_csv=(args.out_csv.strip() or None),
         tqdm_update_every=args.tqdm_update_every,
-        stage1_max_candidates=args.stage1_max_candidates,
-        stage1_score_top_n=args.stage1_score_top_n,
-        stage1_length_normalize=(not args.stage1_no_length_norm),
-        stage1_alpha_prior=args.stage1_alpha_prior,
     )
 
     print("\n==== FINAL ====")
