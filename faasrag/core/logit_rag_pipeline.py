@@ -67,7 +67,7 @@ def compute_semantic_logit_bias_from_passages(
       - keep top_n positive scores
     Returns sparse dict: token_id -> score
     """
-    print(f"Computing semantic logit bias from {len(passages)} passages with top_n={top_n} and per_passage_max_tokens={per_passage_max_tokens}...")
+    # print(f"Computing semantic logit bias from {len(passages)} passages with top_n={top_n} and per_passage_max_tokens={per_passage_max_tokens}...")
    
     device = next(model.parameters()).device
     E = model.get_input_embeddings().weight              # [V, H]
@@ -349,7 +349,7 @@ class RagPipeline:
                     per_passage_max_tokens=self.logit_passage_max_tokens,
                     clamp_negative=False,  # allow negative scores, letting the generator's LM head decide how to use them
                 )
-                print(f"Computed logit bias for {len(bias)} tokens from top-{len(passages)} passages. Sample bias: {list(bias.items())[:10]}")
+                # print(f"Computed logit bias for {len(bias)} tokens from top-{len(passages)} passages. Sample bias: {list(bias.items())[:10]}")
 
             # 3) Generate with logits processor
             with timed(timings, "decode_s"):
