@@ -163,6 +163,8 @@ def evaluate(
             tqdm.write("\n---")
             tqdm.write(f"mode: {mode}  id: {ex_id}")
             tqdm.write(f"Q: {q}")
+            tqdm.write(f"M: {messages}")
+
             tqdm.write(f"PRED: {pred}")
             tqdm.write(f"GOLDS: {golds}")
             tqdm.write(f"EM={em} F1={f1:.3f}")
