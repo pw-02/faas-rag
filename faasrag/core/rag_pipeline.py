@@ -653,6 +653,11 @@ class RagPipeline:
         start = time.perf_counter()
 
         timings: dict[str, float] = {}
+        # token accounting for stage-1 scoring passes
+        score_prompt_tok_sum = 0
+        score_completion_tok_sum = 0
+        score_total_tok_sum = 0
+
 
         scoring_messages = build_stage1_scoring_messages(q)
 
@@ -691,10 +696,21 @@ class RagPipeline:
         with timed(timings, "candidate_score_s"):
             for i, (cand, _prior_unused) in enumerate(to_score):
                 completion = " " + cand.strip()
-                llm_score = float(self.generator.score_chat(scoring_messages, completion))
+                llm_score, p_tok, c_tok, t_tok = self.generator.score(
+                    scoring_messages,
+                    completion,
+                    length_normalize=False,  # keep your own normalization logic below
+                )
+                
+                # Stage1 is not “generation tokens,” it’s scoring compute. Counting tokens this way makes comparisons honest:
+                score_prompt_tok_sum += int(p_tok)
+                score_completion_tok_sum += int(c_tok)
+                score_total_tok_sum += int(t_tok)
+                llm_score = float(llm_score)
 
                 if length_normalize:
-                    denom = max(1, len(cand.split()))
+                    cand_ids = self.generator.tokenizer(" " + cand.strip(), add_special_tokens=False)["input_ids"]
+                    denom = max(1, len(cand_ids))
                     llm_score = llm_score / denom
 
                 if alpha_prior and alpha_prior > 0:
@@ -714,6 +730,9 @@ class RagPipeline:
             raw_answer=best,
             messages=scoring_messages,
             retrieved_doc_ids=rr.doc_ids,
+            prompt_tokens=int(score_prompt_tok_sum),
+            completion_tokens=int(score_completion_tok_sum),
+            total_tokens=int(score_total_tok_sum),
             timings_s=timings,
             extra={
                 "cache_used": rr.cache_used,

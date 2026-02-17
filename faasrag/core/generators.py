@@ -451,54 +451,64 @@ class HFCausalLMGenerator:
             },
         )
     
+    from typing import Tuple
 
     @torch.no_grad()
-    def score(self, prompt: str, completion: str, *, length_normalize: bool = False) -> float:
+    def score(
+        self,
+        prompt: str,
+        completion: str,
+        *,
+        length_normalize: bool = False,
+    ) -> Tuple[float, int, int, int]:
         """
-        Returns log P(completion | prompt) using the model's token logprobs.
-        completion should be the *exact* string you want to score as the continuation.
+        Returns:
+        (log P(completion | prompt), prompt_tokens, completion_tokens, total_tokens_scored)
+
+        Note:
+        - "completion_tokens" here means #tokens in the *completion string*.
+        - total_tokens_scored = prompt_tokens + completion_tokens (for the full forward pass).
         """
         prompt = prompt or ""
         completion = completion or ""
 
-        # Tokenize prompt alone to get prompt length in tokens
+        # Tokenize prompt alone
         prompt_inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True)
         prompt_inputs = self._move_inputs_to_model_device(prompt_inputs)
         prompt_len = int(prompt_inputs["input_ids"].shape[-1])
 
-        # Tokenize full sequence (prompt + completion)
+        # Tokenize full (prompt + completion)
         full_text = prompt + completion
         full_inputs = self.tokenizer(full_text, return_tensors="pt", truncation=True)
         full_inputs = self._move_inputs_to_model_device(full_inputs)
         input_ids = full_inputs["input_ids"]  # [1, T]
         attn = full_inputs.get("attention_mask", None)
 
-        # Forward pass to get logits for each position
+        total_len = int(input_ids.shape[-1])
+        completion_len = max(0, total_len - prompt_len)
+
+        # Forward pass
         outputs = self.model(input_ids=input_ids, attention_mask=attn)
         logits = outputs.logits  # [1, T, V]
 
-        # For next-token prediction: logits at position t predict token t+1
-        # So to score tokens in positions [prompt_len, T-1], we look at logits for [prompt_len-1, T-2]
-        # Target tokens are input_ids[:, prompt_len: ]
-        if prompt_len >= input_ids.shape[1]:
+        if prompt_len >= total_len:
             # nothing to score
-            return 0.0
+            return 0.0, prompt_len, 0, prompt_len
 
-        target_ids = input_ids[:, prompt_len:]  # tokens belonging to completion
-        # logits that predict those targets:
-        # first completion token is predicted by position prompt_len-1
-        pred_logits = logits[:, prompt_len - 1 : -1, :]  # aligns with target_ids length
+        # Score only the completion portion
+        target_ids = input_ids[:, prompt_len:]  # [1, L]
+        pred_logits = logits[:, prompt_len - 1 : -1, :]  # [1, L, V]
 
-        # Convert logits to log-probs and gather target token log-probs
-        log_probs = F.log_softmax(pred_logits, dim=-1)  # [1, L, V]
+        log_probs = F.log_softmax(pred_logits, dim=-1)
         token_log_probs = log_probs.gather(-1, target_ids.unsqueeze(-1)).squeeze(-1)  # [1, L]
         seq_log_prob = float(token_log_probs.sum().item())
 
         if length_normalize:
-            L = target_ids.shape[1]
-            seq_log_prob = seq_log_prob / max(1, int(L))
+            L = int(target_ids.shape[1])
+            seq_log_prob = seq_log_prob / max(1, L)
 
-        return seq_log_prob
+        return seq_log_prob, prompt_len, completion_len, (prompt_len + completion_len)
+
 
     @torch.no_grad()
     def score_chat(
@@ -507,13 +517,77 @@ class HFCausalLMGenerator:
         completion: str,
         *,
         length_normalize: bool = False,
-    ) -> float:
+    ) -> Tuple[float, int, int, int]:
         """
-        Returns log P(completion | messages) where messages are formatted via chat template.
-        completion is scored as the assistant's continuation (you typically pass " " + candidate).
+        Same as score_chat(), but returns token counts too.
         """
         prompt = self._chat_prompt_text(messages)
         return self.score(prompt, completion, length_normalize=length_normalize)
+
+    
+
+    # @torch.no_grad()
+    # def score(self, prompt: str, completion: str, *, length_normalize: bool = False) -> float:
+    #     """
+    #     Returns log P(completion | prompt) using the model's token logprobs.
+    #     completion should be the *exact* string you want to score as the continuation.
+    #     """
+    #     prompt = prompt or ""
+    #     completion = completion or ""
+
+    #     # Tokenize prompt alone to get prompt length in tokens
+    #     prompt_inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True)
+    #     prompt_inputs = self._move_inputs_to_model_device(prompt_inputs)
+    #     prompt_len = int(prompt_inputs["input_ids"].shape[-1])
+
+    #     # Tokenize full sequence (prompt + completion)
+    #     full_text = prompt + completion
+    #     full_inputs = self.tokenizer(full_text, return_tensors="pt", truncation=True)
+    #     full_inputs = self._move_inputs_to_model_device(full_inputs)
+    #     input_ids = full_inputs["input_ids"]  # [1, T]
+    #     attn = full_inputs.get("attention_mask", None)
+
+    #     # Forward pass to get logits for each position
+    #     outputs = self.model(input_ids=input_ids, attention_mask=attn)
+    #     logits = outputs.logits  # [1, T, V]
+
+    #     # For next-token prediction: logits at position t predict token t+1
+    #     # So to score tokens in positions [prompt_len, T-1], we look at logits for [prompt_len-1, T-2]
+    #     # Target tokens are input_ids[:, prompt_len: ]
+    #     if prompt_len >= input_ids.shape[1]:
+    #         # nothing to score
+    #         return 0.0
+
+    #     target_ids = input_ids[:, prompt_len:]  # tokens belonging to completion
+    #     # logits that predict those targets:
+    #     # first completion token is predicted by position prompt_len-1
+    #     pred_logits = logits[:, prompt_len - 1 : -1, :]  # aligns with target_ids length
+
+    #     # Convert logits to log-probs and gather target token log-probs
+    #     log_probs = F.log_softmax(pred_logits, dim=-1)  # [1, L, V]
+    #     token_log_probs = log_probs.gather(-1, target_ids.unsqueeze(-1)).squeeze(-1)  # [1, L]
+    #     seq_log_prob = float(token_log_probs.sum().item())
+
+    #     if length_normalize:
+    #         L = target_ids.shape[1]
+    #         seq_log_prob = seq_log_prob / max(1, int(L))
+
+    #     return seq_log_prob
+
+    # @torch.no_grad()
+    # def score_chat(
+    #     self,
+    #     messages: List[dict],
+    #     completion: str,
+    #     *,
+    #     length_normalize: bool = False,
+    # ) -> float:
+    #     """
+    #     Returns log P(completion | messages) where messages are formatted via chat template.
+    #     completion is scored as the assistant's continuation (you typically pass " " + candidate).
+    #     """
+    #     prompt = self._chat_prompt_text(messages)
+    #     return self.score(prompt, completion, length_normalize=length_normalize)
     
 
     # # ---- Added for exact-length microbench ----

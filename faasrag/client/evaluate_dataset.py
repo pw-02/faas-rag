@@ -104,6 +104,10 @@ def evaluate(
 
     stage1_mine_sum = 0.0
     stage1_score_sum = 0.0
+    # stage1 extra reporting
+    stage1_num_scored_sum = 0
+    stage1_tok_per_cand_sum = 0.0
+    stage1_tok_per_cand_n = 0
 
     cand_recall_hits = 0
     cand_recall_total = 0
@@ -164,7 +168,16 @@ def evaluate(
         prompt_tokens = int(out.get("prompt_tokens", 0) or 0)
         completion_tokens = int(out.get("completion_tokens", 0) or 0)
         total_tokens = int(out.get("total_tokens", 0) or 0)
+        num_candidates_scored = len(candidates) if isinstance(candidates, list) else 0
 
+        mean_tokens_per_candidate = 0.0
+        if mode == "logit_rag_stage1" and num_candidates_scored > 0:
+            # In stage1, total_tokens should now reflect total tokens consumed across all scoring passes
+            mean_tokens_per_candidate = float(total_tokens) / float(num_candidates_scored)
+
+            stage1_num_scored_sum += int(num_candidates_scored)
+            stage1_tok_per_cand_sum += float(mean_tokens_per_candidate)
+            stage1_tok_per_cand_n += 1
         retrieved_doc_ids = out.get("retrieved_doc_ids") or []
 
         # Accumulate
@@ -187,8 +200,10 @@ def evaluate(
         stage1_score_sum += cand_score_s
 
         # Stage-1 diagnostics
-        candidates = out.get("candidates") or []
-        best = out.get("best_candidate", "")
+        extra = out.get("extra") or {}
+        candidates = out.get("candidates") or extra.get("candidates") or []
+        best = out.get("best_candidate") or extra.get("best_candidate") or ""
+
         has_gold = False
         selected_gold = False
         if mode == "logit_rag_stage1":
@@ -207,6 +222,8 @@ def evaluate(
             tqdm.write(f"M: {messages}")
             tqdm.write(f"PRED: {pred}")
             tqdm.write(f"GOLDS: {golds}")
+            tqdm.write(f"num_candidates_scored: {num_candidates_scored}")
+            tqdm.write(f"mean_tokens_per_candidate: {mean_tokens_per_candidate:.2f}")
             tqdm.write(f"EM={em} F1={f1:.3f}")
             tqdm.write(f"tokens: prompt={prompt_tokens} completion={completion_tokens} total={total_tokens}")
             tqdm.write(f"timings_s: total={total_s:.3f} decode={decode_s:.3f}")
@@ -261,7 +278,9 @@ def evaluate(
             row["gold_in_candidates"] = int(has_gold)
             row["selected_gold_given_present"] = int(selected_gold)
             row["best_candidate"] = best
-            row["num_candidates_scored"] = len(candidates)
+            row["num_candidates_scored"] = int(num_candidates_scored)
+            row["mean_tokens_per_candidate"] = float(mean_tokens_per_candidate)
+
 
         if mode == "logit_rag_stage2":
             row["bias_tokens"] = int(out.get("bias_tokens", 0) or 0)
@@ -291,7 +310,8 @@ def evaluate(
     if mode == "logit_rag_stage1":
         summary["candidate_recall"] = (cand_recall_hits / cand_recall_total) if cand_recall_total else 0.0
         summary["selection_accuracy_given_present"] = (select_hits / select_total) if select_total else 0.0
-
+        summary["mean_num_candidates_scored"] = (stage1_num_scored_sum / n) if n else 0.0
+        summary["mean_tokens_per_candidate"] = ((stage1_tok_per_cand_sum / stage1_tok_per_cand_n) if stage1_tok_per_cand_n else 0.0)
     return summary
 
 
