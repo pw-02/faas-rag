@@ -31,11 +31,18 @@ ChatMessage = Dict[str, str]  # {"role": Role, "content": str}
 # System Instructions
 # ============================================================
 
+# STRICT_SYSTEM = (
+#     "Answer the question using ONLY the provided passages. "
+#     "If the answer is not in the passages, reply exactly: I don't know. "
+#     "Do NOT use any general knowledge. Do NOT use any information not in the passages. "
+#     "Output ONLY the answer (max 5 words)."
+# )
+
 STRICT_SYSTEM = (
-    "Answer the question using ONLY the provided passages. "
-    "If the answer is not in the passages, reply exactly: I don't know. "
-    "Do NOT use any general knowledge. Do NOT use any information not in the passages. "
-    "Output ONLY the answer (max 5 words)."
+    "Answer the question using ONLY the provided Context. "
+    "Return ONLY an answer that appears verbatim in the Context (copy-paste a short span). "
+    "If the answer does not appear in the Context, reply exactly: I don't know. "
+    "Do not use any outside knowledge."
 )
 
 OPEN_SYSTEM = (
