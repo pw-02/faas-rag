@@ -25,27 +25,112 @@ class GenResult:
     total_tokens: int
     metrics: Dict[str, Any]  # ttft_s, total_s, prefill_tps, decode_tps, finish_reason
 
+# class SparseAddBiasProcessor(LogitsProcessor):
+#     """
+#     Adds alpha * bias[token_id] to logits during decoding.
+#     bias is a sparse dict: token_id -> float.
+#     """
+#     def __init__(self, bias: dict[int, float], alpha: float, device: torch.device):
+#         self.alpha = float(alpha)
+#         if not bias:
+#             self.token_ids = None
+#             self.bias_vals = None
+#             return
+
+#         # store as tensors for fast scatter-add
+#         self.token_ids = torch.tensor(list(bias.keys()), dtype=torch.long, device=device)
+#         self.bias_vals = torch.tensor(list(bias.values()), dtype=torch.float32, device=device)
+
+#     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+#         # scores: [batch, vocab]
+#         if self.token_ids is None:
+#             return scores
+#         scores[:, self.token_ids] += self.alpha * self.bias_vals
+#         return scores
+
 class SparseAddBiasProcessor(LogitsProcessor):
     """
     Adds alpha * bias[token_id] to logits during decoding.
-    bias is a sparse dict: token_id -> float.
+
+    Improvements:
+      - max_steps: apply bias only for first N generated tokens
+      - per_token_cap: clamp each bias value magnitude
+      - ignore_eos: optionally avoid biasing EOS token
     """
-    def __init__(self, bias: dict[int, float], alpha: float, device: torch.device):
+
+    def __init__(
+        self,
+        bias: dict[int, float],
+        alpha: float,
+        device: torch.device,
+        *,
+        max_steps: int | None = None,
+        per_token_cap: float | None = None,
+        eos_token_id: int | None = None,
+        ignore_eos: bool = True,
+    ):
         self.alpha = float(alpha)
+        self.max_steps = max_steps
+        self.per_token_cap = per_token_cap
+        self.eos_token_id = eos_token_id
+        self.ignore_eos = ignore_eos
+
+        self.step = 0  # track generation step
+
         if not bias:
             self.token_ids = None
             self.bias_vals = None
             return
 
-        # store as tensors for fast scatter-add
-        self.token_ids = torch.tensor(list(bias.keys()), dtype=torch.long, device=device)
-        self.bias_vals = torch.tensor(list(bias.values()), dtype=torch.float32, device=device)
+        # Convert to tensors
+        token_ids = list(bias.keys())
+        bias_vals = list(bias.values())
+
+        # Optionally remove EOS token from bias
+        if ignore_eos and eos_token_id is not None:
+            filtered = [
+                (tid, val)
+                for tid, val in zip(token_ids, bias_vals)
+                if tid != eos_token_id
+            ]
+            if filtered:
+                token_ids, bias_vals = zip(*filtered)
+            else:
+                token_ids, bias_vals = [], []
+
+        if not token_ids:
+            self.token_ids = None
+            self.bias_vals = None
+            return
+
+        self.token_ids = torch.tensor(token_ids, dtype=torch.long, device=device)
+        self.bias_vals = torch.tensor(bias_vals, dtype=torch.float32, device=device)
+
+        # Optional per-token cap
+        if self.per_token_cap is not None:
+            self.bias_vals = torch.clamp(
+                self.bias_vals,
+                min=-float(self.per_token_cap),
+                max=float(self.per_token_cap),
+            )
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        # scores: [batch, vocab]
+        """
+        scores: [batch, vocab]
+        """
         if self.token_ids is None:
             return scores
+
+        # If using max_steps and we've passed limit → stop biasing
+        if self.max_steps is not None and self.step >= self.max_steps:
+            return scores
+
+        # Apply bias
         scores[:, self.token_ids] += self.alpha * self.bias_vals
+
+        # Increment generation step
+        self.step += 1
+
         return scores
 
 
@@ -212,7 +297,6 @@ class HFCausalLMGenerator:
         alpha: float = 2.0,
         clamp_first_line: bool = True,
         max_new_tokens: Optional[int] = None,
-
         *,
         prompt_max_length: Optional[int] = None,
         bias_steps: Optional[int] = None,   # <-- NEW: only bias first N generated tokens
