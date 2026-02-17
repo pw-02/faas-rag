@@ -87,14 +87,17 @@ def evaluate(
     if mode not in valid:
         raise ValueError(f"Invalid --mode {mode}. Choose: {', '.join(sorted(valid))}")
 
+    # core metrics
     n = 0
     em_sum = 0.0
     f1_sum = 0.0
 
+    # token totals
     prompt_tok_sum = 0
     completion_tok_sum = 0
     total_tok_sum = 0
 
+    # timing totals
     total_s_sum = 0.0
     decode_sum = 0.0
     embed_sum = 0.0
@@ -102,26 +105,35 @@ def evaluate(
     docstore_sum = 0.0
     prompt_build_sum = 0.0
 
+    # stage1 timing totals
     stage1_mine_sum = 0.0
     stage1_score_sum = 0.0
+
     # stage1 extra reporting
     stage1_num_scored_sum = 0
     stage1_tok_per_cand_sum = 0.0
     stage1_tok_per_cand_n = 0
 
+    # stage1 diagnostics
     cand_recall_hits = 0
     cand_recall_total = 0
     select_hits = 0
     select_total = 0
 
+    # stage2 diagnostics
+    stage2_n = 0
+    stage2_mined_hit_sum = 0
+    stage2_gold_in_mined_sum = 0
+
     subset = examples[:limit] if limit else examples
     pbar = tqdm(subset, total=len(subset), desc=f"Evaluating ({mode})", dynamic_ncols=True)
-    # Stage-1 diagnostics (stage1 stores these in out["extra"])
-  
 
     if out_csv:
         with open(out_csv, "w", encoding="utf-8") as f:
             f.write("")
+
+    def mean(x: float) -> float:
+        return x / n if n else 0.0
 
     for ex in pbar:
         ex_id = ex.get("id", "")
@@ -147,14 +159,15 @@ def evaluate(
         elif mode == "prompt_rag":
             out = pipeline.run_prompt_rag(q)
         elif mode == "llm":
-            # main() sets top_k=0 for llm mode, so run_prompt_rag becomes LLM-only
             out = pipeline.run_prompt_rag(q)
         else:
             raise RuntimeError("unreachable")
 
+        # Prediction + metrics
         pred = (out.get("raw_answer") or out.get("answer") or "").strip()
         em = metric_max_over_ground_truths(exact_match_score, pred, golds)
         f1 = metric_max_over_ground_truths(f1_score, pred, golds)
+
         messages = out.get("messages", "")
         timings = out.get("timings_s") or {}
         embed_s = float(timings.get("embed_s", 0.0) or 0.0)
@@ -171,24 +184,68 @@ def evaluate(
         completion_tokens = int(out.get("completion_tokens", 0) or 0)
         total_tokens = int(out.get("total_tokens", 0) or 0)
 
+        retrieved_doc_ids = out.get("retrieved_doc_ids") or []
+
+        # extra payload (stage1 stores candidates/best here)
         extra = out.get("extra") or {}
+
+        # cache fields may be top-level (stage2) or inside extra (stage1)
+        cache_used = out.get("cache_used", None)
+        cache_hits = out.get("cache_hits", None)
+        cache_misses = out.get("cache_misses", None)
+        if cache_used is None:
+            cache_used = extra.get("cache_used", False)
+        if cache_hits is None:
+            cache_hits = extra.get("cache_hits", 0)
+        if cache_misses is None:
+            cache_misses = extra.get("cache_misses", 0)
+
+        # Stage1 candidates/best (robust)
         candidates = out.get("candidates") or extra.get("candidates") or []
         best = out.get("best_candidate") or extra.get("best_candidate") or ""
-
 
         num_candidates_scored = len(candidates) if isinstance(candidates, list) else 0
 
         mean_tokens_per_candidate = 0.0
         if mode == "logit_rag_stage1" and num_candidates_scored > 0:
-            # In stage1, total_tokens should now reflect total tokens consumed across all scoring passes
             mean_tokens_per_candidate = float(total_tokens) / float(num_candidates_scored)
-
             stage1_num_scored_sum += int(num_candidates_scored)
             stage1_tok_per_cand_sum += float(mean_tokens_per_candidate)
             stage1_tok_per_cand_n += 1
-        retrieved_doc_ids = out.get("retrieved_doc_ids") or []
 
-        # Accumulate
+        # Stage1 diagnostic flags
+        has_gold = False
+        selected_gold = False
+        if mode == "logit_rag_stage1":
+            cand_recall_total += 1
+            has_gold = gold_in_candidates(candidates, golds)
+            cand_recall_hits += int(has_gold)
+            if has_gold:
+                select_total += 1
+                selected_gold = model_selected_gold(best, golds)
+                select_hits += int(selected_gold)
+
+        # Stage2 diagnostic flags
+        mined_hit = False
+        gold_in_mined = False
+        if mode == "logit_rag_stage2":
+            stage2_n += 1
+            mined = out.get("mined_candidates") or []
+            mined_norm = [normalize_answer(str(x)) for x in mined]
+            mined_norm = [x for x in mined_norm if x]
+
+            pred_norm = normalize_answer(pred)
+            mined_hit = any(m and (m in pred_norm) for m in mined_norm[:30])
+
+            gold_norms = [normalize_answer(str(g)) for g in golds]
+            gold_norms = [g for g in gold_norms if g]
+            mined_set = set(mined_norm)
+            gold_in_mined = any(g in mined_set for g in gold_norms)
+
+            stage2_mined_hit_sum += int(mined_hit)
+            stage2_gold_in_mined_sum += int(gold_in_mined)
+
+        # Accumulate totals
         n += 1
         em_sum += float(em)
         f1_sum += float(f1)
@@ -207,75 +264,84 @@ def evaluate(
         stage1_mine_sum += mine_s
         stage1_score_sum += cand_score_s
 
-
-        has_gold = False
-        selected_gold = False
-        if mode == "logit_rag_stage1":
-            cand_recall_total += 1
-            has_gold = gold_in_candidates(candidates, golds)
-            cand_recall_hits += int(has_gold)
-            if has_gold:
-                select_total += 1
-                selected_gold = model_selected_gold(best, golds)
-                select_hits += int(selected_gold)
-
+        # Print debug
         if n <= print_first_n:
             tqdm.write("\n---")
             tqdm.write(f"mode: {mode}  id: {ex_id}")
             tqdm.write(f"Q: {q}")
-            tqdm.write(f"M: {messages}")
             tqdm.write(f"PRED: {pred}")
             tqdm.write(f"GOLDS: {golds}")
-            tqdm.write(f"num_candidates_scored: {num_candidates_scored}")
-            tqdm.write(f"mean_tokens_per_candidate: {mean_tokens_per_candidate:.2f}")
             tqdm.write(f"EM={em} F1={f1:.3f}")
             tqdm.write(f"tokens: prompt={prompt_tokens} completion={completion_tokens} total={total_tokens}")
             tqdm.write(f"timings_s: total={total_s:.3f} decode={decode_s:.3f}")
+
             if mode == "logit_rag_stage1":
+                tqdm.write(f"num_candidates_scored: {num_candidates_scored}")
+                tqdm.write(f"mean_tokens_per_candidate: {mean_tokens_per_candidate:.2f}")
                 tqdm.write(f"gold_in_candidates: {has_gold} selected_gold: {selected_gold}")
                 tqdm.write(f"best_candidate: {best}")
                 if candidates:
                     tqdm.write("top5_candidates: " + json.dumps(candidates[:5], ensure_ascii=False)[:600])
+
             if mode == "logit_rag_stage2":
-                tqdm.write(f"bias_tokens: {out.get('bias_tokens', 0)} alpha: {out.get('alpha', 0.0)}")
+                tqdm.write(f"bias_tokens: {out.get('bias_tokens', 0)} alpha: {out.get('alpha', 0.0)} hybrid_prompt: {stage2_hybrid_prompt}")
+                tqdm.write(f"mined_hit: {mined_hit} gold_in_mined: {gold_in_mined}")
                 mined = out.get("mined_candidates") or []
                 if mined:
                     tqdm.write("mined[:10]: " + json.dumps(mined[:10], ensure_ascii=False)[:400])
 
+        # Progress postfix
         if tqdm_update_every > 0 and n % tqdm_update_every == 0:
-            postfix = {"EM": f"{em_sum/n:.3f}", "F1": f"{f1_sum/n:.3f}", "tok": f"{(total_tok_sum/n):.0f}"}
+            postfix = {
+                "EM": f"{em_sum/n:.3f}",
+                "F1": f"{f1_sum/n:.3f}",
+                "tok": f"{(total_tok_sum/n):.0f}",
+                "tot_s": f"{(total_s_sum/n):.2f}",
+            }
             if mode == "logit_rag_stage1":
                 cand_rec = (cand_recall_hits / cand_recall_total) if cand_recall_total else 0.0
                 sel_acc = (select_hits / select_total) if select_total else 0.0
                 postfix["cand@"] = f"{cand_rec:.2f}"
                 postfix["sel@"] = f"{sel_acc:.2f}"
+                if stage1_tok_per_cand_n > 0:
+                    postfix["tok/cand"] = f"{(stage1_tok_per_cand_sum / stage1_tok_per_cand_n):.1f}"
+            if mode == "logit_rag_stage2" and stage2_n > 0:
+                postfix["mined_hit"] = f"{(stage2_mined_hit_sum/stage2_n):.2f}"
+                postfix["gold_in_m"] = f"{(stage2_gold_in_mined_sum/stage2_n):.2f}"
             pbar.set_postfix(postfix)
 
+        # CSV row
         row = {
             "mode": mode,
             "id": ex_id,
             "question": q,
             "prediction": pred,
             "golden_answers": json.dumps(golds, ensure_ascii=False),
+
             "em": float(em),
             "f1": float(f1),
+
             "top_k": int(getattr(pipeline, "top_k", 0)),
             "retrieved_count": len(retrieved_doc_ids),
             "retrieved_doc_ids": json.dumps(retrieved_doc_ids),
+
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
             "total_tokens": total_tokens,
+
             "embed_s": embed_s,
             "ann_s": ann_s,
             "docstore_s": docstore_s,
             "prompt_build_s": prompt_s,
             "decode_s": decode_s,
             "total_s": total_s,
+
             "candidate_mine_s": mine_s,
             "candidate_score_s": cand_score_s,
-            "cache_used": int(bool(out.get("cache_used", False))),
-            "cache_hits": int(out.get("cache_hits", 0) or 0),
-            "cache_misses": int(out.get("cache_misses", 0) or 0),
+
+            "cache_used": int(bool(cache_used)),
+            "cache_hits": int(cache_hits or 0),
+            "cache_misses": int(cache_misses or 0),
         }
 
         if mode == "logit_rag_stage1":
@@ -285,28 +351,30 @@ def evaluate(
             row["num_candidates_scored"] = int(num_candidates_scored)
             row["mean_tokens_per_candidate"] = float(mean_tokens_per_candidate)
 
-
         if mode == "logit_rag_stage2":
             row["bias_tokens"] = int(out.get("bias_tokens", 0) or 0)
             row["alpha"] = float(out.get("alpha", 0.0) or 0.0)
+            row["hybrid_prompt"] = int(bool(stage2_hybrid_prompt))
+            row["mined_hit"] = int(mined_hit)
+            row["gold_in_mined"] = int(gold_in_mined)
 
         append_csv_row(out_csv, row)
-
-    def mean(x: float) -> float:
-        return x / n if n else 0.0
 
     summary: Dict[str, float] = {
         "mode": mode,
         "n": float(n),
         "em": mean(em_sum),
         "f1": mean(f1_sum),
+
         "mean_total_tokens": mean(total_tok_sum),
+
         "mean_embed_s": mean(embed_sum),
         "mean_ann_s": mean(ann_sum),
         "mean_docstore_s": mean(docstore_sum),
         "mean_prompt_build_s": mean(prompt_build_sum),
         "mean_decode_s": mean(decode_sum),
         "mean_total_s": mean(total_s_sum),
+
         "mean_candidate_mine_s": mean(stage1_mine_sum),
         "mean_candidate_score_s": mean(stage1_score_sum),
     }
@@ -315,8 +383,21 @@ def evaluate(
         summary["candidate_recall"] = (cand_recall_hits / cand_recall_total) if cand_recall_total else 0.0
         summary["selection_accuracy_given_present"] = (select_hits / select_total) if select_total else 0.0
         summary["mean_num_candidates_scored"] = (stage1_num_scored_sum / n) if n else 0.0
-        summary["mean_tokens_per_candidate"] = ((stage1_tok_per_cand_sum / stage1_tok_per_cand_n) if stage1_tok_per_cand_n else 0.0)
+        summary["mean_tokens_per_candidate"] = (
+            (stage1_tok_per_cand_sum / stage1_tok_per_cand_n) if stage1_tok_per_cand_n else 0.0
+        )
+
+    if mode == "logit_rag_stage2":
+        #mined_hit_rate: prediction contains (any of) mined candidates (substring match on normalized text)
+        #gold_in_mined_rate: any gold answer exactly equals a mined candidate (normalized)
+        
+        summary["mined_hit_rate"] = (stage2_mined_hit_sum / stage2_n) if stage2_n else 0.0 
+        summary["gold_in_mined_rate"] = (stage2_gold_in_mined_sum / stage2_n) if stage2_n else 0.0
+        summary["alpha"] = float(stage2_alpha)
+        summary["hybrid_prompt"] = int(bool(stage2_hybrid_prompt))
+
     return summary
+
 
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
