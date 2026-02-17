@@ -141,8 +141,12 @@ class RagPipeline:
             self.prompt_build_method = PromptBuildMethodType.LLM_ONLY
         elif pbm == "LOGIT_RAG_STAGE1":
             self.prompt_build_method = PromptBuildMethodType.LOGIT_RAG_STAGE1
+        elif pbm == "LOGIT_RAG_STAGE2":
+            self.prompt_build_method = PromptBuildMethodType.LOGIT_RAG_STAGE2
         else:
             raise ValueError(f"Invalid prompt_build_method {prompt_build_method}")
+        
+        self.logger.info("Initializing RagPipeline with prompt_build_method=%s", self.prompt_build_method)
 
         if self.top_k < 0:
             raise ValueError("top_k must be >= 0")
@@ -791,13 +795,10 @@ class RagPipeline:
             if hybrid_prompt:
                 messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
             else:
-                messages = [{"role": "user", "content": q}]
-                # messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
+                # messages = [{"role": "user", "content": q}]
+                messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
 
-                # messages = [
-                #     {"role": "system", "content": "Answer with a short phrase only. No explanation."},
-                #     {"role": "user", "content": question},
-                # ]
+        
 
         with timed(timings, "decode_s"):
             gen = self.generator.generate_chat_with_logit_bias(

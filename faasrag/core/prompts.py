@@ -17,6 +17,7 @@ class PromptBuildMethodType(Enum):
     LLM_ONLY = auto()
     FEW_SHOT = auto()
     LOGIT_RAG_STAGE1 = auto()  # not a prompt method, but used to trigger LLM_ONLY with top_k>0
+    LOGIT_RAG_STAGE2 = auto()  # not a prompt method, but used to trigger hybrid prompt with top_k>0
 
 
 # ============================================================
@@ -63,6 +64,12 @@ STAGE1_SYSTEM = (
     "Return ONLY the short answer in the requested format."
 )
 
+STAGE2_SYSTEM = (
+    "Answer with a SINGLE short answer only. "
+    "No explanation. No extra words. No punctuation. No quotes. "
+    "Do not list multiple possibilities. "
+    "Maximum 5 words."
+)
 
 FEWSHOT_SYSTEM = "Summarize the dialogue into a few short sentences."
 
@@ -238,6 +245,28 @@ def build_stage1_scoring_messages(question: str) -> List[ChatMessage]:
         {"role": "user", "content": user_content},
     ]
 
+def build_stage2_messages(question: str) -> List[ChatMessage]:
+    q = normalize_question(question)
+    atype = infer_answer_type(q)
+
+    # Optional: slightly different instruction per type helps EM
+    if atype == "number":
+        hint = "Return ONLY digits if possible."
+    elif atype == "date":
+        hint = "Return ONLY the year or date."
+    else:
+        hint = "Return ONLY the answer."
+
+    user_content = (
+        f"{hint}\n"
+        f"Question: {q}\n"
+        "Answer:"
+    )
+
+    return [
+        {"role": "system", "content": STAGE2_SYSTEM},
+        {"role": "user", "content": user_content},
+    ]
 
 # ============================================================
 # Unified Entry Point
@@ -272,6 +301,11 @@ def build_rag_messages(
     elif prompt_build_method == PromptBuildMethodType.LOGIT_RAG_STAGE1:
         messages = build_stage1_scoring_messages(question)
         passages_used = []
+    
+    elif prompt_build_method == PromptBuildMethodType.LOGIT_RAG_STAGE2:
+        messages = build_stage2_messages(question)
+        passages_used = []
+
 
     else:
         raise ValueError(f"Invalid prompt build method {prompt_build_method}")
