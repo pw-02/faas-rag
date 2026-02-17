@@ -343,6 +343,7 @@ class RagPipeline:
                     per_passage_max_tokens=self.logit_passage_max_tokens,
                     clamp_negative=True,
                 )
+                print(f"Computed logit bias for {len(bias)} tokens from top-{len(passages)} passages. Sample bias: {list(bias.items())[:10]}")
 
             # 3) Generate with logits processor
             with timed(timings, "decode_s"):

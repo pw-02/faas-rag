@@ -98,12 +98,6 @@ def evaluate(
     stage1_mine_sum = 0.0
     stage1_score_sum = 0.0
 
-    # diagnostics for stage-1 hypothesis
-    cand_recall_hits = 0          # gold appears in candidate list?
-    cand_recall_total = 0         # number of evaluated examples (for stage-1 only)
-    select_hits = 0               # model picked gold among candidates
-    select_total = 0              # only when gold is present
-
     subset = examples[:limit] if limit else examples
     pbar = tqdm(subset, total=len(subset), desc=f"Evaluating ({mode})", dynamic_ncols=True)
 
@@ -169,6 +163,7 @@ def evaluate(
         stage1_mine_sum += mine_s
         stage1_score_sum += cand_score_s
 
+
         # stage-1 diagnostics (only meaningful for that mode)
         candidates = out.get("candidates") or []
         best = out.get("best_candidate", "")
@@ -185,6 +180,9 @@ def evaluate(
             tqdm.write(f"EM={em} F1={f1:.3f}")
             tqdm.write(f"tokens: prompt={prompt_tokens} completion={completion_tokens} total={total_tokens}")
             tqdm.write(f"timings_s: total={total_s:.3f} ttft={ttft_s:.3f} decode={decode_s:.3f}")
+            if mode == "logit":
+                tqdm.write(f"alpha: {pipeline.logit_alpha}  top_n: {pipeline.logit_top_n}  passage_max_tokens: {pipeline.logit_passage_max_tokens}")
+    
             # tqdm.write(f"messages: {str(messages)[:500]}")  # optional debug
 
         if tqdm_update_every > 0 and n % tqdm_update_every == 0:
@@ -278,7 +276,7 @@ def main(cfg: RagServiceConfig):
     # logit knobs
     parser.add_argument("--logit_passage_max_tokens", type=int, default=256)
     parser.add_argument("--logit_top_n", type=int, default=20)
-    parser.add_argument("--logit_alpha", type=float, default=2.0)
+    parser.add_argument("--logit_alpha", type=float, default=20.0)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
