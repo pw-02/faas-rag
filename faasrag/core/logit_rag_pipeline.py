@@ -67,6 +67,8 @@ def compute_semantic_logit_bias_from_passages(
       - keep top_n positive scores
     Returns sparse dict: token_id -> score
     """
+    print(f"Computing semantic logit bias from {len(passages)} passages with top_n={top_n} and per_passage_max_tokens={per_passage_max_tokens}...")
+   
     device = next(model.parameters()).device
     E = model.get_input_embeddings().weight              # [V, H]
     E_norm = E / (E.norm(dim=1, keepdim=True) + 1e-12)   # [V, H]
@@ -79,6 +81,7 @@ def compute_semantic_logit_bias_from_passages(
         ds.append(_passage_to_vector_mean_input_emb(model, tokenizer, p.text, per_passage_max_tokens))
 
     if not ds:
+        print("No valid passages with text found for bias computation, returning empty bias.")
         return {}
 
     d_agg = torch.stack(ds, dim=0).mean(dim=0)           # [H]
