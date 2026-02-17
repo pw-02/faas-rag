@@ -24,6 +24,34 @@ from faasrag.core.utils import extract_short_answer, append_csv_row
 from contextlib import contextmanager
 from transformers import LogitsProcessor, LogitsProcessorList
 import torch
+import re
+
+def is_junk_token(tokenizer, tid: int) -> bool:
+    s = tokenizer.decode([tid]).strip().lower()
+
+    # empty or whitespace
+    if not s:
+        return True
+
+    # punctuation-only
+    if re.fullmatch(r"[^\w]+", s):
+        return True
+
+    # pure numbers (optional – keep years if you want)
+    if re.fullmatch(r"\d+", s):
+        return True
+
+    # very short fragments
+    if len(s) <= 1:
+        return True
+
+    # common stopwords (small starter set)
+    if s in {
+        "the","a","an","and","or","of","to","in","is","was","for","on","with","as","by"
+    }:
+        return True
+
+    return False
 
 @contextmanager
 def timed(store: dict, key: str):
@@ -78,6 +106,7 @@ def build_doc_log_prior(
 def log_prior_to_sparse_bias(
     log_p_doc: torch.Tensor,
     top_n: int,
+    tokenizer,
     ignore_token_ids: Optional[Set[int]] = None,
     zero_center: bool = True,
 ) -> Dict[int, float]:
@@ -103,6 +132,8 @@ def log_prior_to_sparse_bias(
     bias: Dict[int, float] = {}
     for tid, v in zip(idx.tolist(), vals.tolist()):
         if int(tid) in ignore_token_ids:
+            continue
+        if is_junk_token(tokenizer, tid):
             continue
         bias[int(tid)] = float(v)
     return bias
@@ -367,6 +398,7 @@ class RagPipeline:
                 bias = log_prior_to_sparse_bias(
                     log_p_doc=log_p_doc,
                     top_n=self.logit_top_n,
+                    tokenizer=self.generator.tokenizer,
                     ignore_token_ids=special_ids,
                     zero_center=True,
                 )
