@@ -149,7 +149,7 @@ def evaluate(
         pred = (out.get("raw_answer") or out.get("answer") or "").strip()
         em = metric_max_over_ground_truths(exact_match_score, pred, golds)
         f1 = metric_max_over_ground_truths(f1_score, pred, golds)
-
+        messages = out.get("messages", "")
         timings = out.get("timings_s") or {}
         embed_s = float(timings.get("embed_s", 0.0) or 0.0)
         ann_s = float(timings.get("ann_s", 0.0) or 0.0)
@@ -204,6 +204,7 @@ def evaluate(
             tqdm.write("\n---")
             tqdm.write(f"mode: {mode}  id: {ex_id}")
             tqdm.write(f"Q: {q}")
+            tqdm.write(f"M: {messages}")
             tqdm.write(f"PRED: {pred}")
             tqdm.write(f"GOLDS: {golds}")
             tqdm.write(f"EM={em} F1={f1:.3f}")
@@ -300,7 +301,7 @@ def main(cfg: RagServiceConfig):
     parser.add_argument(
         "--mode",
         type=str,
-        default="prompt_rag",
+        default="logit_rag_stage1",
         choices=["llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"],
     )
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl")
