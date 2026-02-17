@@ -390,7 +390,7 @@ def evaluate(
     if mode == "logit_rag_stage2":
         #mined_hit_rate: prediction contains (any of) mined candidates (substring match on normalized text)
         #gold_in_mined_rate: any gold answer exactly equals a mined candidate (normalized)
-        
+
         summary["mined_hit_rate"] = (stage2_mined_hit_sum / stage2_n) if stage2_n else 0.0 
         summary["gold_in_mined_rate"] = (stage2_gold_in_mined_sum / stage2_n) if stage2_n else 0.0
         summary["alpha"] = float(stage2_alpha)
@@ -422,7 +422,7 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--stage1_no_length_norm", action="store_true")
 
     # Stage-2 knobs
-    parser.add_argument("--stage2_alpha", type=float, default=0.8)
+    parser.add_argument("--stage2_alpha", type=float, default=0.2)
     parser.add_argument("--stage2_hybrid_prompt", action="store_true")
 
     args = parser.parse_args()
