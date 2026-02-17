@@ -178,7 +178,9 @@ class RagPipeline:
 
                     doc = self.docstore.get(str(pid))
                     if not doc:
-                        continue
+                        #thow exception here as something going wrong if index returns a pid that is not in docstore
+                        # self.logger.error(f"Docstore missing pid {pid} returned by index. This indicates data inconsistency between index and docstore.")
+                        raise ValueError(f"Docstore missing pid {pid} returned by index. This indicates data inconsistency between index and docstore.")
                     passages.append(
                         Passage(
                             pid=int(pid),
