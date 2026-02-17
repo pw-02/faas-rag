@@ -751,7 +751,7 @@ class RagPipeline:
         question: str,
         *,
         max_candidates: int = 40,
-        max_phrases_for_bias: int = 30,
+        max_phrases_for_bias: int = 10,
         alpha: float = 0.8,
         phrase_score_temperature: float = 1.0,
         per_token_cap: float = 2.0,
@@ -780,7 +780,7 @@ class RagPipeline:
 
         with timed(timings, "bias_build_s"):
             bias = self._candidates_to_token_bias(
-                mined,
+                candidates=mined[: max_phrases_for_bias],
                 max_phrases=max_phrases_for_bias,
                 per_token_cap=per_token_cap,
                 phrase_score_temperature=phrase_score_temperature,
@@ -791,7 +791,11 @@ class RagPipeline:
             if hybrid_prompt:
                 messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
             else:
-                messages = [{"role": "user", "content": q}]
+                # messages = [{"role": "user", "content": q}]
+                messages = [
+                    {"role": "system", "content": "Answer with a short phrase only. No explanation."},
+                    {"role": "user", "content": question},
+                ]
 
         with timed(timings, "decode_s"):
             gen = self.generator.generate_chat_with_logit_bias(

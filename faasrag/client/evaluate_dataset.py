@@ -81,6 +81,7 @@ def evaluate(
     # stage-2 knobs
     stage2_alpha: float = 0.8,
     stage2_hybrid_prompt: bool = False,
+    stage2_max_phrases: int = 30,
 ) -> Dict[str, float]:
     mode = (mode or "").strip().lower()
     valid = {"llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"}
@@ -155,6 +156,7 @@ def evaluate(
                 q,
                 alpha=stage2_alpha,
                 hybrid_prompt=stage2_hybrid_prompt,
+                max_phrases_for_bias=stage2_max_phrases,
             )
         elif mode == "prompt_rag":
             out = pipeline.run_prompt_rag(q)
@@ -394,6 +396,7 @@ def evaluate(
         summary["mined_hit_rate"] = (stage2_mined_hit_sum / stage2_n) if stage2_n else 0.0 
         summary["gold_in_mined_rate"] = (stage2_gold_in_mined_sum / stage2_n) if stage2_n else 0.0
         summary["alpha"] = float(stage2_alpha)
+        summary["max_phrases_for_bias"] = int(stage2_max_phrases)
         summary["hybrid_prompt"] = int(bool(stage2_hybrid_prompt))
 
     return summary
@@ -410,7 +413,7 @@ def main(cfg: RagServiceConfig):
         choices=["llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"],
     )
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl")
-    parser.add_argument("--limit", type=int, default=1000)
+    parser.add_argument("--limit", type=int, default=200)
     parser.add_argument("--out_csv", type=str, default="dataset_eval.csv")
     parser.add_argument("--print_first_n", type=int, default=10)
     parser.add_argument("--tqdm_update_every", type=int, default=10)
@@ -423,6 +426,7 @@ def main(cfg: RagServiceConfig):
 
     # Stage-2 knobs
     parser.add_argument("--stage2_alpha", type=float, default=0.2)
+    parser.add_argument("--stage2_max_phrases", type=float, default=10)
     parser.add_argument("--stage2_hybrid_prompt", action="store_true")
 
     args = parser.parse_args()
@@ -482,6 +486,7 @@ def main(cfg: RagServiceConfig):
         stage1_alpha_prior=args.stage1_alpha_prior,
         stage2_alpha=args.stage2_alpha,
         stage2_hybrid_prompt=args.stage2_hybrid_prompt,
+        stag2_max_phrases=args.stage2_max_phrases,
     )
 
     print("\n==== FINAL ====")
