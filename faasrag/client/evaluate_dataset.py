@@ -462,10 +462,11 @@ def main(cfg: RagServiceConfig):
         choices=["llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"],
     )
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl")
-    parser.add_argument("--limit", type=int, default=200)
+    parser.add_argument("--limit", type=int, default=1000)
     parser.add_argument("--out_csv", type=str, default="dataset_eval.csv")
     parser.add_argument("--print_first_n", type=int, default=10)
     parser.add_argument("--tqdm_update_every", type=int, default=10)
+    parser.add_argument("--save_to_file", action="store_true", default=False)
 
     # Stage-1 knobs
     parser.add_argument("--stage1_max_candidates", type=int, default=40)
@@ -523,6 +524,7 @@ def main(cfg: RagServiceConfig):
         logger=logger,
         retrieve_only=False,
         always_log_results=False,
+
     )
 
     examples = load_jsonl(args.data)
@@ -562,6 +564,7 @@ def main(cfg: RagServiceConfig):
             stage2_alpha=float(alpha),
             stage2_hybrid_prompt=bool(args.stage2_hybrid_prompt),
             stage2_max_phrases=int(args.stage2_max_phrases),
+            save_to_file=args.save_to_file,
         )
 
         # annotate summary with sweep params
