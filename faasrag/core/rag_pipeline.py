@@ -791,11 +791,13 @@ class RagPipeline:
             if hybrid_prompt:
                 messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
             else:
-                # messages = [{"role": "user", "content": q}]
-                messages = [
-                    {"role": "system", "content": "Answer with a short phrase only. No explanation."},
-                    {"role": "user", "content": question},
-                ]
+                messages = [{"role": "user", "content": q}]
+                # messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
+
+                # messages = [
+                #     {"role": "system", "content": "Answer with a short phrase only. No explanation."},
+                #     {"role": "user", "content": question},
+                # ]
 
         with timed(timings, "decode_s"):
             gen = self.generator.generate_chat_with_logit_bias(
