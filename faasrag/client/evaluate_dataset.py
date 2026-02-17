@@ -88,7 +88,10 @@ def evaluate(
     # stage-2 knobs
     stage2_alpha: float = 0.8,
     stage2_hybrid_prompt: bool = False,
-    stage2_max_phrases: int = 30,
+    stage2_max_candidates: int = 40,
+    stage2_phrase_score_temperature: float = 1.0,
+    stage2_per_token_cap: float = 2.0,
+    stage2_clamp_first_line: bool = True,
     save_to_file = False,
 ) -> Dict[str, float]:
     mode = (mode or "").strip().lower()
@@ -168,12 +171,11 @@ def evaluate(
         elif mode == "logit_rag_stage2":
             out = pipeline.run_logit_rag_stage2(
                 q,
-                max_candidates=40,
-                max_phrases_for_bias=stage2_max_phrases,
+                max_candidates=stage2_max_candidates,
                 alpha=stage2_alpha,
-                phrase_score_temperature=1.0,
-                per_token_cap=2.0,
-                clamp_first_line=True,
+                phrase_score_temperature=stage2_phrase_score_temperature,
+                per_token_cap=stage2_per_token_cap,
+                clamp_first_line=stage2_clamp_first_line,
                 hybrid_prompt=stage2_hybrid_prompt,
             )
         elif mode == "prompt_rag":
@@ -451,7 +453,7 @@ def evaluate(
         summary["selection_total_where_gold_in_mined"] = float(stage2_select_total_given_oracle)
 
         summary["alpha"] = float(stage2_alpha)
-        summary["max_phrases_for_bias"] = int(stage2_max_phrases)
+        # summary["max_phrases_for_bias"] = int(stage2_max_phrases)
         summary["hybrid_prompt"] = int(bool(stage2_hybrid_prompt))
 
     return summary
@@ -481,9 +483,11 @@ def main(cfg: RagServiceConfig):
     # Stage-2 knobs
     parser.add_argument("--stage2_alpha", type=float, default=0.2)
     parser.add_argument("--stage2_alpha_sweep", type=str, default="8,10,12")  # <-- NEW 0.1,0.2,0.4,0.8
-    parser.add_argument("--stage2_max_phrases", type=int, default=20)
+    parser.add_argument("--stage2_max_candidates", type=int, default=40)
+    parser.add_argument("--stage2_phrase_score_temperature", type=float, default=1.0)
+    parser.add_argument("--stage2_per_token_cap", type=float, default=2.0)
+    parser.add_argument("--stage2_clamp_first_line", action="store_true")
     parser.add_argument("--stage2_hybrid_prompt", action="store_true")
-
     # Optional: write one summary row per sweep setting
     parser.add_argument("--sweep_out_jsonl", type=str, default="stage2_alpha_sweep.csv")  # <-- NEW
 
@@ -550,8 +554,8 @@ def main(cfg: RagServiceConfig):
             else:
                 out_csv = out_csv_base.replace(".csv", f"_alpha{alpha:g}.csv")
 
-        logger.info("Running mode=%s alpha=%s max_phrases=%s hybrid_prompt=%s limit=%s",
-                    args.mode, alpha, args.stage2_max_phrases, args.stage2_hybrid_prompt, args.limit)
+        logger.info("Running mode=%s alpha=%s max_candidates=%s hybrid_prompt=%s limit=%s",
+                    args.mode, alpha, args.stage2_max_candidates, args.stage2_hybrid_prompt, args.limit)
 
         metrics = evaluate(
             pipeline,
@@ -568,6 +572,10 @@ def main(cfg: RagServiceConfig):
             stage2_alpha=float(alpha),
             stage2_hybrid_prompt=bool(args.stage2_hybrid_prompt),
             stage2_max_phrases=int(args.stage2_max_phrases),
+            stage2_max_candidates=args.stage2_max_candidates,
+            stage2_phrase_score_temperature=args.stage2_phrase_score_temperature,
+            stage2_per_token_cap=args.stage2_per_token_cap,
+            stage2_clamp_first_line=bool(args.stage2_clamp_first_line),
             save_to_file=args.save_to_file,
         )
 
@@ -576,6 +584,9 @@ def main(cfg: RagServiceConfig):
         metrics["sweep_alpha"] = float(alpha)
         metrics["sweep_max_phrases"] = int(args.stage2_max_phrases)
         metrics["sweep_hybrid_prompt"] = int(bool(args.stage2_hybrid_prompt))
+        metrics["sweep_phrase_score_temperature"] = float(args.stage2_phrase_score_temperature)
+        metrics["sweep_per_token_cap"] = float(args.stage2_per_token_cap)
+        metrics["sweep_clamp_first_line"] = int(bool(args.stage2_clamp_first_line))
         all_summaries.append(metrics)
 
         print("\n==== FINAL (alpha={:g}) ====".format(alpha))

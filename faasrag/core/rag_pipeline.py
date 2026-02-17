@@ -278,7 +278,6 @@ class RagPipeline:
         self,
         candidates: list[tuple[str, float]],
         *,
-        max_phrases: int = 40,
         per_token_cap: float = 2.0,
         phrase_score_temperature: float = 1.0,
         drop_junk_tokens: bool = True,
@@ -290,7 +289,7 @@ class RagPipeline:
 
         tok = self.generator.tokenizer
         special_ids = set(getattr(tok, "all_special_ids", []))
-        items = candidates[:max_phrases]
+        items = candidates
 
         scores = np.array([float(s) for _, s in items], dtype=np.float64)
         scores = scores / max(1e-9, float(phrase_score_temperature))
@@ -892,7 +891,6 @@ class RagPipeline:
         question: str,
         *,
         max_candidates: int = 40, #Keep only the top 40 candidate answer strings
-        max_phrases_for_bias: int = 10,
         alpha: float = 0.8,
         phrase_score_temperature: float = 1.0,
         per_token_cap: float = 2.0,
@@ -921,8 +919,7 @@ class RagPipeline:
 
         with timed(timings, "bias_build_s"):
             bias = self._candidates_to_token_bias(
-                candidates=mined[: max_phrases_for_bias],
-                max_phrases=max_phrases_for_bias,
+                candidates=mined,
                 per_token_cap=per_token_cap,
                 phrase_score_temperature=phrase_score_temperature,
                 drop_junk_tokens=True,
