@@ -366,6 +366,16 @@ class RagPipeline:
         This output is used by:
         - Stage 1: rerank candidates by LLM log-likelihood (selection)
         - Stage 2: convert candidates into token logit bias (generation prior)
+
+        What happens (in order)
+            1. For each retrieved passage (and each sliding window of that passage)
+            you run the reader QA model to get start_logits and end_logits.
+            2. You form lots of candidate spans by pairing high-scoring start positions with high-scoring end positions, 
+            3. You turn those spans into text using offset_mapping to map token indices → character offsets → substring of the passage.
+            4. You refine/clean them (your regex / heuristics)and optionally extract “atomic” subspans (years, numbers+units, name-like chunks)
+            5. You aggregate scores across passages/windows into cand_scores.If the same candidate appears multiple times (or in strong passages), it rises.
+            6. You deduplicate/merge near-duplicates
+            7. Finally you sort candidates and return the top max_candidatesas [(candidate_string, aggregated_score), ...].
         """
         self._ensure_reader()
         assert self.reader_model is not None
@@ -443,10 +453,17 @@ class RagPipeline:
         # If you want full spans, change to a non-capturing group:
         #   r"\b(?:[A-Z][a-z]+|[A-Z]\.)(?:\s+(?:...))*\b"
         #
+
+        # name_pat = re.compile(
+        #     r"\b([A-Z][a-z]+|[A-Z]\.)"
+        #     r"(?:\s+(?:[A-Z][a-z]+|[A-Z]\.|de|da|del|van|von|al|bin|ibn|la|le|of))*\b"
+        # )
+
+        #change to non-capturing group to get full name spans instead of just first token
         name_pat = re.compile(
-            r"\b([A-Z][a-z]+|[A-Z]\.)"
-            r"(?:\s+(?:[A-Z][a-z]+|[A-Z]\.|de|da|del|van|von|al|bin|ibn|la|le|of))*\b"
-        )
+            r"\b(?:[A-Z][a-z]+|[A-Z]\.)"
+            r"(?:\s+(?:[A-Z][a-z]+|[A-Z]\.|de|da|del|van|von|al|bin|ibn|la|le|of))*\b")
+
 
         def clean_span(s: str) -> str:
             """Collapse whitespace + strip edge punctuation/quotes so spans compare/dedup cleanly."""
@@ -470,7 +487,7 @@ class RagPipeline:
             - mostly non-alphanumeric
             """
             sl = s.lower()
-            if sl in {"the", "a", "an", "it", "they", "he", "she", "this", "that", "these", "those"}:
+            if sl in {"the", "a", "an", "it", "they", "he", "she", "this", "that", "these", "those", "sir", "madam"}:
                 return True
             if bad_punct_re.search(s):
                 return True
