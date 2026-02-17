@@ -34,6 +34,7 @@ ChatMessage = Dict[str, str]  # {"role": Role, "content": str}
 STRICT_SYSTEM = (
     "Answer the question using ONLY the provided passages. "
     "If the answer is not in the passages, reply exactly: I don't know. "
+    "Do NOT use any general knowledge. Do NOT use any information not in the passages. "
     "Output ONLY the answer (max 5 words)."
 )
 
