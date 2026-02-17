@@ -82,10 +82,11 @@ def evaluate(
       - "llm"              -> pipeline.run(q) with top_k=0
       - "prompt_rag"       -> pipeline.run(q) with top_k>0 (your cfg.prompt_build_method controls strict/open)
       - "logit_rag_stage1" -> pipeline.run_logit_rag_stage1(q, ...)
+      - "logit_rag_stage2" -> pipeline.run_logit_rag_stage2(q)
     """
     mode = (mode or "").strip().lower()
-    if mode not in {"llm", "prompt_rag", "logit_rag_stage1"}:
-        raise ValueError(f"Invalid --mode {mode}. Choose: llm, prompt_rag, logit_rag_stage1")
+    if mode not in {"llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"}:
+        raise ValueError(f"Invalid --mode {mode}. Choose: llm, prompt_rag, logit_rag_stage1, logit_rag_stage2")
 
     n = 0
     em_sum = 0.0
