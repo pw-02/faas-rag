@@ -23,6 +23,7 @@ from faasrag.core.utils import (
     metric_max_over_ground_truths,
     append_csv_row,
     normalize_answer,
+    parse_float_list
 )
 from faasrag.core.rag_pipeline import RagPipeline
 
@@ -62,6 +63,12 @@ def model_selected_gold(best_candidate: str, golds: List[str]) -> bool:
         return False
     b = normalize_answer(best_candidate)
     return any(b == normalize_answer(g) for g in golds)
+
+
+
+
+
+
 def evaluate(
     pipeline: RagPipeline,
     examples: List[Dict[str, Any]],
@@ -442,7 +449,6 @@ def evaluate(
 
     return summary
 
-
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
@@ -466,8 +472,12 @@ def main(cfg: RagServiceConfig):
 
     # Stage-2 knobs
     parser.add_argument("--stage2_alpha", type=float, default=0.2)
-    parser.add_argument("--stage2_max_phrases", type=float, default=20)
+    parser.add_argument("--stage2_alpha_sweep", type=str, default="0.1,0.2,0.4,0.8")  # <-- NEW 0.1,0.2,0.4,0.8
+    parser.add_argument("--stage2_max_phrases", type=int, default=20)
     parser.add_argument("--stage2_hybrid_prompt", action="store_true")
+
+    # Optional: write one summary row per sweep setting
+    parser.add_argument("--sweep_out_jsonl", type=str, default="stage2_alpha_sweep.jsonl")  # <-- NEW
 
     args = parser.parse_args()
 
@@ -478,26 +488,24 @@ def main(cfg: RagServiceConfig):
     if args.mode == "llm":
         top_k = 0
         cfg.prompt_build_method = "LLM_ONLY"
-
     elif args.mode == "prompt_rag":
         top_k = 5
         cfg.prompt_build_method = "QA_OPEN"
-
     elif args.mode == "logit_rag_stage1":
         top_k = 10
         cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
-
     elif args.mode == "logit_rag_stage2":
         top_k = 10
         cfg.prompt_build_method = "LOGIT_RAG_STAGE2"
     else:
         raise ValueError(f"Invalid mode {args.mode}")
 
-    out_csv = args.out_csv.strip()
-    if out_csv:
-        out_csv = f"{args.mode}_{out_csv}"
-        logger.info("Output CSV enabled: %s", out_csv)
+    out_csv_base = args.out_csv.strip()
+    if out_csv_base:
+        out_csv_base = f"{args.mode}_{out_csv_base}"
+        logger.info("Output CSV enabled base: %s", out_csv_base)
 
+    # Build pipeline once (reuse across sweeps)
     pipeline = RagPipeline(
         generator_cfg=cfg.generator,
         embedder_cfg=cfg.embedder,
@@ -515,25 +523,61 @@ def main(cfg: RagServiceConfig):
     )
 
     examples = load_jsonl(args.data)
-    metrics = evaluate(
-        pipeline,
-        examples,
-        mode=args.mode,
-        limit=(args.limit if args.limit > 0 else None),
-        print_first_n=args.print_first_n,
-        out_csv=(out_csv or None),
-        tqdm_update_every=args.tqdm_update_every,
-        stage1_max_candidates=args.stage1_max_candidates,
-        stage1_score_top_n=args.stage1_score_top_n,
-        stage1_length_normalize=(not args.stage1_no_length_norm),
-        stage1_alpha_prior=args.stage1_alpha_prior,
-        stage2_alpha=args.stage2_alpha,
-        stage2_hybrid_prompt=args.stage2_hybrid_prompt,
-        stage2_max_phrases=args.stage2_max_phrases,
-    )
 
-    print("\n==== FINAL ====")
-    print(json.dumps(metrics, indent=2))
+    # Decide alphas to run
+    sweep_alphas = parse_float_list(args.stage2_alpha_sweep) if args.mode == "logit_rag_stage2" else []
+    
+    if not sweep_alphas:
+        sweep_alphas = [args.stage2_alpha]  # single run fallback
+
+    all_summaries = []
+
+    for alpha in sweep_alphas:
+        # If sweeping, make per-alpha CSV to avoid mixing settings in one file.
+        out_csv = None
+        if out_csv_base:
+            if len(sweep_alphas) == 1:
+                out_csv = out_csv_base
+            else:
+                out_csv = out_csv_base.replace(".csv", f"_alpha{alpha:g}.csv")
+
+        logger.info("Running mode=%s alpha=%s max_phrases=%s hybrid_prompt=%s limit=%s",
+                    args.mode, alpha, args.stage2_max_phrases, args.stage2_hybrid_prompt, args.limit)
+
+        metrics = evaluate(
+            pipeline,
+            examples,
+            mode=args.mode,
+            limit=(args.limit if args.limit > 0 else None),
+            print_first_n=args.print_first_n,
+            out_csv=(out_csv or None),
+            tqdm_update_every=args.tqdm_update_every,
+            stage1_max_candidates=args.stage1_max_candidates,
+            stage1_score_top_n=args.stage1_score_top_n,
+            stage1_length_normalize=(not args.stage1_no_length_norm),
+            stage1_alpha_prior=args.stage1_alpha_prior,
+            stage2_alpha=float(alpha),
+            stage2_hybrid_prompt=bool(args.stage2_hybrid_prompt),
+            stage2_max_phrases=int(args.stage2_max_phrases),
+        )
+
+        # annotate summary with sweep params
+        metrics = dict(metrics)
+        metrics["sweep_alpha"] = float(alpha)
+        metrics["sweep_max_phrases"] = int(args.stage2_max_phrases)
+        metrics["sweep_hybrid_prompt"] = int(bool(args.stage2_hybrid_prompt))
+        all_summaries.append(metrics)
+
+        print("\n==== FINAL (alpha={:g}) ====".format(alpha))
+        print(json.dumps(metrics, indent=2))
+
+    # Optional: write JSONL summaries for quick plotting
+    if args.sweep_out_jsonl.strip():
+        path = args.sweep_out_jsonl.strip()
+        with open(path, "a", encoding="utf-8") as f:
+            for row in all_summaries:
+                f.write(json.dumps(row) + "\n")
+        logger.info("Wrote sweep summaries to %s", path)
 
 
 if __name__ == "__main__":

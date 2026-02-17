@@ -140,3 +140,18 @@ def selection_accuracy_given_gold_in_mined(pred: str, mined: List[str], golds: L
     if pred and golds:
         pred_is_gold = any(normalize_answer(pred) == normalize_answer(g) for g in golds)
     return gold_in, pred_is_gold
+
+
+def parse_float_list(s: str) -> List[float]:
+    # supports "0.1,0.2,0.4" or "[0.1, 0.2]" or "0.1 0.2"
+    if not s:
+        return []
+    s = s.strip()
+    s = s.strip("[]()")
+    parts = [p.strip() for p in s.replace(",", " ").split()]
+    out: List[float] = []
+    for p in parts:
+        if not p:
+            continue
+        out.append(float(p))
+    return out
