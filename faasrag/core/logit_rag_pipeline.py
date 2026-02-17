@@ -98,6 +98,9 @@ def compute_semantic_logit_bias_from_passages(
 
     token_ids = idx.detach().cpu().tolist()
     token_vals = vals.detach().cpu().tolist()
+    if len(token_ids) == 0:
+        print("No tokens with positive bias scores, returning empty bias.")
+        return {}
     return {int(t): float(v) for t, v in zip(token_ids, token_vals)}
 
 class SparseAddBiasProcessor(LogitsProcessor):
