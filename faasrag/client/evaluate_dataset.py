@@ -268,7 +268,7 @@ def evaluate(
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, default="logit", choices=["llm", "prompt", "logit"])
+    parser.add_argument("--prompt", type=str, default="logit", choices=["llm", "prompt", "logit"])
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl", help="Path to dataset (jsonl)")
     parser.add_argument("--limit", type=int, default=1000, help="Optional limit for quick runs (0 = all)")
     parser.add_argument("--out_csv", type=str, default="dataset_eval.csv", help="CSV path (empty disables)")
@@ -290,11 +290,11 @@ def main(cfg: RagServiceConfig):
         cfg.prompt_build_method = "LLM_ONLY"
     elif args.mode == "prompt":
         top_k = 5
-        cfg.prompt_build_method = "QA_STRICT"  # for fairness vs stage-1
+        cfg.prompt_build_method = "QA_OPEN"  # for fairness vs stage-1
     elif args.mode == "logit":
         top_k = 10
         # prompt_build_method isn't used for stage-1, but keep it consistent
-        cfg.prompt_build_method = "QA_STRICT"
+        cfg.prompt_build_method = "QA_OPEN"
     else:
         raise ValueError(f"Invalid mode {args.mode}")
 
