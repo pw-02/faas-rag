@@ -343,7 +343,7 @@ def main(cfg: RagServiceConfig):
         cfg.prompt_build_method = "LLM_ONLY"
     elif args.mode == "prompt_rag":
         top_k = 5
-        cfg.prompt_build_method = "QA_STRICT"  # for fairness vs stage-1
+        cfg.prompt_build_method = "QA_OPEN"  # for fairness vs stage-1
     elif args.mode == "logit_rag_stage1":
         top_k = 500
         # prompt_build_method isn't used for stage-1, but keep it consistent
