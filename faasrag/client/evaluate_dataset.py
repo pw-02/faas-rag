@@ -486,7 +486,7 @@ def main(cfg: RagServiceConfig):
         stage1_alpha_prior=args.stage1_alpha_prior,
         stage2_alpha=args.stage2_alpha,
         stage2_hybrid_prompt=args.stage2_hybrid_prompt,
-        stag2_max_phrases=args.stage2_max_phrases,
+        stage2_max_phrases=args.stage2_max_phrases,
     )
 
     print("\n==== FINAL ====")
