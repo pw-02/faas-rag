@@ -4,7 +4,7 @@ import os
 import re
 import string
 from collections import Counter
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional
 
 
 
@@ -114,3 +114,29 @@ def metric_max_over_ground_truths(metric_fn, prediction: str, ground_truths: Ite
         ground_truths = [""]
     scores = [metric_fn(prediction, gt) for gt in ground_truths]
     return max(scores)
+
+
+def oracle_em_from_mined(mined: List[str], golds: List[str]) -> bool:
+    """
+    True if ANY mined candidate exactly matches ANY gold answer (after normalization).
+    """
+    if not mined or not golds:
+        return False
+    mined_norm = {normalize_answer(m) for m in mined if str(m).strip()}
+    gold_norm = {normalize_answer(g) for g in golds if str(g).strip()}
+    return any(g in mined_norm for g in gold_norm)
+
+
+def selection_accuracy_given_gold_in_mined(pred: str, mined: List[str], golds: List[str]) -> Tuple[bool, bool]:
+    """
+    Returns:
+      (gold_in_mined, pred_is_gold)
+    Where:
+      gold_in_mined: oracle_em_from_mined(...)
+      pred_is_gold: prediction exactly matches a gold (after normalization)
+    """
+    gold_in = oracle_em_from_mined(mined, golds)
+    pred_is_gold = False
+    if pred and golds:
+        pred_is_gold = any(normalize_answer(pred) == normalize_answer(g) for g in golds)
+    return gold_in, pred_is_gold

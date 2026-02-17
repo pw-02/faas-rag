@@ -62,8 +62,6 @@ def model_selected_gold(best_candidate: str, golds: List[str]) -> bool:
         return False
     b = normalize_answer(best_candidate)
     return any(b == normalize_answer(g) for g in golds)
-
-
 def evaluate(
     pipeline: RagPipeline,
     examples: List[Dict[str, Any]],
@@ -125,6 +123,12 @@ def evaluate(
     stage2_n = 0
     stage2_mined_hit_sum = 0
     stage2_gold_in_mined_sum = 0
+
+    # NEW: stage2 oracle + selection-given-oracle
+    stage2_oracle_hits = 0
+    stage2_oracle_total = 0
+    stage2_select_hits_given_oracle = 0
+    stage2_select_total_given_oracle = 0
 
     subset = examples[:limit] if limit else examples
     pbar = tqdm(subset, total=len(subset), desc=f"Evaluating ({mode})", dynamic_ncols=True)
@@ -230,8 +234,14 @@ def evaluate(
         # Stage2 diagnostic flags
         mined_hit = False
         gold_in_mined = False
+
+        # NEW: stage2 oracle + selection-given-oracle
+        oracle_em_from_mined = False
+        selected_gold_given_oracle = False
+
         if mode == "logit_rag_stage2":
             stage2_n += 1
+
             mined = out.get("mined_candidates") or []
             mined_norm = [normalize_answer(str(x)) for x in mined]
             mined_norm = [x for x in mined_norm if x]
@@ -241,11 +251,22 @@ def evaluate(
 
             gold_norms = [normalize_answer(str(g)) for g in golds]
             gold_norms = [g for g in gold_norms if g]
+
             mined_set = set(mined_norm)
             gold_in_mined = any(g in mined_set for g in gold_norms)
 
             stage2_mined_hit_sum += int(mined_hit)
             stage2_gold_in_mined_sum += int(gold_in_mined)
+
+            # -------- NEW METRICS --------
+            stage2_oracle_total += 1
+            oracle_em_from_mined = gold_in_mined  # exact match oracle, normalized
+            stage2_oracle_hits += int(oracle_em_from_mined)
+
+            if oracle_em_from_mined:
+                stage2_select_total_given_oracle += 1
+                selected_gold_given_oracle = any(pred_norm == g for g in gold_norms)
+                stage2_select_hits_given_oracle += int(selected_gold_given_oracle)
 
         # Accumulate totals
         n += 1
@@ -286,8 +307,13 @@ def evaluate(
                     tqdm.write("top5_candidates: " + json.dumps(candidates[:5], ensure_ascii=False)[:600])
 
             if mode == "logit_rag_stage2":
-                tqdm.write(f"bias_tokens: {out.get('bias_tokens', 0)} alpha: {out.get('alpha', 0.0)} hybrid_prompt: {stage2_hybrid_prompt}")
-                tqdm.write(f"mined_hit: {mined_hit} gold_in_mined: {gold_in_mined}")
+                tqdm.write(
+                    f"bias_tokens: {out.get('bias_tokens', 0)} alpha: {out.get('alpha', 0.0)} hybrid_prompt: {stage2_hybrid_prompt}"
+                )
+                tqdm.write(
+                    f"mined_hit: {mined_hit} gold_in_mined: {gold_in_mined} "
+                    f"oracle_em_from_mined: {oracle_em_from_mined} selected_gold_given_oracle: {selected_gold_given_oracle}"
+                )
                 mined = out.get("mined_candidates") or []
                 if mined:
                     tqdm.write("mined[:10]: " + json.dumps(mined[:10], ensure_ascii=False)[:400])
@@ -310,6 +336,12 @@ def evaluate(
             if mode == "logit_rag_stage2" and stage2_n > 0:
                 postfix["mined_hit"] = f"{(stage2_mined_hit_sum/stage2_n):.2f}"
                 postfix["gold_in_m"] = f"{(stage2_gold_in_mined_sum/stage2_n):.2f}"
+                # NEW postfix bits
+                postfix["oracle"] = f"{(stage2_oracle_hits/stage2_oracle_total):.2f}" if stage2_oracle_total else "0.00"
+                postfix["sel|oracle"] = (
+                    f"{(stage2_select_hits_given_oracle/stage2_select_total_given_oracle):.2f}"
+                    if stage2_select_total_given_oracle else "0.00"
+                )
             pbar.set_postfix(postfix)
 
         # CSV row
@@ -359,6 +391,9 @@ def evaluate(
             row["hybrid_prompt"] = int(bool(stage2_hybrid_prompt))
             row["mined_hit"] = int(mined_hit)
             row["gold_in_mined"] = int(gold_in_mined)
+            # NEW per-row fields
+            row["oracle_em_from_mined"] = int(oracle_em_from_mined)
+            row["selected_gold_given_gold_in_mined"] = int(selected_gold_given_oracle)
 
         append_csv_row(out_csv, row)
 
@@ -390,17 +425,22 @@ def evaluate(
         )
 
     if mode == "logit_rag_stage2":
-        #mined_hit_rate: prediction contains (any of) mined candidates (substring match on normalized text)
-        #gold_in_mined_rate: any gold answer exactly equals a mined candidate (normalized)
-
-        summary["mined_hit_rate"] = (stage2_mined_hit_sum / stage2_n) if stage2_n else 0.0 
+        summary["mined_hit_rate"] = (stage2_mined_hit_sum / stage2_n) if stage2_n else 0.0
         summary["gold_in_mined_rate"] = (stage2_gold_in_mined_sum / stage2_n) if stage2_n else 0.0
+
+        # NEW: oracle + selection given oracle
+        summary["oracle_em_from_mined"] = (stage2_oracle_hits / stage2_oracle_total) if stage2_oracle_total else 0.0
+        summary["selection_accuracy_given_gold_in_mined"] = (
+            (stage2_select_hits_given_oracle / stage2_select_total_given_oracle)
+            if stage2_select_total_given_oracle else 0.0
+        )
+        summary["selection_total_where_gold_in_mined"] = float(stage2_select_total_given_oracle)
+
         summary["alpha"] = float(stage2_alpha)
         summary["max_phrases_for_bias"] = int(stage2_max_phrases)
         summary["hybrid_prompt"] = int(bool(stage2_hybrid_prompt))
 
     return summary
-
 
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
