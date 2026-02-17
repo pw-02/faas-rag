@@ -233,7 +233,7 @@ def main(cfg: RagServiceConfig):
         prompt_build_method=cfg.prompt_build_method,
         max_ctx_chars=cfg.max_ctx_chars,
         cache_cfg=None,
-        top_k=0, # set to 0 for no retrieval (LLM-only), >0 for RAG
+        top_k=cfg.top_k, # set to 0 for no retrieval (LLM-only), >0 for RAG
         logger=logger,
         retrieve_only=False,
         always_log_results=False,
