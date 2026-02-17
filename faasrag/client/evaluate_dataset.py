@@ -9,8 +9,10 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import logging
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
@@ -571,12 +573,17 @@ def main(cfg: RagServiceConfig):
         print("\n==== FINAL (alpha={:g}) ====".format(alpha))
         print(json.dumps(metrics, indent=2))
 
-    # Optional: write JSONL summaries for quick plotting
+    # Optional: write CSV summaries for quick plotting
     if args.sweep_out_jsonl.strip():
         path = args.sweep_out_jsonl.strip()
-        with open(path, "a", encoding="utf-8") as f:
+        file_exists = os.path.exists(path)
+        with open(path, "a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=all_summaries[0].keys())
+            # Write header once
+            if not file_exists:
+                writer.writeheader()
             for row in all_summaries:
-                f.write(json.dumps(row) + "\n")
+                writer.writerow(row)
         logger.info("Wrote sweep summaries to %s", path)
 
 
