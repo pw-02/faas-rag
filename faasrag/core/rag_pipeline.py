@@ -5,7 +5,6 @@ import re
 import math
 import collections
 from typing import Any, Optional
-
 import numpy as np
 from datetime import datetime, timezone
 from contextlib import contextmanager
