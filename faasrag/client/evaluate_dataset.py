@@ -14,6 +14,7 @@ from faasrag.core.utils import (
     f1_score,
     metric_max_over_ground_truths,
     append_csv_row,
+    normalize_answer,  # <-- make sure this exists in your utils.py
 )
 from faasrag.core.rag_pipeline import RagPipeline
 
@@ -38,6 +39,29 @@ def get_question_and_answers(ex: Dict[str, Any]) -> Tuple[str, List[str]]:
     return q, golds
 
 
+def gold_in_candidates(candidates: List[Dict[str, Any]], golds: List[str]) -> bool:
+    """
+    Candidate recall: does ANY gold answer appear (after normalization) in the mined/scored candidates?
+    """
+    if not candidates or not golds:
+        return False
+    cand_norm = {normalize_answer(str(c.get("candidate", ""))) for c in candidates}
+    for g in golds:
+        if normalize_answer(g) in cand_norm:
+            return True
+    return False
+
+
+def model_selected_gold(best_candidate: str, golds: List[str]) -> bool:
+    """
+    Selection accuracy: given gold is present in candidate list, did the model pick a gold?
+    """
+    if not best_candidate or not golds:
+        return False
+    b = normalize_answer(best_candidate)
+    return any(b == normalize_answer(g) for g in golds)
+
+
 def evaluate(
     pipeline: RagPipeline,
     examples: List[Dict[str, Any]],
@@ -56,7 +80,7 @@ def evaluate(
     """
     mode:
       - "llm"              -> pipeline.run(q) with top_k=0
-      - "prompt_rag"       -> pipeline.run(q) with top_k>0
+      - "prompt_rag"       -> pipeline.run(q) with top_k>0 (your cfg.prompt_build_method controls strict/open)
       - "logit_rag_stage1" -> pipeline.run_logit_rag_stage1(q, ...)
     """
     mode = (mode or "").strip().lower()
@@ -83,10 +107,11 @@ def evaluate(
     stage1_mine_sum = 0.0
     stage1_score_sum = 0.0
 
-    candidate_recall_hits = 0
-    selection_hits = 0
-    selection_total = 0
-
+    # diagnostics for stage-1 hypothesis
+    cand_recall_hits = 0          # gold appears in candidate list?
+    cand_recall_total = 0         # number of evaluated examples (for stage-1 only)
+    select_hits = 0               # model picked gold among candidates
+    select_total = 0              # only when gold is present
 
     subset = examples[:limit] if limit else examples
     pbar = tqdm(subset, total=len(subset), desc=f"Evaluating ({mode})", dynamic_ncols=True)
@@ -101,7 +126,7 @@ def evaluate(
         if not q:
             continue
 
-        # --- run selected experiment mode ---
+        # run selected mode
         if mode == "logit_rag_stage1":
             out = pipeline.run_logit_rag_stage1(
                 q,
@@ -111,7 +136,8 @@ def evaluate(
                 alpha_prior=stage1_alpha_prior,
             )
         else:
-            out = pipeline.run_prompt_rag(q)
+            # prompt_rag + llm are both handled by pipeline.run()
+            out = pipeline.run(q)
 
         pred = (out.get("raw_answer") or out.get("answer") or "").strip()
         em = metric_max_over_ground_truths(exact_match_score, pred, golds)
@@ -121,7 +147,7 @@ def evaluate(
         retrieved_doc_ids = out.get("retrieved_doc_ids") or []
         finish_reason = out.get("finish_reason", "")
 
-        # tokens (stage1 may not track tokens; will be 0 unless you add counting)
+        # tokens
         prompt_tokens = int(out.get("prompt_tokens", 0) or 0)
         completion_tokens = int(out.get("completion_tokens", 0) or 0)
         total_tokens = int(out.get("total_tokens", 0) or 0)
@@ -133,11 +159,10 @@ def evaluate(
         docstore_s = float(timings.get("docstore_s", 0.0) or 0.0)
         prompt_s = float(timings.get("prompt_s", 0.0) or 0.0)
         decode_s = float(timings.get("decode_s", 0.0) or 0.0)
-
         ttft_s = float(timings.get("ttft_s", 0.0) or 0.0)
         total_s = float(timings.get("total_s", 0.0) or 0.0)
 
-        # stage1-only timings if you used names from my earlier pipeline code
+        # stage1-only timings (as in your pipeline)
         mine_s = float(timings.get("candidate_mine_s", 0.0) or 0.0)
         cand_score_s = float(timings.get("candidate_score_s", 0.0) or 0.0)
 
@@ -145,7 +170,7 @@ def evaluate(
         cache_hits = int(out.get("cache_hits", 0) or 0)
         cache_misses = int(out.get("cache_misses", 0) or 0)
 
-        # accumulate
+        # accumulate core metrics
         em_sum += float(em)
         f1_sum += float(f1)
         n += 1
@@ -164,28 +189,37 @@ def evaluate(
         stage1_mine_sum += mine_s
         stage1_score_sum += cand_score_s
 
+        # stage-1 diagnostics (only meaningful for that mode)
+        candidates = out.get("candidates") or []
+        best = out.get("best_candidate", "")
+        has_gold = False
+        selected_gold = False
+
+        if mode == "logit_rag_stage1":
+            cand_recall_total += 1
+            has_gold = gold_in_candidates(candidates, golds)
+            cand_recall_hits += int(has_gold)
+
+            if has_gold:
+                select_total += 1
+                selected_gold = model_selected_gold(best, golds)
+                select_hits += int(selected_gold)
+
         if n <= print_first_n:
             tqdm.write("\n---")
             tqdm.write(f"mode: {mode}  id: {ex_id}")
             tqdm.write(f"Q: {q}")
-            tqdm.write(f"M: {messages}")
-
             tqdm.write(f"PRED: {pred}")
             tqdm.write(f"GOLDS: {golds}")
             tqdm.write(f"EM={em} F1={f1:.3f}")
             tqdm.write(f"tokens: prompt={prompt_tokens} completion={completion_tokens} total={total_tokens}")
             tqdm.write(f"timings_s: total={total_s:.3f} ttft={ttft_s:.3f} decode={decode_s:.3f}")
             if mode == "logit_rag_stage1":
-                best = out.get("best_candidate", "")
+                tqdm.write(f"gold_in_candidates: {has_gold}  selected_gold: {selected_gold}")
                 tqdm.write(f"best_candidate: {best}")
-                # optionally show top-5 candidates by score
-                cands = out.get("candidates") or []
-                if cands:
-                    top5 = cands[:5]
-                    tqdm.write("top5_candidates: " + json.dumps(top5, ensure_ascii=False)[:500])
-
-            # printing messages can be huge; keep optional
-            # tqdm.write(f"messages: {str(messages)[:500]}")
+                if candidates:
+                    tqdm.write("top5_candidates: " + json.dumps(candidates[:5], ensure_ascii=False)[:600])
+            # tqdm.write(f"messages: {str(messages)[:500]}")  # optional debug
 
         if tqdm_update_every > 0 and n % tqdm_update_every == 0:
             postfix = {
@@ -194,8 +228,10 @@ def evaluate(
                 "tot_s": f"{(total_s_sum/n):.2f}",
             }
             if mode == "logit_rag_stage1":
-                postfix["mine_s"] = f"{(stage1_mine_sum/n):.2f}"
-                postfix["score_s"] = f"{(stage1_score_sum/n):.2f}"
+                cand_rec = (cand_recall_hits / cand_recall_total) if cand_recall_total else 0.0
+                sel_acc = (select_hits / select_total) if select_total else 0.0
+                postfix["cand@"] = f"{cand_rec:.2f}"
+                postfix["sel@"] = f"{sel_acc:.2f}"
             else:
                 postfix["tok"] = f"{(total_tok_sum/n):.0f}"
             pbar.set_postfix(postfix)
@@ -234,11 +270,15 @@ def evaluate(
             "cache_used": cache_used,
             "cache_hits": cache_hits,
             "cache_misses": cache_misses,
+
+            # stage-1 diagnostics (filled for stage-1, otherwise 0/empty)
+            "gold_in_candidates": int(has_gold),
+            "selected_gold_given_present": int(selected_gold),
         }
 
         if mode == "logit_rag_stage1":
-            row["best_candidate"] = out.get("best_candidate", "")
-            row["num_candidates_scored"] = len(out.get("candidates") or [])
+            row["best_candidate"] = best
+            row["num_candidates_scored"] = len(candidates)
 
         append_csv_row(out_csv, row)
 
@@ -266,13 +306,20 @@ def evaluate(
         "mean_candidate_mine_s": mean(stage1_mine_sum),
         "mean_candidate_score_s": mean(stage1_score_sum),
     }
+
+    if mode == "logit_rag_stage1":
+        summary["candidate_recall"] = (cand_recall_hits / cand_recall_total) if cand_recall_total else 0.0
+        summary["selection_accuracy_given_present"] = (select_hits / select_total) if select_total else 0.0
+        summary["oracle_em_from_candidates"] = (cand_recall_hits / cand_recall_total) if cand_recall_total else 0.0
+        summary["selection_total_where_gold_present"] = int(select_total)
+
     return summary
 
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, default="prompt_rag", choices=["llm", "prompt_rag", "logit_rag_stage1"])
+    parser.add_argument("--mode", type=str, default="logit_rag_stage1", choices=["llm", "prompt_rag", "logit_rag_stage1"])
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl", help="Path to dataset (jsonl)")
     parser.add_argument("--limit", type=int, default=1000, help="Optional limit for quick runs (0 = all)")
     parser.add_argument("--out_csv", type=str, default="dataset_eval.csv", help="CSV path (empty disables)")
@@ -290,26 +337,23 @@ def main(cfg: RagServiceConfig):
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("evaluate_dataset")
 
-    # Configure top_k based on mode:
-    # - llm: force top_k=0
-    # - prompt_rag: use cfg.top_k (must be >0)
-    # - logit_rag_stage1: use cfg.top_k (must be >0)
+    # Configure top_k + prompt_build_method based on mode
     if args.mode == "llm":
         top_k = 0
         cfg.prompt_build_method = "LLM_ONLY"
     elif args.mode == "prompt_rag":
-        top_k = 5
-        cfg.prompt_build_method = "QA_STRICT"
+        top_k = int(getattr(cfg, "top_k", 5) or 5)
+        cfg.prompt_build_method = "QA_STRICT"  # for fairness vs stage-1
     elif args.mode == "logit_rag_stage1":
-        top_k = 50
+        top_k = int(getattr(cfg, "top_k", 50) or 50)
+        # prompt_build_method isn't used for stage-1, but keep it consistent
         cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
     else:
         raise ValueError(f"Invalid mode {args.mode}")
 
     if args.out_csv.strip():
-        #append mode to start of filename before extension
-        args.out_csv = args.mode + "_" + args.out_csv
-        logger.info(f"Output CSV enabled: {args.out_csv}")
+        args.out_csv = f"{args.mode}_{args.out_csv}"
+        logger.info("Output CSV enabled: %s", args.out_csv)
 
     pipeline = RagPipeline(
         generator_cfg=cfg.generator,
