@@ -327,8 +327,8 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--tqdm_update_every", type=int, default=10)
 
     # Stage-1 knobs
-    parser.add_argument("--stage1_max_candidates", type=int, default=40)
-    parser.add_argument("--stage1_score_top_n", type=int, default=20)
+    parser.add_argument("--stage1_max_candidates", type=int, default=20)
+    parser.add_argument("--stage1_score_top_n", type=int, default=10)
     parser.add_argument("--stage1_alpha_prior", type=float, default=0.0)
     parser.add_argument("--stage1_no_length_norm", action="store_true")
 
@@ -345,7 +345,7 @@ def main(cfg: RagServiceConfig):
         top_k = 5
         cfg.prompt_build_method = "QA_OPEN"  # for fairness vs stage-1
     elif args.mode == "logit_rag_stage1":
-        top_k = 500
+        top_k = 10
         # prompt_build_method isn't used for stage-1, but keep it consistent
         cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
     else:
