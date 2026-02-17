@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 import time
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Set
 import numpy as np
 from datetime import datetime, timezone
 
@@ -25,101 +25,110 @@ from contextlib import contextmanager
 from transformers import LogitsProcessor, LogitsProcessorList
 import torch
 
-
-
-
 @contextmanager
 def timed(store: dict, key: str):
     t0 = time.perf_counter()
     yield
     store[key] = time.perf_counter() - t0
-    
-@torch.no_grad()
-def _passage_to_vector_mean_input_emb(model, tokenizer, text: str, max_tokens: int) -> torch.Tensor:
-    """Mean of the model's input embeddings for tokens in the passage -> [H] normalized."""
-    device = next(model.parameters()).device
-    ids = tokenizer(
-        text,
-        return_tensors="pt",
-        add_special_tokens=False,
-        truncation=True,
-        max_length=max_tokens,
-    )["input_ids"].to(device)  # [1, T]
-    emb = model.get_input_embeddings()(ids)  # [1, T, H]
-    d = emb.mean(dim=1).squeeze(0)           # [H]
-    d = d / (d.norm(p=2) + 1e-12)
-    return d
 
 
 @torch.no_grad()
-def compute_semantic_logit_bias_from_passages(
-    model,
+def build_doc_log_prior(
+    retrieved_chunks: List[str],
     tokenizer,
-    passages: list[Passage],
-    top_n: int,
-    per_passage_max_tokens: int,
-    clamp_negative: bool = True,
-) -> dict[int, float]:
+    mu: float = 1e-3,
+    max_length_per_chunk: int = 512,
+    ignore_special_tokens: bool = True,
+) -> torch.Tensor:
     """
-    Online semantic bias:
-      - build one aggregated passage vector d_agg (mean of passage vectors)
-      - score all vocab tokens by cosine similarity to d_agg
-      - keep top_n positive scores
-    Returns sparse dict: token_id -> score
-    """
-    # print(f"Computing semantic logit bias from {len(passages)} passages with top_n={top_n} and per_passage_max_tokens={per_passage_max_tokens}...")
-   
-    device = next(model.parameters()).device
-    E = model.get_input_embeddings().weight              # [V, H]
-    E_norm = E / (E.norm(dim=1, keepdim=True) + 1e-12)   # [V, H]
+    Build log(p_doc) over vocab from retrieved chunks.
 
-    # Aggregate passage vectors
-    ds = []
-    for p in passages:
-        if not p.text:
+    Returns:
+        log_p_doc: FloatTensor [V] on CPU
+    """
+    vocab_size = tokenizer.vocab_size
+    counts = np.zeros(vocab_size, dtype=np.float64)
+
+    special_ids: Set[int] = set()
+    if ignore_special_tokens:
+        special_ids = set(getattr(tokenizer, "all_special_ids", []))
+
+    for text in retrieved_chunks:
+        if not text:
             continue
-        ds.append(_passage_to_vector_mean_input_emb(model, tokenizer, p.text, per_passage_max_tokens))
+        enc = tokenizer(
+            text,
+            add_special_tokens=False,
+            truncation=True,
+            max_length=max_length_per_chunk,
+            return_attention_mask=False,
+        )
+        token_ids = enc["input_ids"]
+        for tid in token_ids:
+            if ignore_special_tokens and tid in special_ids:
+                continue
+            counts[int(tid)] += 1.0
 
-    if not ds:
-        print("No valid passages with text found for bias computation, returning empty bias.")
+    counts = counts + float(mu)
+    p_doc = counts / counts.sum()
+    log_p_doc = torch.tensor(np.log(p_doc), dtype=torch.float32)  # CPU [V]
+    return log_p_doc
+
+
+def log_prior_to_sparse_bias(
+    log_p_doc: torch.Tensor,
+    top_n: int,
+    ignore_token_ids: Optional[Set[int]] = None,
+    zero_center: bool = True,
+) -> Dict[int, float]:
+    """
+    Convert dense log prior [V] into sparse dict token_id -> log(p_doc[token]).
+
+    We keep only top_n tokens by log-probability.
+    Optionally zero-center the log prior to avoid globally depressing logits.
+    """
+    if log_p_doc is None:
+        return {}
+    if zero_center:
+        log_p_doc = log_p_doc - log_p_doc.mean()
+
+    V = int(log_p_doc.shape[0])
+    top_n = int(min(max(top_n, 0), V))
+    if top_n == 0:
         return {}
 
-    d_agg = torch.stack(ds, dim=0).mean(dim=0)           # [H]
-    d_agg = d_agg / (d_agg.norm(p=2) + 1e-12)
+    vals, idx = torch.topk(log_p_doc, k=top_n)  # highest log-prob tokens
+    ignore_token_ids = ignore_token_ids or set()
 
-    # Similarity to all vocab tokens -> [V]
-    scores = E_norm @ d_agg
+    bias: Dict[int, float] = {}
+    for tid, v in zip(idx.tolist(), vals.tolist()):
+        if int(tid) in ignore_token_ids:
+            continue
+        bias[int(tid)] = float(v)
+    return bias
 
-    vals, idx = torch.topk(scores, k=top_n)
-    if clamp_negative:
-        keep = vals > 0
-        vals = vals[keep]
-        idx = idx[keep]
-
-    token_ids = idx.detach().cpu().tolist()
-    token_vals = vals.detach().cpu().tolist()
-    if len(token_ids) == 0:
-        print("No tokens with positive bias scores, returning empty bias.")
-        return {}
-    return {int(t): float(v) for t, v in zip(token_ids, token_vals)}
 
 class SparseAddBiasProcessor(LogitsProcessor):
-    """Adds alpha * bias[token_id] to logits each step."""
-    def __init__(self, bias: dict[int, float], alpha: float, device):
+    """
+    Adds alpha * bias[token_id] to logits each step.
+    bias is a sparse dict {token_id: bias_value}.
+    """
+    def __init__(self, bias: Dict[int, float], alpha: float, device):
         self.alpha = float(alpha)
         if not bias:
             self.token_ids = None
             self.bias_vals = None
             return
+
         self.token_ids = torch.tensor(list(bias.keys()), dtype=torch.long, device=device)
         self.bias_vals = torch.tensor(list(bias.values()), dtype=torch.float32, device=device)
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if self.token_ids is None:
             return scores
+        # scores: [batch, vocab]
         scores[:, self.token_ids] += self.alpha * self.bias_vals
         return scores
-    
 
 
 class RagPipeline:
@@ -247,6 +256,8 @@ class RagPipeline:
         cache_used = False
         cache_hits = 0
         cache_misses = 0
+        # ALWAYS define bias so result logging never crashes
+        bias: dict[int, float] = {}
 
         # -------------------------
         # Retrieval
@@ -296,6 +307,7 @@ class RagPipeline:
 
                 retrieved_doc_ids = [str(p.pid) for p in passages]
 
+
         # -------------------------
         # Early exit (retrieve-only)
         # -------------------------
@@ -341,14 +353,24 @@ class RagPipeline:
                         "Logit-RAG requires generator.model and generator.tokenizer (HF model). "
                         "Your current generator wrapper may be vLLM-only; add a HF path or expose these."
                     )
-                bias = compute_semantic_logit_bias_from_passages(
-                    self.generator.model,
+                retrieved_texts = [p.text for p in passages if p.text]
+
+                log_p_doc  = build_doc_log_prior(
+                    retrieved_texts,
                     self.generator.tokenizer,
-                    passages,
-                    top_n=self.logit_top_n,
-                    per_passage_max_tokens=self.logit_passage_max_tokens,
-                    clamp_negative=False,  # allow negative scores, letting the generator's LM head decide how to use them
+                    mu=1e-3,
+                    max_length_per_chunk=self.logit_passage_max_tokens,
+                    ignore_special_tokens=True,
                 )
+                special_ids = set(getattr(self.generator.tokenizer, "all_special_ids", []))
+                
+                bias = log_prior_to_sparse_bias(
+                    log_p_doc=log_p_doc,
+                    top_n=self.logit_top_n,
+                    ignore_token_ids=special_ids,
+                    zero_center=True,
+                )
+
                 # print(f"Computed logit bias for {len(bias)} tokens from top-{len(passages)} passages. Sample bias: {list(bias.items())[:10]}")
 
             # 3) Generate with logits processor
