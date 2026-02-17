@@ -290,10 +290,14 @@ def main(cfg: RagServiceConfig):
     if args.mode == "llm":
         top_k = 0
         cfg.prompt_build_method = "LLM_ONLY"
-    else:
+    elif args.mode == "prompt_rag":
         top_k = int(cfg.top_k)
-        
         cfg.prompt_build_method = cfg.prompt_build_method or "QA_STRICT"
+    elif args.mode == "logit_rag_stage1":
+        top_k = int(cfg.top_k)
+        cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
+    else:
+        raise ValueError(f"Invalid mode {args.mode}")
 
     if args.out_csv.strip():
         #append mode to start of filename before extension

@@ -75,6 +75,8 @@ class RagPipeline:
             self.prompt_build_method = PromptBuildMethodType.FEW_SHOT
         elif prompt_build_method.upper() == "LLM_ONLY":
             self.prompt_build_method = PromptBuildMethodType.LLM_ONLY
+        elif prompt_build_method.upper() == "LOGIT_RAG_STAGE1":
+            self.prompt_build_method = PromptBuildMethodType.LOGIT_RAG_STAGE1
         else:
             raise ValueError(f"Invalid prompt_build_method {prompt_build_method}")
 
