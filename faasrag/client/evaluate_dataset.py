@@ -275,8 +275,8 @@ def main(cfg: RagServiceConfig):
 
     # logit knobs
     parser.add_argument("--logit_passage_max_tokens", type=int, default=256)
-    parser.add_argument("--logit_top_n", type=int, default=20)
-    parser.add_argument("--logit_alpha", type=float, default=20.0)
+    parser.add_argument("--logit_top_n", type=int, default=256)
+    parser.add_argument("--logit_alpha", type=float, default=2.0)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
