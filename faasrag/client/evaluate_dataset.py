@@ -106,7 +106,7 @@ def evaluate(
                 alpha_prior=stage1_alpha_prior,
             )
         else:
-            out = pipeline.run(q)
+            out = pipeline.run_prompt_rag(q)
 
         pred = (out.get("raw_answer") or out.get("answer") or "").strip()
         em = metric_max_over_ground_truths(exact_match_score, pred, golds)
