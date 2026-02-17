@@ -90,6 +90,8 @@ def evaluate(
         # IMPORTANT: use RAW answer for metrics (do not truncate)
         pred = (out.get("raw_answer") or out.get("answer") or "").strip()
 
+        messages = out.get("messages") or []
+
         em = metric_max_over_ground_truths(exact_match_score, pred, golds)
         f1 = metric_max_over_ground_truths(f1_score, pred, golds)
 
@@ -143,7 +145,7 @@ def evaluate(
             tqdm.write(f"EM={em} F1={f1:.3f}")
             tqdm.write(f"tokens: prompt={prompt_tokens} completion={completion_tokens} total={total_tokens}")
             tqdm.write(f"timings_s: total={total_s:.3f} ttft={ttft_s:.3f} decode={decode_s:.3f}")
-
+            tqdm.write(f"messages: {len(messages)}")
         # Update tqdm postfix occasionally (avoid slowing loop)
         if tqdm_update_every > 0 and n % tqdm_update_every == 0:
             pbar.set_postfix({

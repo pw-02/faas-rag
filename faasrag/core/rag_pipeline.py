@@ -59,8 +59,10 @@ class RagPipeline:
         self.top_k = int(top_k)
         if self.top_k < 0:
             raise ValueError("top_k must be >= 0")
-        if self.top_k == 0 or self.retrieve_only:
+        elif self.top_k == 0 or self.retrieve_only:
             self.logger.warning("top_k=0 with retrieve_only=True means no retrieval will be performed, pipeline will rely entirely on the generator's prior knowledge.")
+        else:
+                self.logger.info("top_k=%d: Retrieval will be performed with up to top_k passages included in the prompt.", self.top_k)
         
         if prompt_build_method.upper() == "QA_STRICT":
             self.prompt_build_method = PromptBuildMethodType.QA_STRICT
@@ -79,15 +81,19 @@ class RagPipeline:
         self.generator = None
 
         # 1) Embedder
+        self.logger.info("Initializing embedder...")
         self.embedder = build_embedder(embedder_cfg)
 
         # 2) Index
+        self.logger.info("Loading index...")
         self.index = load_index(index_cfg, artifact_dir=artifact_dir)
 
         # 3) Dim sanity
+        self.logger.info("Checking dimension sanity...")
         dim = self.sanity_check_dimensions()
 
         # 4) Docstore
+        self.logger.info("Loading docstore...")
         self.docstore = load_docstore(docstore_cfg, artifact_dir=artifact_dir, backend=docstore_backend)
 
         # 5) Cache
@@ -96,6 +102,7 @@ class RagPipeline:
 
         # 6) Generator
         if not self.retrieve_only:
+            self.logger.info("Initializing generator...")
             self.generator = build_generator(generator_cfg)
 
         self.logger.info(
@@ -203,7 +210,7 @@ class RagPipeline:
         # -------------------------
         with timed(timings, "prompt_s"):
              messages, _ = build_rag_messages(question, passages, self.prompt_build_method)
-
+            
         # -------------------------
         # Generation
         # -------------------------
@@ -226,6 +233,7 @@ class RagPipeline:
         
         reesult = {
             "question": question,
+            "messages": messages,
             "answer": answer, #extract_short_answer(answer, max_chars=20),
             "retrieved_doc_ids": retrieved_doc_ids,
             "prompt_tokens": prompt_tokens,
