@@ -571,7 +571,6 @@ def main(cfg: RagServiceConfig):
             stage1_alpha_prior=args.stage1_alpha_prior,
             stage2_alpha=float(alpha),
             stage2_hybrid_prompt=bool(args.stage2_hybrid_prompt),
-            stage2_max_phrases=int(args.stage2_max_phrases),
             stage2_max_candidates=args.stage2_max_candidates,
             stage2_phrase_score_temperature=args.stage2_phrase_score_temperature,
             stage2_per_token_cap=args.stage2_per_token_cap,
@@ -582,7 +581,7 @@ def main(cfg: RagServiceConfig):
         # annotate summary with sweep params
         metrics = dict(metrics)
         metrics["sweep_alpha"] = float(alpha)
-        metrics["sweep_max_phrases"] = int(args.stage2_max_phrases)
+        metrics["sweep_max_candidates"] = int(args.stage2_max_candidates)
         metrics["sweep_hybrid_prompt"] = int(bool(args.stage2_hybrid_prompt))
         metrics["sweep_phrase_score_temperature"] = float(args.stage2_phrase_score_temperature)
         metrics["sweep_per_token_cap"] = float(args.stage2_per_token_cap)

@@ -278,9 +278,9 @@ class RagPipeline:
         self,
         candidates: list[tuple[str, float]],
         *,
-        per_token_cap: float = 2.0,
-        phrase_score_temperature: float = 1.0,
-        drop_junk_tokens: bool = True,
+        per_token_cap: float = 2.0, #Limits how much any single token’s logit can be boosted.
+        phrase_score_temperature: float = 1.0, #controls how sharp your phrase weights are. Higher temp => more even weights, lower temp => sharper focus on top candidates.
+        drop_junk_tokens: bool = True, #drop_junk_tokens: bool = True
     ) -> dict[int, float]:
         if not candidates:
             return {}
