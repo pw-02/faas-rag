@@ -12,7 +12,7 @@ import hydra
 from omegaconf import OmegaConf
 import torch
 from concurrent.futures import ThreadPoolExecutor
-from faasrag.core.rag_pipeline import RagPipeline
+from faasrag.core.prompt_rag_pipeline import RagPipeline
 from faasrag.core.args import RagServiceConfig
 import faasrag.protos.rag_pb2 as rag_pb2
 import faasrag.protos.rag_pb2_grpc as rag_pb2_grpc

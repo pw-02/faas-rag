@@ -4,7 +4,7 @@ from omegaconf import OmegaConf
 import torch
 
 from faasrag.core.args import RagServiceConfig
-from faasrag.core.rag_pipeline import RagPipeline
+from faasrag.core.prompt_rag_pipeline import RagPipeline
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):
