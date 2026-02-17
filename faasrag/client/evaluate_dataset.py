@@ -294,7 +294,7 @@ def main(cfg: RagServiceConfig):
         cfg.prompt_build_method = "LLM_ONLY"
     elif args.mode == "prompt_rag":
         top_k = 5
-        cfg.prompt_build_method = cfg.prompt_build_method or "QA_STRICT"
+        cfg.prompt_build_method = "QA_STRICT"
     elif args.mode == "logit_rag_stage1":
         top_k = 50
         cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
