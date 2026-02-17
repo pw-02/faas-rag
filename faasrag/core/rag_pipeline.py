@@ -693,15 +693,16 @@ class RagPipeline:
         prior_vals = (prior_vals / prior_sum) if prior_sum > 0 else (np.ones_like(prior_vals) / len(prior_vals))
 
         scored: list[dict[str, Any]] = []
+        
         with timed(timings, "candidate_score_s"):
             for i, (cand, _prior_unused) in enumerate(to_score):
                 completion = " " + cand.strip()
-                llm_score, p_tok, c_tok, t_tok = self.generator.score(
+                llm_score, p_tok, c_tok, t_tok = self.generator.score_chat(
                     scoring_messages,
                     completion,
                     length_normalize=False,  # keep your own normalization logic below
                 )
-                
+
                 # Stage1 is not “generation tokens,” it’s scoring compute. Counting tokens this way makes comparisons honest:
                 score_prompt_tok_sum += int(p_tok)
                 score_completion_tok_sum += int(c_tok)

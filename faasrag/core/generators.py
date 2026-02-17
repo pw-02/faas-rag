@@ -454,13 +454,13 @@ class HFCausalLMGenerator:
     from typing import Tuple
 
     @torch.no_grad()
+    
     def score(
         self,
         prompt: str,
         completion: str,
         *,
-        length_normalize: bool = False,
-    ) -> Tuple[float, int, int, int]:
+        length_normalize: bool = False,) -> Tuple[float, int, int, int]:
         """
         Returns:
         (log P(completion | prompt), prompt_tokens, completion_tokens, total_tokens_scored)
