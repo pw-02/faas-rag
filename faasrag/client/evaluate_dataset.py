@@ -345,7 +345,7 @@ def main(cfg: RagServiceConfig):
         top_k = 5
         cfg.prompt_build_method = "QA_OPEN"  # for fairness vs stage-1
     elif args.mode == "logit_rag_stage1":
-        top_k = 50
+        top_k = 10
         # prompt_build_method isn't used for stage-1, but keep it consistent
         cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
     else:
