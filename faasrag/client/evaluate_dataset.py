@@ -180,7 +180,6 @@ def evaluate(
         total_tok_sum += total_tokens
 
         embed_sum += embed_s
-
         ann_sum += ann_s
         docstore_sum += docstore_s
         prompt_build_sum += prompt_s
@@ -210,7 +209,6 @@ def evaluate(
             tqdm.write("\n---")
             tqdm.write(f"mode: {mode}  id: {ex_id}")
             tqdm.write(f"Q: {q}")
-            tqdm.write(f"M: {messages}")
             tqdm.write(f"PRED: {pred}")
             tqdm.write(f"GOLDS: {golds}")
             tqdm.write(f"EM={em} F1={f1:.3f}")
@@ -329,9 +327,9 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--tqdm_update_every", type=int, default=10)
 
     # Stage-1 knobs
-    parser.add_argument("--stage1_max_candidates", type=int, default=20)
-    parser.add_argument("--stage1_score_top_n", type=int, default=10)
-    parser.add_argument("--stage1_alpha_prior", type=float, default=0.8)
+    parser.add_argument("--stage1_max_candidates", type=int, default=40)
+    parser.add_argument("--stage1_score_top_n", type=int, default=20)
+    parser.add_argument("--stage1_alpha_prior", type=float, default=0.0)
     parser.add_argument("--stage1_no_length_norm", action="store_true")
 
     args = parser.parse_args()
@@ -347,7 +345,7 @@ def main(cfg: RagServiceConfig):
         top_k = 5
         cfg.prompt_build_method = "QA_OPEN"  # for fairness vs stage-1
     elif args.mode == "logit_rag_stage1":
-        top_k = 10
+        top_k = 50
         # prompt_build_method isn't used for stage-1, but keep it consistent
         cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
     else:
