@@ -329,7 +329,7 @@ def main(cfg: RagServiceConfig):
     # Stage-1 knobs
     parser.add_argument("--stage1_max_candidates", type=int, default=40)
     parser.add_argument("--stage1_score_top_n", type=int, default=20)
-    parser.add_argument("--stage1_alpha_prior", type=float, default=0.7)
+    parser.add_argument("--stage1_alpha_prior", type=float, default=0.0)
     parser.add_argument("--stage1_no_length_norm", action="store_true")
 
     args = parser.parse_args()
