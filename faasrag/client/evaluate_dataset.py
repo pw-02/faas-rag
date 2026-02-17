@@ -426,7 +426,7 @@ def main(cfg: RagServiceConfig):
 
     # Stage-2 knobs
     parser.add_argument("--stage2_alpha", type=float, default=0.2)
-    parser.add_argument("--stage2_max_phrases", type=float, default=10)
+    parser.add_argument("--stage2_max_phrases", type=float, default=5)
     parser.add_argument("--stage2_hybrid_prompt", action="store_true")
 
     args = parser.parse_args()
