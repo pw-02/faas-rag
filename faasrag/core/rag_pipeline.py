@@ -584,7 +584,7 @@ class RagPipeline:
         q = (question or "").strip()
         if not q:
             raise ValueError("question must be non-empty")
-
+        start = time.perf_counter()
         timings: dict[str, float] = {}
         rr = self._retrieve(q, self.top_k) if self.top_k > 0 else RetrievalResult(timings_s={"embed_s": 0.0, "ann_s": 0.0, "docstore_s": 0.0})
         timings.update(rr.timings_s)
@@ -611,6 +611,7 @@ class RagPipeline:
         timings["ttft_s"] = gen.metrics.get("ttft_s") or 0.0
         timings["prefill_tps"] = gen.metrics.get("prefill_tps") or 0.0
         timings["decode_tps"] = gen.metrics.get("decode_tps") or 0.0
+        timings["total_s"] = time.perf_counter() - start
 
         res = RagRunResult(
             mode="prompt_rag",
@@ -628,6 +629,8 @@ class RagPipeline:
         )
         if self.always_log_results:
             self.log_result(res.to_dict())
+        
+
         return res.to_dict()
 
     def run_logit_rag_stage1(
@@ -646,6 +649,8 @@ class RagPipeline:
             raise RuntimeError("Stage1 requires generator (retrieve_only=False).")
         if self.top_k <= 0:
             raise ValueError("Stage1 requires retrieval (top_k > 0).")
+        
+        start = time.perf_counter()
 
         timings: dict[str, float] = {}
 
@@ -700,6 +705,7 @@ class RagPipeline:
 
         scored.sort(key=lambda x: x["llm_score"], reverse=True)
         best = scored[0]["candidate"] if scored else ""
+        timings["total_s"] = time.perf_counter() - start
 
         res = RagRunResult(
             mode="logit_rag_stage1",
@@ -717,6 +723,7 @@ class RagPipeline:
                 "best_candidate": best,
             },
         )
+
         return res.to_dict()
 
     def run_logit_rag_stage2(
@@ -740,6 +747,8 @@ class RagPipeline:
             raise ValueError("Stage2 requires retrieval (top_k > 0).")
 
         timings: dict[str, float] = {}
+
+        start = time.perf_counter()
 
         with timed(timings, "retrieve_total_s"):
             rr = self._retrieve(q, self.top_k)
@@ -772,6 +781,7 @@ class RagPipeline:
                 clamp_first_line=clamp_first_line,
             )
 
+        timings["total_s"] = time.perf_counter() - start
         res = RagRunResult(
             mode="logit_rag_stage2",
             question=q,
