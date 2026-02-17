@@ -102,6 +102,13 @@ class RagPipeline:
         self.logger.info("Loading docstore...")
         self.docstore = load_docstore(docstore_cfg, artifact_dir=artifact_dir, backend=docstore_backend)
 
+        if cache_cfg is not None:
+            self.cache = build_cache(cache_cfg, dim=dim, seed=self.seed)
+
+        if not self.retrieve_only:
+            self.logger.info("Initializing generator...")
+            self.generator = build_generator(generator_cfg)
+        
         self.reader_name = getattr(generator_cfg, "reader_name", None) or "deepset/roberta-base-squad2"
         self.reader_device = getattr(generator_cfg, "reader_device", None) or getattr(self.generator, "device", "cpu")
 
@@ -109,19 +116,15 @@ class RagPipeline:
         self.reader_tokenizer = AutoTokenizer.from_pretrained(self.reader_name, use_fast=True)
         self.reader_model = AutoModelForQuestionAnswering.from_pretrained(self.reader_name)
         self.reader_model.eval()
+        self.reader_device = "cuda:1" if torch.cuda.is_available() else "cpu"
 
         # Move reader to device
         if isinstance(self.reader_device, str) and self.reader_device.startswith("cuda"):
             self.reader_model.to(self.reader_device)
+            logger.info("Moved reader model to device %s", self.reader_device)
         else:
             self.reader_model.to("cpu")
-
-        if cache_cfg is not None:
-            self.cache = build_cache(cache_cfg, dim=dim, seed=self.seed)
-
-        if not self.retrieve_only:
-            self.logger.info("Initializing generator...")
-            self.generator = build_generator(generator_cfg)
+            logger.info("Using CPU for reader model") 
 
         self.logger.info(
             "RagPipeline initialized prompt=%s retrieve_only=%s top_k=%d embedder_device=%s generator_device=%s",
