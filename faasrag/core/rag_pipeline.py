@@ -335,7 +335,7 @@ class RagPipeline:
         return bias
 
     # -------------------------
-    # Candidate mining (your QA1 miner)
+    # Candidate mining (QA reader -> atomic candidate strings)
     # -------------------------
     def _mine_candidates_qa1(
         self,
@@ -350,39 +350,81 @@ class RagPipeline:
         max_span_tokens: int = 8,
         length_penalty: float = 0.35,
     ) -> list[tuple[str, float]]:
-        self._ensure_reader()
+        """
+        PURPOSE
+        -------
+        Extract a *small set of plausible short answers* from retrieved passages, using an
+        extractive QA model (reader). Returns candidates with a score that combines:
+        - reader confidence (start+end logits, length-penalized)
+        - passage relevance weight (based on retriever score + rank)
 
+        OUTPUT
+        ------
+        List of (candidate_text, score), sorted descending. Candidates are "atomic"
+        strings (names / years / numbers / short noun phrases), not long spans/sentences.
+
+        This output is used by:
+        - Stage 1: rerank candidates by LLM log-likelihood (selection)
+        - Stage 2: convert candidates into token logit bias (generation prior)
+        """
+        self._ensure_reader()
         assert self.reader_model is not None
         assert self.reader_tokenizer is not None
 
+        # -----------------------------
+        # 0) Basic input hygiene
+        # -----------------------------
         question = (question or "").strip()
         if not question:
             return []
 
+        # -----------------------------
+        # 1) Very cheap question typing
+        #    (used to filter/refine extracted spans)
+        # -----------------------------
         qlow = question.lower().strip()
         is_who = qlow.startswith("who") or " who " in f" {qlow} "
         is_when = qlow.startswith("when") or " what year" in qlow or " what date" in qlow
         is_where = qlow.startswith("where")
         is_how_many = qlow.startswith("how many") or qlow.startswith("how much")
 
+        # -----------------------------
+        # 2) Compute per-passage weights
+        #
+        # Idea: candidates from higher-ranked / more-similar passages should count more.
+        # - sim_w: softmax over retriever similarity scores
+        # - rank_w: 1/(1+i) to reward early passages
+        # - passage_w: blended weight used later during aggregation
+        # -----------------------------
         sims = [float(getattr(p, "score", 0.0) or 0.0) for p in passages]
         if sims:
             m = max(sims)
             exps = [math.exp(s - m) for s in sims]
             Z = sum(exps) or 1.0
-            sim_w = [e / Z for e in exps]
+            sim_w = [e / Z for e in exps]  # sums to 1
         else:
             sim_w = [1.0 / max(1, len(passages))] * len(passages)
 
         rank_w = [1.0 / (1.0 + i) for i in range(len(passages))]
-        passage_w = []
+
+        # Blend: rank weighting plus similarity weighting
+        passage_w: list[float] = []
         for i in range(len(passages)):
+            # (0.2 + 0.8 * ...) keeps weights from collapsing too hard
             w = rank_w[i] * (0.2 + 0.8 * sim_w[i] * len(passages))
             passage_w.append(float(w))
 
+        # -----------------------------
+        # 3) Regex + span filters to enforce "atomic" outputs
+        #
+        # Key principle: your QA reader often returns fragments.
+        # We aggressively normalize, reject, and "refine" them into:
+        #   - names (for who/where)
+        #   - years/dates/numbers (for when/how many)
+        # -----------------------------
         ws_re = re.compile(r"\s+")
-        bad_punct_re = re.compile(r"[\.!\?;]")
-        many_commas_re = re.compile(r",.*,")
+        bad_punct_re = re.compile(r"[\.!\?;]")    # sentence-ish punctuation => likely not an atomic answer
+        many_commas_re = re.compile(r",.*,")      # multiple commas => likely list/phrase, not atomic
 
         year_pat = re.compile(r"\b(1[5-9]\d{2}|20\d{2})\b")
         number_pat = re.compile(r"\b\d+(\.\d+)?\b")
@@ -390,23 +432,40 @@ class RagPipeline:
             r"\b(pages?|years?|months?|days?|km|kilometers?|miles?|meters?|feet|ft|inches?|%|dollars?|usd|euros?|pounds?)\b",
             re.IGNORECASE,
         )
+
+        # NOTE: name_pat.findall() returns ONLY the *capturing group* unless you use non-capturing groups.
+        # In your current pattern, ([A-Z][a-z]+|[A-Z]\.) is a capturing group, so findall()
+        # returns just the FIRST token (e.g., "Charles") not "Charles Cornwallis".
+        #
+        # If you want full spans, change to a non-capturing group:
+        #   r"\b(?:[A-Z][a-z]+|[A-Z]\.)(?:\s+(?:...))*\b"
+        #
         name_pat = re.compile(
             r"\b([A-Z][a-z]+|[A-Z]\.)"
             r"(?:\s+(?:[A-Z][a-z]+|[A-Z]\.|de|da|del|van|von|al|bin|ibn|la|le|of))*\b"
         )
 
         def clean_span(s: str) -> str:
+            """Collapse whitespace + strip edge punctuation/quotes so spans compare/dedup cleanly."""
             s = (s or "").strip()
             s = ws_re.sub(" ", s)
             return s.strip(" \t\r\n\"'`.,;:()[]{}")
 
         def too_long_or_short(s: str) -> bool:
+            """Reject empty, 1-char, too-long, or too-many-words spans."""
             if not s or len(s) < 2 or len(s) > max_answer_chars:
                 return True
             toks = s.split()
             return (len(toks) == 0) or (len(toks) > max_span_tokens)
 
         def is_junk(s: str) -> bool:
+            """
+            Reject spans that are likely useless as answers:
+            - stopword-only
+            - contain sentence punctuation
+            - look like long comma-separated fragments
+            - mostly non-alphanumeric
+            """
             sl = s.lower()
             if sl in {"the", "a", "an", "it", "they", "he", "she", "this", "that", "these", "those"}:
                 return True
@@ -418,6 +477,10 @@ class RagPipeline:
             return alnum < max(2, int(0.4 * len(s)))
 
         def type_mismatch(s: str) -> bool:
+            """
+            Light gating: if it's a 'who' question, candidate should look name-like.
+            If it's a 'when/how many', must include digits, etc.
+            """
             if is_who:
                 return not bool(re.search(r"\b[A-Z][a-z]+\b", s))
             if is_when:
@@ -429,11 +492,20 @@ class RagPipeline:
             return False
 
         def refine_atomic(s: str) -> list[str]:
+            """
+            Given a raw reader span, produce *atomic subspans*:
+            - number(+unit) chunks, years (when/how many)
+            - name-like chunks (who/where)
+            - plus the cleaned original if it already looks atomic
+
+            This is the key step that turns messy spans into usable candidate strings.
+            """
             out: list[str] = []
             s2 = clean_span(s)
             if not s2 or is_junk(s2):
                 return out
 
+            # Pull numeric chunks (optionally with a unit)
             if is_how_many or is_when:
                 for m in re.finditer(
                     r"\b\d{1,6}(?:\.\d+)?(?:\s+" + unit_pat.pattern[2:-2] + r")?\b",
@@ -442,21 +514,25 @@ class RagPipeline:
                 ):
                     out.append(clean_span(m.group(0)))
 
+            # Pull standalone years
             if is_when:
                 for m in year_pat.findall(s2):
                     out.append(clean_span(m))
 
+            # Pull name-like phrases (see NOTE above about findall capturing group!)
             if is_who or is_where:
                 for m in name_pat.findall(s2):
                     c = clean_span(m)
                     if c and len(c.split()) <= max_span_tokens:
                         out.append(c)
 
+            # If the whole span is already short+clean, keep it too.
             if (not too_long_or_short(s2)) and (not is_junk(s2)):
                 out.append(s2)
 
+            # Deduplicate in order (case/whitespace insensitive)
             seen = set()
-            uniq = []
+            uniq: list[str] = []
             for x in out:
                 k = " ".join(x.lower().split())
                 if k in seen:
@@ -465,23 +541,32 @@ class RagPipeline:
                 uniq.append(x)
             return uniq
 
+        # -----------------------------
+        # 4) Run extractive QA over each passage
+        #
+        # Reader returns start/end logits for each window (sliding over long passages).
+        # We pick top start indices and end indices, form spans, length-penalize,
+        # and keep per_passage_nbest spans per passage window.
+        # -----------------------------
         cand_scores: dict[str, float] = collections.defaultdict(float)
         device = next(self.reader_model.parameters()).device
 
         with torch.no_grad():
             for i, p in enumerate(passages):
+                # reader context is (title + text), truncated to keep runtime bounded
                 ctx = ((p.title or "") + "\n" + (p.text or ""))[:20000]
                 if not ctx.strip():
                     continue
 
+                # Tokenize (question, context) with sliding windows
                 enc = self.reader_tokenizer(
                     question,
                     ctx,
                     truncation="only_second",
                     max_length=max_seq_len,
                     stride=doc_stride,
-                    return_overflowing_tokens=True,
-                    return_offsets_mapping=True,
+                    return_overflowing_tokens=True,   # multiple windows for long contexts
+                    return_offsets_mapping=True,      # map token positions -> character spans
                     padding=False,
                     return_tensors="pt",
                 )
@@ -489,32 +574,42 @@ class RagPipeline:
                 input_ids = enc["input_ids"].to(device)
                 attn = enc["attention_mask"].to(device)
                 offset_mapping = enc["offset_mapping"]
-                seq_ids_fn = getattr(enc, "sequence_ids", None)
+                seq_ids_fn = getattr(enc, "sequence_ids", None)  # tells which tokens are question vs context
 
                 out = self.reader_model(input_ids=input_ids, attention_mask=attn)
                 start_logits = out.start_logits
                 end_logits = out.end_logits
 
+                # Iterate each window produced by the sliding tokenizer
                 for widx in range(start_logits.size(0)):
+                    # Move logits to CPU for topk ops (can keep on GPU if you want speed)
                     s_logits = start_logits[widx].detach().cpu()
                     e_logits = end_logits[widx].detach().cpu()
 
+                    # Identify context tokens (sequence_id == 1 typically indicates context)
                     if callable(seq_ids_fn):
                         seq_ids = seq_ids_fn(widx)
                     else:
                         seq_ids = [0] * len(offset_mapping[widx])
 
-                    valid = []
+                    # valid token positions = context tokens with a non-empty char span
+                    valid: list[int] = []
                     for tidx, off in enumerate(offset_mapping[widx]):
                         if off is None:
                             continue
                         if seq_ids[tidx] == 1 and off[1] > off[0]:
                             valid.append(tidx)
+
+                    # fallback: if sequence_ids unavailable, accept any token with offset span
                     if not valid:
-                        valid = [tidx for tidx, off in enumerate(offset_mapping[widx]) if off is not None and off[1] > off[0]]
+                        valid = [
+                            tidx for tidx, off in enumerate(offset_mapping[widx])
+                            if off is not None and off[1] > off[0]
+                        ]
                     if not valid:
                         continue
 
+                    # Choose top start and end positions (broader than per_passage_nbest, then cross-product)
                     k = max(10, per_passage_nbest * 6)
                     vs = s_logits[valid]
                     ve = e_logits[valid]
@@ -524,7 +619,8 @@ class RagPipeline:
                     top_s_idx = [valid[int(ix)] for ix in top_s.indices.tolist()]
                     top_e_idx = [valid[int(ix)] for ix in top_e.indices.tolist()]
 
-                    spans = []
+                    # Form candidate spans from start/end pairs (bounded by max_span_tokens)
+                    spans: list[tuple[int, int, float]] = []
                     for si in top_s_idx:
                         for ei in top_e_idx:
                             if ei < si:
@@ -532,33 +628,49 @@ class RagPipeline:
                             span_len = (ei - si) + 1
                             if span_len > max_span_tokens:
                                 continue
+
+                            # Reader confidence ~ start_logit + end_logit
                             raw_score = float(s_logits[si] + e_logits[ei])
+
+                            # Penalize longer spans so single tokens / short names win
                             adj_score = raw_score - (length_penalty * span_len)
                             spans.append((si, ei, adj_score))
 
+                    # Keep only best few spans per window
                     spans.sort(key=lambda x: x[2], reverse=True)
                     spans = spans[:per_passage_nbest]
 
+                    # Convert token spans -> character spans -> raw text -> refined atomic candidates
                     for si, ei, span_score in spans:
                         off_s = offset_mapping[widx][si]
                         off_e = offset_mapping[widx][ei]
                         if off_s is None or off_e is None:
                             continue
+
                         start_char = int(off_s[0])
                         end_char = int(off_e[1])
                         if end_char <= start_char:
                             continue
 
                         raw = ctx[start_char:end_char]
+
+                        # refine_atomic() is where we split messy spans into atomic pieces
                         refined = refine_atomic(clean_span(raw))
                         if not refined:
                             continue
 
+                        # Aggregate candidate scores:
+                        # passage_w[i] emphasizes good passages
+                        # (1 + span_score) keeps sign positive-ish and preserves ranking
                         for c in refined:
                             if too_long_or_short(c) or is_junk(c) or type_mismatch(c):
                                 continue
                             cand_scores[c] += passage_w[i] * (1.0 + span_score)
 
+        # -----------------------------
+        # 5) Merge + deduplicate by normalized form
+        #    (e.g. "Charles Cornwallis" vs "charles cornwallis")
+        # -----------------------------
         def norm_key(s: str) -> str:
             s = s.lower().strip()
             s = ws_re.sub(" ", s)
@@ -571,15 +683,20 @@ class RagPipeline:
             k = norm_key(c)
             if not k:
                 continue
+
+            # Keep a "best" surface form for display (prefer longer name-like forms)
             if k not in surface:
                 surface[k] = c
             else:
                 if len(c) > len(surface[k]) and len(c.split()) <= max_span_tokens:
                     surface[k] = c
+
             merged[k] += float(s)
 
+        # Sort by merged score and cap output size
         items = sorted(((surface[k], v) for k, v in merged.items()), key=lambda x: x[1], reverse=True)
         return items[:max_candidates]
+
 
     # -------------------------
     # Public runs
@@ -754,7 +871,7 @@ class RagPipeline:
         self,
         question: str,
         *,
-        max_candidates: int = 40,
+        max_candidates: int = 40, #Keep only the top 40 candidate answer strings
         max_phrases_for_bias: int = 10,
         alpha: float = 0.8,
         phrase_score_temperature: float = 1.0,

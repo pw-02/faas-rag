@@ -168,9 +168,13 @@ def evaluate(
         elif mode == "logit_rag_stage2":
             out = pipeline.run_logit_rag_stage2(
                 q,
-                alpha=stage2_alpha,
-                hybrid_prompt=stage2_hybrid_prompt,
+                max_candidates=40,
                 max_phrases_for_bias=stage2_max_phrases,
+                alpha=stage2_alpha,
+                phrase_score_temperature=1.0,
+                per_token_cap=2.0,
+                clamp_first_line=True,
+                hybrid_prompt=stage2_hybrid_prompt,
             )
         elif mode == "prompt_rag":
             out = pipeline.run_prompt_rag(q)
@@ -477,7 +481,7 @@ def main(cfg: RagServiceConfig):
     # Stage-2 knobs
     parser.add_argument("--stage2_alpha", type=float, default=0.2)
     parser.add_argument("--stage2_alpha_sweep", type=str, default="8,10,12,15,20")  # <-- NEW 0.1,0.2,0.4,0.8
-    parser.add_argument("--stage2_max_phrases", type=int, default=20)
+    parser.add_argument("--stage2_max_phrases", type=int, default=5)
     parser.add_argument("--stage2_hybrid_prompt", action="store_true")
 
     # Optional: write one summary row per sweep setting
