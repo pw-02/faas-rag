@@ -7,6 +7,20 @@ from collections import Counter
 from typing import Iterable, Optional
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def append_csv_row(path: str, row: dict):
     exists = os.path.exists(path)
     with open(path, "a", newline="", encoding="utf-8") as f:

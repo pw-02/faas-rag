@@ -16,7 +16,7 @@ from faasrag.core.utils import (
     append_csv_row,
     normalize_answer,  # <-- make sure this exists in your utils.py
 )
-from faasrag.core.logit_rag_pipeline import RagPipeline
+from faasrag.core.rag_pipeline import RagPipeline
 
 
 def load_jsonl(path: str) -> List[Dict[str, Any]]:
@@ -71,12 +71,21 @@ def evaluate(
     print_first_n: int = 10,
     out_csv: Optional[str] = None,
     tqdm_update_every: int = 10,
-
+    # stage-1 options (ignored for other modes)
+    stage1_max_candidates: int = 40,
+    stage1_score_top_n: int = 20,
+    stage1_length_normalize: bool = True,
+    stage1_alpha_prior: float = 0.0,
 ) -> Dict[str, float]:
-    
+    """
+    mode:
+      - "llm"              -> pipeline.run(q) with top_k=0
+      - "prompt_rag"       -> pipeline.run(q) with top_k>0 (your cfg.prompt_build_method controls strict/open)
+      - "logit_rag_stage1" -> pipeline.run_logit_rag_stage1(q, ...)
+    """
     mode = (mode or "").strip().lower()
-    if mode not in {"llm", "prompt", "logit"}:
-        raise ValueError(f"Invalid --mode {mode}. Choose: llm, prompt, logit")
+    if mode not in {"llm", "prompt_rag", "logit_rag_stage1"}:
+        raise ValueError(f"Invalid --mode {mode}. Choose: llm, prompt_rag, logit_rag_stage1")
 
     n = 0
     em_sum = 0.0
@@ -117,7 +126,18 @@ def evaluate(
         if not q:
             continue
 
-        out = pipeline.run(q)
+        # run selected mode
+        if mode == "logit_rag_stage1":
+            out = pipeline.run_logit_rag_stage1(
+                q,
+                max_candidates=stage1_max_candidates,
+                score_top_n=stage1_score_top_n,
+                length_normalize=stage1_length_normalize,
+                alpha_prior=stage1_alpha_prior,
+            )
+        else:
+            # prompt_rag + llm are both handled by pipeline.run()
+                out = pipeline.run_prompt_rag(q)
 
         pred = (out.get("raw_answer") or out.get("answer") or "").strip()
         em = metric_max_over_ground_truths(exact_match_score, pred, golds)
@@ -175,7 +195,16 @@ def evaluate(
         has_gold = False
         selected_gold = False
 
- 
+        if mode == "logit_rag_stage1":
+            cand_recall_total += 1
+            has_gold = gold_in_candidates(candidates, golds)
+            cand_recall_hits += int(has_gold)
+
+            if has_gold:
+                select_total += 1
+                selected_gold = model_selected_gold(best, golds)
+                select_hits += int(selected_gold)
+
         if n <= print_first_n:
             tqdm.write("\n---")
             tqdm.write(f"mode: {mode}  id: {ex_id}")
@@ -185,6 +214,11 @@ def evaluate(
             tqdm.write(f"EM={em} F1={f1:.3f}")
             tqdm.write(f"tokens: prompt={prompt_tokens} completion={completion_tokens} total={total_tokens}")
             tqdm.write(f"timings_s: total={total_s:.3f} ttft={ttft_s:.3f} decode={decode_s:.3f}")
+            if mode == "logit_rag_stage1":
+                tqdm.write(f"gold_in_candidates: {has_gold}  selected_gold: {selected_gold}")
+                tqdm.write(f"best_candidate: {best}")
+                if candidates:
+                    tqdm.write("top5_candidates: " + json.dumps(candidates[:5], ensure_ascii=False)[:600])
             # tqdm.write(f"messages: {str(messages)[:500]}")  # optional debug
 
         if tqdm_update_every > 0 and n % tqdm_update_every == 0:
@@ -193,7 +227,13 @@ def evaluate(
                 "F1": f"{f1_sum/n:.3f}",
                 "tot_s": f"{(total_s_sum/n):.2f}",
             }
-            postfix["tok"] = f"{(total_tok_sum/n):.0f}"
+            if mode == "logit_rag_stage1":
+                cand_rec = (cand_recall_hits / cand_recall_total) if cand_recall_total else 0.0
+                sel_acc = (select_hits / select_total) if select_total else 0.0
+                postfix["cand@"] = f"{cand_rec:.2f}"
+                postfix["sel@"] = f"{sel_acc:.2f}"
+            else:
+                postfix["tok"] = f"{(total_tok_sum/n):.0f}"
             pbar.set_postfix(postfix)
 
         # write CSV row
@@ -236,6 +276,10 @@ def evaluate(
             "selected_gold_given_present": int(selected_gold),
         }
 
+        if mode == "logit_rag_stage1":
+            row["best_candidate"] = best
+            row["num_candidates_scored"] = len(candidates)
+
         append_csv_row(out_csv, row)
 
     def mean(x: float) -> float:
@@ -262,23 +306,32 @@ def evaluate(
         "mean_candidate_mine_s": mean(stage1_mine_sum),
         "mean_candidate_score_s": mean(stage1_score_sum),
     }
+
+    if mode == "logit_rag_stage1":
+        summary["candidate_recall"] = (cand_recall_hits / cand_recall_total) if cand_recall_total else 0.0
+        summary["selection_accuracy_given_present"] = (select_hits / select_total) if select_total else 0.0
+        summary["oracle_em_from_candidates"] = (cand_recall_hits / cand_recall_total) if cand_recall_total else 0.0
+        summary["selection_total_where_gold_present"] = int(select_total)
+
     return summary
 
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, default="logit", choices=["llm", "prompt", "logit"])
+    parser.add_argument("--mode", type=str, default="logit_rag_stage1", choices=["llm", "prompt_rag", "logit_rag_stage1"])
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl", help="Path to dataset (jsonl)")
     parser.add_argument("--limit", type=int, default=1000, help="Optional limit for quick runs (0 = all)")
     parser.add_argument("--out_csv", type=str, default="dataset_eval.csv", help="CSV path (empty disables)")
     parser.add_argument("--print_first_n", type=int, default=10)
     parser.add_argument("--tqdm_update_every", type=int, default=10)
 
-    # logit knobs
-    parser.add_argument("--logit_passage_max_tokens", type=int, default=256)
-    parser.add_argument("--logit_top_n", type=int, default=20)
-    parser.add_argument("--logit_alpha", type=float, default=2.0)
+    # Stage-1 knobs
+    parser.add_argument("--stage1_max_candidates", type=int, default=40)
+    parser.add_argument("--stage1_score_top_n", type=int, default=20)
+    parser.add_argument("--stage1_alpha_prior", type=float, default=0.0)
+    parser.add_argument("--stage1_no_length_norm", action="store_true")
+
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -288,10 +341,10 @@ def main(cfg: RagServiceConfig):
     if args.mode == "llm":
         top_k = 0
         cfg.prompt_build_method = "LLM_ONLY"
-    elif args.mode == "prompt":
+    elif args.mode == "prompt_rag":
         top_k = 5
         cfg.prompt_build_method = "QA_OPEN"  # for fairness vs stage-1
-    elif args.mode == "logit":
+    elif args.mode == "logit_rag_stage1":
         top_k = 10
         # prompt_build_method isn't used for stage-1, but keep it consistent
         cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
@@ -316,10 +369,6 @@ def main(cfg: RagServiceConfig):
         logger=logger,
         retrieve_only=False,
         always_log_results=False,
-        rag_mode=args.mode,
-        logit_alpha=args.logit_alpha,
-        logit_top_n=args.logit_top_n,
-        logit_passage_max_tokens=args.logit_passage_max_tokens,
     )
 
     examples = load_jsonl(args.data)

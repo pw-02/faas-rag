@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Tuple, Optional, Union
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import LogitsProcessor, LogitsProcessorList
 
 from faasrag.core.args import (GeneratorConfig, Llama3InstructGeneratorConfig, 
                                Qwen2_5InstructGeneratorConfig, SyntheticGeneratorConfig,
@@ -24,6 +25,28 @@ class GenResult:
     total_tokens: int
     metrics: Dict[str, Any]  # ttft_s, total_s, prefill_tps, decode_tps, finish_reason
 
+class SparseAddBiasProcessor(LogitsProcessor):
+    """
+    Adds alpha * bias[token_id] to logits during decoding.
+    bias is a sparse dict: token_id -> float.
+    """
+    def __init__(self, bias: dict[int, float], alpha: float, device: torch.device):
+        self.alpha = float(alpha)
+        if not bias:
+            self.token_ids = None
+            self.bias_vals = None
+            return
+
+        # store as tensors for fast scatter-add
+        self.token_ids = torch.tensor(list(bias.keys()), dtype=torch.long, device=device)
+        self.bias_vals = torch.tensor(list(bias.values()), dtype=torch.float32, device=device)
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # scores: [batch, vocab]
+        if self.token_ids is None:
+            return scores
+        scores[:, self.token_ids] += self.alpha * self.bias_vals
+        return scores
 
 class VLLMStreamingGenerator:
     def __init__(
@@ -368,6 +391,64 @@ class HFCausalLMGenerator:
             completion_tokens=int(completion_tokens),
             total_tokens=int(total_tokens),
             metrics={},
+        )
+    
+    def generate_chat_with_logit_bias(
+        self,
+        messages: List[dict],
+        bias: dict[int, float],
+        alpha: float = 2.0,
+        clamp_first_line: bool = True,
+    ) -> GenResult:
+        """
+        Chat generation with retrieval-driven logit bias (Logit-RAG hook).
+
+        messages: chat messages (system/user/assistant)
+        bias: sparse dict token_id -> bias_value
+        alpha: scalar multiplier for bias strength
+
+        This does NOT add retrieved text to the prompt; it only biases decoding.
+        """
+        prompt = self._chat_prompt_text(messages)
+        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True)
+        inputs = self._move_inputs_to_model_device(inputs)
+
+        device = inputs["input_ids"].device
+        logits_processor = LogitsProcessorList([
+            SparseAddBiasProcessor(bias=bias, alpha=alpha, device=device)
+        ])
+
+        out = self.model.generate(
+            **inputs,
+            max_new_tokens=self.max_new_tokens,
+            do_sample=self.do_sample,
+            temperature=self.temperature if self.do_sample else 0.0,
+            top_p=self.top_p if self.do_sample else 1.0,
+            top_k=self.top_k if self.do_sample else 0,
+            pad_token_id=self.eos_id,
+            eos_token_id=self._build_eos_token_ids(),
+            logits_processor=logits_processor,
+        )
+
+        prompt_tokens = inputs["input_ids"].shape[-1]
+        total_tokens = out.shape[-1]
+        completion_tokens = total_tokens - prompt_tokens
+
+        gen_ids = out[0][prompt_tokens:]
+        text = self.tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
+
+        if clamp_first_line and "\n" in text:
+            text = text.splitlines()[0].strip()
+
+        return GenResult(
+            text=text,
+            prompt_tokens=int(prompt_tokens),
+            completion_tokens=int(completion_tokens),
+            total_tokens=int(total_tokens),
+            metrics={
+                "logit_bias_alpha": float(alpha),
+                "logit_bias_tokens": int(len(bias) if bias else 0),
+            },
         )
     
 
