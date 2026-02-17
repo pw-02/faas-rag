@@ -135,8 +135,6 @@ def evaluate(
                 length_normalize=stage1_length_normalize,
                 alpha_prior=stage1_alpha_prior,
             )
-        elif mode == "logit_rag_stage2":
-            out = pipeline.run_logit_rag_stage2(q)
         else:
             # prompt_rag + llm are both handled by pipeline.run()
                 out = pipeline.run_prompt_rag(q)
@@ -321,7 +319,7 @@ def evaluate(
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, default="logit_rag_stage2", choices=["llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"])
+    parser.add_argument("--mode", type=str, default="logit_rag_stage1", choices=["llm", "prompt_rag", "logit_rag_stage1"])
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl", help="Path to dataset (jsonl)")
     parser.add_argument("--limit", type=int, default=1000, help="Optional limit for quick runs (0 = all)")
     parser.add_argument("--out_csv", type=str, default="dataset_eval.csv", help="CSV path (empty disables)")
@@ -350,9 +348,6 @@ def main(cfg: RagServiceConfig):
         top_k = 10
         # prompt_build_method isn't used for stage-1, but keep it consistent
         cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
-    elif args.mode == "logit_rag_stage2":
-        top_k = 10
-        cfg.prompt_build_method = "LLM_ONLY"
     else:
         raise ValueError(f"Invalid mode {args.mode}")
 

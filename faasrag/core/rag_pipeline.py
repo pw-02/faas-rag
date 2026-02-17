@@ -29,13 +29,100 @@ from faasrag.core.utils import append_csv_row
 import torch
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 
-
-
 @contextmanager
 def timed(store: dict, key: str):
     t0 = time.perf_counter()
     yield
     store[key] = time.perf_counter() - t0
+
+def _candidates_to_token_bias(
+    self,
+    candidates: list[tuple[str, float]],
+    *,
+    max_phrases: int = 40,
+    per_token_cap: float = 2.0,
+    phrase_score_temperature: float = 1.0,
+    drop_junk_tokens: bool = True,
+) -> dict[int, float]:
+    """
+    Turn mined candidate strings into sparse token bias dict.
+
+    candidates: list[(text, score)] sorted desc (from _mine_candidates_qa1)
+    Returns: {token_id: bias_value} where bias_value is additive to logits (before alpha scaling).
+
+    Design:
+    - take top max_phrases candidate strings
+    - tokenize each string with GENERATOR tokenizer (not reader tokenizer)
+    - distribute the phrase score across its tokens (so multi-token names don't overpower)
+    - accumulate per token
+    - optionally filter out whitespace/punct tokens
+
+    This is Option B: entity/keyword mining -> token IDs -> logit bias
+    """
+    if not candidates:
+        return {}
+
+    if not hasattr(self.generator, "tokenizer"):
+        raise RuntimeError("Generator tokenizer not found; need HF generator exposing .tokenizer")
+
+    tok = self.generator.tokenizer
+    special_ids = set(getattr(tok, "all_special_ids", []))
+
+    # Use only top phrases
+    items = candidates[:max_phrases]
+
+    # Normalize phrase scores so they are stable across queries
+    scores = np.array([float(s) for _, s in items], dtype=np.float64)
+    # Softmax-ish normalization (temperature)
+    scores = scores / max(1e-9, float(phrase_score_temperature))
+    scores = scores - scores.max()
+    w = np.exp(scores)
+    w = w / (w.sum() + 1e-9)  # sums to 1
+
+    def is_junk_token_id(tid: int) -> bool:
+        if tid in special_ids:
+            return True
+        if not drop_junk_tokens:
+            return False
+        s = tok.decode([tid])
+        st = s.strip()
+        if st == "":
+            return True
+        # punctuation-only
+        if re.fullmatch(r"[^\w]+", st):
+            return True
+        # very short junk fragments (common with BPE)
+        if len(st) == 1 and not st.isalnum():
+            return True
+        return False
+
+    bias: dict[int, float] = {}
+
+    for (phrase, _raw_score), phrase_w in zip(items, w.tolist()):
+        phrase = (phrase or "").strip()
+        if not phrase:
+            continue
+
+        ids = tok(phrase, add_special_tokens=False)["input_ids"]
+        if not ids:
+            continue
+
+        # Distribute phrase weight across tokens so long phrases don't dominate
+        per_tok = float(phrase_w) / max(1, len(ids))
+
+        for tid in ids:
+            tid = int(tid)
+            if is_junk_token_id(tid):
+                continue
+            bias[tid] = bias.get(tid, 0.0) + per_tok
+
+    # Optional: cap extreme tokens (prevents single token taking over)
+    if per_token_cap is not None and per_token_cap > 0:
+        for tid in list(bias.keys()):
+            if bias[tid] > per_token_cap:
+                bias[tid] = float(per_token_cap)
+
+    return bias
 
 
 class RagPipeline:
@@ -120,10 +207,10 @@ class RagPipeline:
         # Move reader to device
         if isinstance(self.reader_device, str) and self.reader_device.startswith("cuda"):
             self.reader_model.to(self.reader_device)
-            logger.info("Moved reader model to device %s", self.reader_device)
+            self.logger.info("Moved reader model to device %s", self.reader_device)
         else:
             self.reader_model.to("cpu")
-            logger.info("Using CPU for reader model") 
+            self.logger.info("Using CPU for reader model") 
 
         self.logger.info(
             "RagPipeline initialized prompt=%s retrieve_only=%s top_k=%d embedder_device=%s generator_device=%s",
@@ -147,6 +234,99 @@ class RagPipeline:
 
         self.logger.info("Embedder dim %d matches index dim %d", embed_dim, int(index_dim))
         return embed_dim
+    
+
+    def _candidates_to_token_bias(
+        self,
+        candidates: list[tuple[str, float]],
+        *,
+        max_phrases: int = 40,
+        per_token_cap: float = 2.0,
+        phrase_score_temperature: float = 1.0,
+        drop_junk_tokens: bool = True,
+    ) -> dict[int, float]:
+        """
+        Turn mined candidate strings into sparse token bias dict.
+
+        candidates: list[(text, score)] sorted desc (from _mine_candidates_qa1)
+        Returns: {token_id: bias_value} where bias_value is additive to logits (before alpha scaling).
+
+        Design:
+        - take top max_phrases candidate strings
+        - tokenize each string with GENERATOR tokenizer (not reader tokenizer)
+        - distribute the phrase score across its tokens (so multi-token names don't overpower)
+        - accumulate per token
+        - optionally filter out whitespace/punct tokens
+
+        It biases toward tokens that appear in your mined entities. 
+        It does not let "the" dominate because your miner already tries to extract “atomic” spans plus we filter whitespace/punct tokens
+        Its much less brittle than doc-prior counting. This is entity/keyword mining -> token IDs -> logit bias
+        """
+        if not candidates:
+            return {}
+
+        if not hasattr(self.generator, "tokenizer"):
+            raise RuntimeError("Generator tokenizer not found; need HF generator exposing .tokenizer")
+
+        tok = self.generator.tokenizer
+        special_ids = set(getattr(tok, "all_special_ids", []))
+
+        # Use only top phrases
+        items = candidates[:max_phrases]
+
+        # Normalize phrase scores so they are stable across queries
+        scores = np.array([float(s) for _, s in items], dtype=np.float64)
+        # Softmax-ish normalization (temperature)
+        scores = scores / max(1e-9, float(phrase_score_temperature))
+        scores = scores - scores.max()
+        w = np.exp(scores)
+        w = w / (w.sum() + 1e-9)  # sums to 1
+
+        def is_junk_token_id(tid: int) -> bool:
+            if tid in special_ids:
+                return True
+            if not drop_junk_tokens:
+                return False
+            s = tok.decode([tid])
+            st = s.strip()
+            if st == "":
+                return True
+            # punctuation-only
+            if re.fullmatch(r"[^\w]+", st):
+                return True
+            # very short junk fragments (common with BPE)
+            if len(st) == 1 and not st.isalnum():
+                return True
+            return False
+
+        bias: dict[int, float] = {}
+
+        for (phrase, _raw_score), phrase_w in zip(items, w.tolist()):
+            phrase = (phrase or "").strip()
+            if not phrase:
+                continue
+
+            ids = tok(phrase, add_special_tokens=False)["input_ids"]
+            if not ids:
+                continue
+
+            # Distribute phrase weight across tokens so long phrases don't dominate
+            per_tok = float(phrase_w) / max(1, len(ids))
+
+            for tid in ids:
+                tid = int(tid)
+                if is_junk_token_id(tid):
+                    continue
+                bias[tid] = bias.get(tid, 0.0) + per_tok
+
+        # Optional: cap extreme tokens (prevents single token taking over)
+        if per_token_cap is not None and per_token_cap > 0:
+            for tid in list(bias.keys()):
+                if bias[tid] > per_token_cap:
+                    bias[tid] = float(per_token_cap)
+
+        return bias
+
 
     # -------------------------
     # Helpers for retrieval / scoring
@@ -527,74 +707,108 @@ class RagPipeline:
         return items[:max_candidates]
 
 
-    def _mine_candidates(self, passages: list[Passage], max_candidates: int = 50) -> list[tuple[str, float]]:
+    def run_logit_rag_stage2(
+        self,
+        question: str,
+        *,
+        max_candidates: int = 40,
+        max_phrases_for_bias: int = 30,
+        alpha: float = 0.8,
+        phrase_score_temperature: float = 1.0,
+        per_token_cap: float = 2.0,
+        clamp_first_line: bool = True,
+        hybrid_prompt: bool = False,
+    ) -> dict[str, Any]:
         """
-        Cheap candidate miner for Stage-1:
-          - capitalized phrases (1-4 words)
-          - numbers (incl. years)
-          - basic date patterns
-        Returns list of (candidate_string, prior_score) sorted descending.
+        Option B Logit-RAG:
+        1) retrieve passages
+        2) mine short candidates (entities/dates) using reader QA model
+        3) convert candidates -> sparse token bias
+        4) generate answer with generator.generate_chat_with_logit_bias
+
+        hybrid_prompt=False means: question-only prompt (pure logit mode)
+        hybrid_prompt=True means: include retrieved passages in prompt + also use logit bias (hybrid)
         """
-        # Weight earlier passages higher (rank prior)
-        # Also weight by "closeness": if score is distance, smaller is better.
-        # We don’t know your index metric, so we use rank-only by default.
-        cand_scores: dict[str, float] = collections.defaultdict(float)
 
-        cap_phrase = re.compile(r"\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b")
-        # numbers / years
-        num_pat = re.compile(r"\b\d{1,4}\b")
-        year_pat = re.compile(r"\b(1[5-9]\d{2}|20\d{2})\b")
-        # simple month date mentions
-        month_pat = re.compile(
-            r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
-            r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b",
-            re.IGNORECASE,
-        )
+        question = (question or "").strip()
+        if not question:
+            raise ValueError("question must be non-empty")
+        if self.retrieve_only or self.generator is None:
+            raise RuntimeError("Stage2 requires generator (retrieve_only=False).")
+        if self.top_k <= 0:
+            raise ValueError("Stage2 requires retrieval. Set top_k > 0.")
 
-        for rank, p in enumerate(passages):
-            rank_w = 1.0 / (1.0 + rank)
+        timings: dict[str, float] = {}
+        cache_used = False
+        cache_hits = 0
+        cache_misses = 0
+        bias: dict[int, float] = {}
 
-            text = (p.title + "\n" + (p.text or ""))[:20000]  # avoid pathological long docs
+        # 1) Retrieval
+        with timed(timings, "retrieve_total_s"):
+            passages, retrieved_doc_ids, rt, cache_info = self._retrieve_passages(question, k=self.top_k)
+        timings.update(rt)
+        cache_used = bool(cache_info.get("cache_used", False))
+        cache_hits = int(cache_info.get("cache_hits", 0))
+        cache_misses = int(cache_info.get("cache_misses", 0))
 
-            # Capitalized phrases (good for names/orgs/places)
-            for m in cap_phrase.findall(text):
-                c = m.strip()
-                if len(c) < 3:
-                    continue
-                # filter common sentence starters that pollute candidates
-                if c in {"The", "A", "An"}:
-                    continue
-                cand_scores[c] += 1.0 * rank_w
+        # 2) Candidate mining
+        with timed(timings, "candidate_mine_s"):
+            mined = self._mine_candidates_qa1(
+                question=question,
+                passages=passages,
+                max_candidates=max_candidates,
+            )
 
-            # Numbers (good for years, counts)
-            for m in num_pat.findall(text):
-                cand_scores[m] += 0.5 * rank_w
+        # mined: list[(candidate_str, score)]
+        mined_strings = [c for c, _ in mined]
 
-            for m in year_pat.findall(text):
-                cand_scores[m] += 1.0 * rank_w
+        # 3) Build sparse token bias from mined candidates
+        with timed(timings, "bias_build_s"):
+            bias = self._candidates_to_token_bias(
+                candidates=mined,
+                max_phrases=max_phrases_for_bias,
+                per_token_cap=per_token_cap,
+                phrase_score_temperature=phrase_score_temperature,
+                drop_junk_tokens=True,
+            )
 
-            # If month appears, try to grab a nearby day/year pattern (very rough)
-            if month_pat.search(text):
-                # e.g., "January 12, 1999" / "Jan 12 1999"
-                date_pat = re.compile(
-                    r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
-                    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
-                    r"\s+\d{1,2}(?:,?\s+\d{4})?\b",
-                    re.IGNORECASE,
-                )
-                for m in date_pat.findall(text):
-                    cand_scores[m.strip()] += 1.0 * rank_w
+        # 4) Build messages
+        with timed(timings, "prompt_s"):
+            if hybrid_prompt:
+                messages, _ = build_rag_messages(question, passages, self.prompt_build_method)
+            else:
+                # pure logit mode: question only
+                messages = [{"role": "user", "content": question}]
 
-        # Dedup with light normalization: collapse whitespace
-        normalized_map: dict[str, str] = {}
-        merged: dict[str, float] = collections.defaultdict(float)
-        for c, s in cand_scores.items():
-            key = " ".join(c.split())
-            normalized_map[key] = c  # keep first surface form
-            merged[key] += s
+        # 5) Generate with logit bias
+        with timed(timings, "decode_s"):
+            gen = self.generator.generate_chat_with_logit_bias(
+                messages=messages,
+                bias=bias,
+                alpha=float(alpha),
+                clamp_first_line=clamp_first_line,
+            )
 
-        items = sorted(((normalized_map[k], v) for k, v in merged.items()), key=lambda x: x[1], reverse=True)
-        return items[:max_candidates]
+        result = {
+            "question": question,
+            "answer": gen.text,
+            "retrieved_doc_ids": retrieved_doc_ids,
+            "mined_candidates": mined_strings[: min(30, len(mined_strings))],
+            "bias_tokens": int(len(bias)),
+            "alpha": float(alpha),
+            "timings_s": timings,
+            "prompt_tokens": gen.prompt_tokens,
+            "completion_tokens": gen.completion_tokens,
+            "total_tokens": gen.total_tokens,
+            "cache_used": cache_used,
+            "cache_hits": cache_hits,
+            "cache_misses": cache_misses,
+        }
+        return result
+
+
+
 
 
     # ------------------------------------------------
@@ -651,8 +865,6 @@ class RagPipeline:
                 question=question,
                 passages=passages,
                 max_candidates=max_candidates)
-
-
 
         if not mined:
             # fallback: just answer with plain LLM (no retrieval prompt)
