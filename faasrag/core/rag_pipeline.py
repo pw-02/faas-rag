@@ -181,6 +181,113 @@ class RagPipeline:
 
         retrieved_doc_ids = [str(p.pid) for p in passages]
         return passages, retrieved_doc_ids, timings, cache_info
+    
+    # def _mine_candidates(self, passages: list[Passage], max_candidates: int = 50) -> list[tuple[str, float]]:
+    #     """
+    #     Cheap candidate miner for Stage-1:
+    #     - capitalized phrases (1-4 words)
+    #     - numbers (incl. years)
+    #     - basic date patterns
+
+    #     Returns list of (candidate_string, prior_score) sorted descending.
+
+    #     This version uses BOTH:
+    #     (a) rank prior (earlier passages weigh more)
+    #     (b) FAISS closeness prior using Passage.score
+    #         - for DPR + METRIC_INNER_PRODUCT: larger score = more similar
+    #         - we turn passage scores into weights via a softmax
+    #     """
+    #     import collections
+    #     import re
+    #     import math
+
+    #     cand_scores: dict[str, float] = collections.defaultdict(float)
+
+    #     cap_phrase = re.compile(r"\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b")
+    #     num_pat = re.compile(r"\b\d{1,4}\b")
+    #     year_pat = re.compile(r"\b(1[5-9]\d{2}|20\d{2})\b")
+    #     month_pat = re.compile(
+    #         r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    #         r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b",
+    #         re.IGNORECASE,
+    #     )
+
+    #     # -----------------------------
+    #     # Passage-level closeness weights
+    #     # -----------------------------
+    #     # For METRIC_INNER_PRODUCT, Passage.score is similarity (higher better).
+    #     # We convert similarities into a stable probability-like weight via softmax.
+    #     scores = [float(getattr(p, "score", 0.0) or 0.0) for p in passages]
+    #     if scores:
+    #         m = max(scores)
+    #         # temperature controls how sharp the weighting is; 1.0 is usually fine.
+    #         temp = 1.0
+    #         exps = [math.exp((s - m) / temp) for s in scores]
+    #         Z = sum(exps) or 1.0
+    #         sim_wts = [e / Z for e in exps]  # sums to 1
+    #     else:
+    #         sim_wts = []
+
+    #     # -----------------------------
+    #     # Mine candidates with combined weight
+    #     # -----------------------------
+    #     for rank, p in enumerate(passages):
+    #         # rank prior: passage 0 > passage 1 > ...
+    #         rank_w = 1.0 / (1.0 + rank)
+
+    #         # similarity prior: based on FAISS IP score
+    #         sim_w = sim_wts[rank] if rank < len(sim_wts) else 0.0
+
+    #         # combine them; you can tune this, but multiplication is a nice default
+    #         passage_w = rank_w * (0.5 + 0.5 * sim_w * len(passages))
+    #         # Explanation:
+    #         # - sim_w is ~1/k, so multiply by k to make it not tiny
+    #         # - (0.5 + 0.5*...) keeps a floor so rank still matters
+
+    #         text = ((p.title or "") + "\n" + (p.text or ""))[:20000]
+
+    #         # Capitalized phrases
+    #         for m0 in cap_phrase.findall(text):
+    #             c = m0.strip()
+    #             if len(c) < 3:
+    #                 continue
+    #             if c in {"The", "A", "An"}:
+    #                 continue
+    #             cand_scores[c] += 1.0 * passage_w
+
+    #         # Numbers / years
+    #         for m0 in num_pat.findall(text):
+    #             cand_scores[m0] += 0.5 * passage_w
+
+    #         for m0 in year_pat.findall(text):
+    #             cand_scores[m0] += 1.0 * passage_w
+
+    #         # Month-date patterns
+    #         if month_pat.search(text):
+    #             date_pat = re.compile(
+    #                 r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    #                 r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+    #                 r"\s+\d{1,2}(?:,?\s+\d{4})?\b",
+    #                 re.IGNORECASE,
+    #             )
+    #             for m0 in date_pat.findall(text):
+    #                 cand_scores[m0.strip()] += 1.0 * passage_w
+
+    #     # Dedup with light normalization: collapse whitespace
+    #     normalized_map: dict[str, str] = {}
+    #     merged: dict[str, float] = collections.defaultdict(float)
+    #     for c, s in cand_scores.items():
+    #         key = " ".join(c.split())
+    #         if key not in normalized_map:
+    #             normalized_map[key] = c
+    #         merged[key] += float(s)
+
+    #     items = sorted(
+    #         ((normalized_map[k], v) for k, v in merged.items()),
+    #         key=lambda x: x[1],
+    #         reverse=True,
+    #     )
+    #     return items[:max_candidates]
 
     def _mine_candidates(self, passages: list[Passage], max_candidates: int = 50) -> list[tuple[str, float]]:
         """
@@ -251,35 +358,6 @@ class RagPipeline:
         items = sorted(((normalized_map[k], v) for k, v in merged.items()), key=lambda x: x[1], reverse=True)
         return items[:max_candidates]
 
-    def _score_candidate_with_llm(self, question: str, candidate: str) -> float:
-        """
-        Score candidate as an answer using the generator (logprob / likelihood).
-        Requires generator to expose one of:
-          - score_chat(messages, completion) -> float (logprob)
-          - score(prompt, completion) -> float (logprob)
-        """
-        if self.generator is None:
-            raise RuntimeError("Generator is not initialized.")
-
-        # A very simple “answer slot” prompt
-        base_messages = [
-            {"role": "user", "content": f"Question: {question}\nAnswer:"}
-        ]
-        completion = " " + candidate.strip()
-
-        # Preferred: native chat scoring
-        if hasattr(self.generator, "score_chat") and callable(getattr(self.generator, "score_chat")):
-            return float(self.generator.score_chat(base_messages, completion))
-
-        # Fallback: non-chat scoring
-        if hasattr(self.generator, "score") and callable(getattr(self.generator, "score")):
-            prompt = base_messages[0]["content"]
-            return float(self.generator.score(prompt, completion))
-
-        raise NotImplementedError(
-            "Your generator wrapper does not expose score_chat(...) or score(...). "
-            "Add a scoring method that returns log P(completion | prompt/messages)."
-        )
 
     # ------------------------------------------------
     # Stage-1 "logit RAG": retrieve -> mine candidates -> LLM reranks -> pick best
