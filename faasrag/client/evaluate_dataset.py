@@ -332,7 +332,7 @@ def evaluate(
                 )
                 mined = out.get("mined_candidates") or []
                 if mined:
-                    tqdm.write("mined[:10]: " + json.dumps(mined[:10], ensure_ascii=False)[:400])
+                    tqdm.write("mined[:10]: " + json.dumps(mined[:30], ensure_ascii=False)[:400])
 
         # Progress postfix
         if tqdm_update_every > 0 and n % tqdm_update_every == 0:
@@ -459,6 +459,12 @@ def evaluate(
     return summary
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
+
+    #per_token_cap = 1.5
+    # phrase_score_temperature = 0.7
+    # drop_junk_tokens = True
+
+
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
     parser.add_argument(
