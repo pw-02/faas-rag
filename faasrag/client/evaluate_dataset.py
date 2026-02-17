@@ -206,7 +206,7 @@ def evaluate(
 
         stage1_mine_sum += mine_s
         stage1_score_sum += cand_score_s
-        
+
 
         has_gold = False
         selected_gold = False
@@ -325,7 +325,7 @@ def main(cfg: RagServiceConfig):
     parser.add_argument(
         "--mode",
         type=str,
-        default="logit_rag_stage1",
+        default="logit_rag_stage2",
         choices=["llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"],
     )
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl")
