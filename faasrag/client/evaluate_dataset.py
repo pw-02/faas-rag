@@ -145,7 +145,7 @@ def evaluate(
             tqdm.write(f"EM={em} F1={f1:.3f}")
             tqdm.write(f"tokens: prompt={prompt_tokens} completion={completion_tokens} total={total_tokens}")
             tqdm.write(f"timings_s: total={total_s:.3f} ttft={ttft_s:.3f} decode={decode_s:.3f}")
-            tqdm.write(f"messages: {len(messages)}")
+            tqdm.write(f"messages: {str(messages)}")
         # Update tqdm postfix occasionally (avoid slowing loop)
         if tqdm_update_every > 0 and n % tqdm_update_every == 0:
             pbar.set_postfix({
