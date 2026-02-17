@@ -791,8 +791,8 @@ class RagPipeline:
             if hybrid_prompt:
                 messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
             else:
-                messages = [{"role": "user", "content": q}]
-                # messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
+                #messages = [{"role": "user", "content": q}]
+                messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
 
                 # messages = [
                 #     {"role": "system", "content": "Answer with a short phrase only. No explanation."},

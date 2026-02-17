@@ -438,12 +438,15 @@ def main(cfg: RagServiceConfig):
     if args.mode == "llm":
         top_k = 0
         cfg.prompt_build_method = "LLM_ONLY"
+        
     elif args.mode == "prompt_rag":
         top_k = 5
         cfg.prompt_build_method = "QA_OPEN"
+
     elif args.mode == "logit_rag_stage1":
         top_k = 10
         cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
+
     elif args.mode == "logit_rag_stage2":
         top_k = 10
         cfg.prompt_build_method = "LLM_ONLY"
