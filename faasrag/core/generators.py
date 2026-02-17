@@ -208,30 +208,65 @@ class HFCausalLMGenerator:
     def generate_chat_with_logit_bias(
         self,
         messages: List[dict],
-        bias: dict[int, float],
+        bias: Dict[int, float],
         alpha: float = 2.0,
         clamp_first_line: bool = True,
-        max_new_tokens: Optional[int] = None
+        max_new_tokens: Optional[int] = None,
+
+        *,
+        prompt_max_length: Optional[int] = None,
+        bias_steps: Optional[int] = None,   # <-- NEW: only bias first N generated tokens
     ) -> GenResult:
         """
-        Chat generation with retrieval-driven logit bias (Logit-RAG hook).
+        Stage-2 generation: normal chat generation, but with a sparse logit bias applied
+        during decoding to nudge the model toward tokens mined from retrieved passages.
 
-        messages: chat messages (system/user/assistant)
-        bias: sparse dict token_id -> bias_value
-        alpha: scalar multiplier for bias strength
+        messages:
+        Chat messages [{"role": "...", "content": "..."}] formatted via chat template.
+        bias:
 
-        This does NOT add retrieved text to the prompt; it only biases decoding.
+        Dict[token_id -> bias_value]. bias_value is typically small (0..2). We multiply by alpha.
+
+        alpha:
+        Global strength knob. Effective bias is (alpha * bias_value) added to logits.
+
+        prompt_max_length:
+        Explicit prompt truncation length (strongly recommended to avoid silent truncation behavior).
+
+        bias_steps:
+        If set, apply logit bias only for the first N generated tokens.
+        This often improves short-answer tasks by preventing bias from "dragging" later tokens.
         """
-        max_new = int(max_new_tokens) if max_new_tokens is not None else self.max_new_tokens
+        # 1) Resolve generation length
+        max_new = int(max_new_tokens) if max_new_tokens is not None else int(self.max_new_tokens)
+
+        # 2) Chat template -> prompt string
         prompt = self._chat_prompt_text(messages)
-        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True)
+
+        # 3) Tokenize prompt (explicit max_length avoids silent truncation surprises)
+        tok_kwargs = dict(return_tensors="pt", truncation=True if prompt_max_length is not None else False)
+        if prompt_max_length is not None:
+            tok_kwargs["max_length"] = int(prompt_max_length)
+        inputs = self.tokenizer(prompt, **tok_kwargs)
         inputs = self._move_inputs_to_model_device(inputs)
-
         device = inputs["input_ids"].device
-        logits_processor = LogitsProcessorList([
-            SparseAddBiasProcessor(bias=bias, alpha=alpha, device=device)
-        ])
 
+        # 4) Build logits processor
+        # If bias_steps is None: apply every step (current behavior).
+        # If bias_steps is set: apply only early steps.
+        if bias_steps is None:
+            processors = LogitsProcessorList([SparseAddBiasProcessor(bias=bias, alpha=alpha, device=device)])
+        else:
+            processors = LogitsProcessorList([
+                SparseAddBiasProcessor(
+                    bias=bias,
+                    alpha=alpha,
+                    device=device,
+                    max_steps=int(bias_steps),   # <-- you implement this in the processor
+                )
+            ])
+
+        # 5) Generate
         out = self.model.generate(
             **inputs,
             max_new_tokens=max_new,
@@ -241,30 +276,33 @@ class HFCausalLMGenerator:
             top_k=self.top_k if self.do_sample else 0,
             pad_token_id=self.eos_id,
             eos_token_id=self._build_eos_token_ids(),
-            logits_processor=logits_processor,
+            logits_processor=processors,
         )
 
-        prompt_tokens = inputs["input_ids"].shape[-1]
-        total_tokens = out.shape[-1]
-        completion_tokens = total_tokens - prompt_tokens
+        # 6) Token accounting
+        prompt_tokens = int(inputs["input_ids"].shape[-1])
+        total_tokens = int(out.shape[-1])
+        completion_tokens = int(total_tokens - prompt_tokens)
 
+        # 7) Decode completion
         gen_ids = out[0][prompt_tokens:]
         text = self.tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
 
+        # 8) Keep answer compact
         if clamp_first_line and "\n" in text:
             text = text.splitlines()[0].strip()
 
         return GenResult(
             text=text,
-            prompt_tokens=int(prompt_tokens),
-            completion_tokens=int(completion_tokens),
-            total_tokens=int(total_tokens),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
             metrics={
                 "logit_bias_alpha": float(alpha),
                 "logit_bias_tokens": int(len(bias) if bias else 0),
+                "bias_steps": int(bias_steps) if bias_steps is not None else -1,
             },
         )
-    
 
     @torch.no_grad()
     

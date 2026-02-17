@@ -490,7 +490,7 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--stage2_alpha", type=float, default=0.2)
     parser.add_argument("--stage2_alpha_sweep", type=str, default="8,10,12")  # <-- NEW 0.1,0.2,0.4,0.8
     parser.add_argument("--stage2_max_candidates", type=int, default=40)
-    parser.add_argument("--stage2_phrase_score_temperature", type=float, default=1.0)
+    parser.add_argument("--stage2_phrase_score_temperature", type=float, default=0.5)
     parser.add_argument("--stage2_per_token_cap", type=float, default=2.0)
     parser.add_argument("--stage2_clamp_first_line", action="store_true")
     parser.add_argument("--stage2_hybrid_prompt", action="store_true")
