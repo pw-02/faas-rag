@@ -16,6 +16,7 @@ class PromptBuildMethodType(Enum):
     QA_OPEN = auto()
     LLM_ONLY = auto()
     FEW_SHOT = auto()
+    LOGIT_RAG_STAGE1 = auto()  # not a prompt method, but used to trigger LLM_ONLY with top_k>0
 
 
 # ============================================================
@@ -46,6 +47,12 @@ LLM_ONLY_SYSTEM = (
     "Return ONLY the answer. "
     "No extra words. No punctuation. "
     "Maximum 5 words."
+)
+
+# This is used for scoring candidates (stage-1). It should be strict about format.
+STAGE1_SYSTEM = (
+    "You are scoring short-answer candidates for a factual question. "
+    "Return ONLY the short answer in the requested format."
 )
 
 
@@ -105,10 +112,32 @@ def format_context(passages: List[Passage], max_ctx_chars: Optional[int] = None)
     return "\n".join(chunks).strip()
 
 
+def infer_answer_type(question: str) -> str:
+    """
+    Very lightweight heuristic. Good enough to stop obvious failures like picking titles for 'how many' questions.
+    Returns: one of {"person", "number", "date", "location", "other"}.
+    """
+    q = normalize_question(question).lower()
+
+    if q.startswith(("who ", "whose ")):
+        return "person"
+
+    if q.startswith(("how many ", "how much ")):
+        return "number"
+
+    if q.startswith(("when ", "what year ", "what month ", "what date ")):
+        return "date"
+
+    if q.startswith(("where ", "what city ", "what country ", "what state ")):
+        return "location"
+
+    return "other"
+
+
+
 # ============================================================
 # Chat Prompt Builders (return messages)
 # ============================================================
-
 def build_qa_messages(
     question: str,
     passages: List[Passage],
@@ -125,7 +154,8 @@ def build_qa_messages(
         '"""\n'
         f"{context}\n"
         '"""\n\n'
-        f"Question: {q}"
+        f"Question: {q}\n"
+        "Short answer:"
     )
 
     return [
@@ -138,12 +168,11 @@ def build_llm_only_messages(question: str) -> List[ChatMessage]:
     q = normalize_question(question)
     return [
         {"role": "system", "content": LLM_ONLY_SYSTEM},
-        {"role": "user", "content": q},
+        {"role": "user", "content": f"{q}\nShort answer:"},
     ]
 
 
 def build_fewshot_messages(passages: List[Passage], max_ctx_chars: int = 4000) -> List[ChatMessage]:
-    # Treat passages as the example dialogue text (sanitized)
     examples = []
     total = 0
     for p in passages:
@@ -166,6 +195,42 @@ def build_fewshot_messages(passages: List[Passage], max_ctx_chars: int = 4000) -
     ]
 
 
+def build_stage1_scoring_messages(question: str) -> List[ChatMessage]:
+    """
+    Messages used when scoring a candidate completion in Stage-1.
+    Your generator will compute log P(candidate | these messages).
+    """
+    q = normalize_question(question)
+    atype = infer_answer_type(q)
+
+    if atype == "person":
+        slot = "Person"
+        extra = "Return ONLY the person name. Do not repeat the question or the title."
+    elif atype == "number":
+        slot = "Number"
+        extra = "Return ONLY the number (digits) if possible. Do not repeat the question or the title."
+    elif atype == "date":
+        slot = "Date"
+        extra = "Return ONLY the date or year. Do not repeat the question or the title."
+    elif atype == "location":
+        slot = "Location"
+        extra = "Return ONLY the location name. Do not repeat the question or the title."
+    else:
+        slot = "Short answer"
+        extra = "Return ONLY the short answer. Do not repeat the question."
+
+    user_content = (
+        f"{extra}\n\n"
+        f"Question: {q}\n"
+        f"{slot}:"
+    )
+
+    return [
+        {"role": "system", "content": STAGE1_SYSTEM},
+        {"role": "user", "content": user_content},
+    ]
+
+
 # ============================================================
 # Unified Entry Point
 # ============================================================
@@ -178,33 +243,27 @@ def build_rag_messages(
 ) -> Tuple[List[ChatMessage], List[Passage]]:
     """
     Returns (messages, passages_used).
-    For LLM_ONLY, passages_used is [].
+    For LLM_ONLY / LOGIT_RAG_STAGE1, passages_used is [].
     """
     if prompt_build_method == PromptBuildMethodType.QA_STRICT:
-        messages = build_qa_messages(
-            question=question,
-            passages=passages,
-            max_ctx_chars=max_ctx_chars,
-            strict=True,
-        )
+        messages = build_qa_messages(question, passages, max_ctx_chars, strict=True)
         passages_used = passages
 
     elif prompt_build_method == PromptBuildMethodType.QA_OPEN:
-        messages = build_qa_messages(
-            question=question,
-            passages=passages,
-            max_ctx_chars=max_ctx_chars,
-            strict=False,
-        )
+        messages = build_qa_messages(question, passages, max_ctx_chars, strict=False)
         passages_used = passages
 
     elif prompt_build_method == PromptBuildMethodType.LLM_ONLY:
-        messages = build_llm_only_messages(question=question)
-        passages_used = []  # ensure no context is used
+        messages = build_llm_only_messages(question)
+        passages_used = []
 
     elif prompt_build_method == PromptBuildMethodType.FEW_SHOT:
-        messages = build_fewshot_messages(passages=passages, max_ctx_chars=max_ctx_chars)
+        messages = build_fewshot_messages(passages, max_ctx_chars=max_ctx_chars)
         passages_used = passages
+
+    elif prompt_build_method == PromptBuildMethodType.LOGIT_RAG_STAGE1:
+        messages = build_stage1_scoring_messages(question)
+        passages_used = []
 
     else:
         raise ValueError(f"Invalid prompt build method {prompt_build_method}")

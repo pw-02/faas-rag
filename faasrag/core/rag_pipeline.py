@@ -23,7 +23,7 @@ from faasrag.core.embedders import build_embedder
 from faasrag.core.generators import build_generator
 from faasrag.core.docstores import load_docstore
 from faasrag.core.indexes import load_index
-from faasrag.core.prompts import PromptBuildMethodType, build_rag_messages
+from faasrag.core.prompts import PromptBuildMethodType, build_rag_messages, build_stage1_scoring_messages
 from faasrag.core.utils import append_csv_row
 
 
@@ -314,9 +314,13 @@ class RagPipeline:
         cache_hits = 0
         cache_misses = 0
 
+        # Build the scoring prompt ONCE (typed slot like Person:/Number:/Date:)
+        scoring_messages = build_stage1_scoring_messages(question)
+
         # Retrieval
         with timed(timings, "retrieve_total_s"):
             passages, retrieved_doc_ids, rt, cache_info = self._retrieve_passages(question, k=self.top_k)
+            
         timings.update(rt)
         cache_used = bool(cache_info.get("cache_used", False))
         cache_hits = int(cache_info.get("cache_hits", 0))
@@ -326,15 +330,15 @@ class RagPipeline:
         with timed(timings, "candidate_mine_s"):
             mined = self._mine_candidates(passages, max_candidates=max_candidates)
 
+
         if not mined:
             # fallback: just answer with plain LLM (no retrieval prompt)
             with timed(timings, "decode_s"):
-                base_messages = [{"role": "user", "content": f"Question: {question}\nAnswer:"}]
-                gen = self.generator.generate_chat(base_messages)
+                gen = self.generator.generate_chat(scoring_messages)
             return {
                 "question": question,
                 "mode": "logit_rag_stage1_fallback_llm",
-                "messages": base_messages,
+                "messages": scoring_messages,
                 "answer": gen.text,
                 "raw_answer": gen.text,
                 "retrieved_doc_ids": retrieved_doc_ids,
@@ -350,8 +354,9 @@ class RagPipeline:
                 "cache_misses": cache_misses,
             }
 
-        # Keep top-N by prior for scoring
+       # Keep top-N by prior for scoring
         to_score = mined[: max(1, score_top_n)]
+
         # Normalize priors for optional mixing
         prior_vals = np.array([max(0.0, s) for _, s in to_score], dtype=np.float64)
         prior_sum = float(prior_vals.sum())
@@ -363,15 +368,18 @@ class RagPipeline:
         # LLM reranking
         scored: list[dict[str, Any]] = []
         with timed(timings, "candidate_score_s"):
-            for i, (cand, prior) in enumerate(to_score):
-                llm_score = self._score_candidate_with_llm(question, cand)
+            for i, (cand, _prior_unused) in enumerate(to_score):
+                # KEY CHANGE: score candidate using the typed scoring prompt
+                # This requires your generator to have score_chat().
+                completion = " " + cand.strip()
+                llm_score = float(self.generator.score_chat(scoring_messages, completion))
 
-                # very cheap length norm to reduce penalty on longer spans
+                # length norm
                 if length_normalize:
                     denom = max(1, len(cand.split()))
                     llm_score = llm_score / denom
 
-                # optional prior mixing in log space
+                # optional prior mixing
                 if alpha_prior and alpha_prior > 0:
                     p = float(prior_vals[i])
                     llm_score = llm_score + float(alpha_prior) * math.log(p + 1e-12)
@@ -390,12 +398,12 @@ class RagPipeline:
         result = {
             "question": question,
             "mode": "logit_rag_stage1",
+            "messages": scoring_messages,  # helpful for debugging
             "answer": best,
             "raw_answer": best,
             "retrieved_doc_ids": retrieved_doc_ids,
             "candidates": scored,
             "best_candidate": best,
-            # tokens: Stage1 scoring doesn’t go through generate_chat, so we don't have reliable counts here
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,

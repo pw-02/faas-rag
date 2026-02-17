@@ -265,7 +265,7 @@ def evaluate(
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, default="logit_rag_stage1", choices=["llm", "prompt_rag", "logit_rag_stage1"])
+    parser.add_argument("--mode", type=str, default="llm", choices=["llm", "prompt_rag", "logit_rag_stage1"])
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl", help="Path to dataset (jsonl)")
     parser.add_argument("--limit", type=int, default=1000, help="Optional limit for quick runs (0 = all)")
     parser.add_argument("--out_csv", type=str, default="dataset_eval.csv", help="CSV path (empty disables)")
@@ -289,8 +289,11 @@ def main(cfg: RagServiceConfig):
     # - logit_rag_stage1: use cfg.top_k (must be >0)
     if args.mode == "llm":
         top_k = 0
+        cfg.prompt_build_method = "LLM_ONLY"
     else:
         top_k = int(cfg.top_k)
+        
+        cfg.prompt_build_method = cfg.prompt_build_method or "QA_STRICT"
 
     if args.out_csv.strip():
         #append mode to start of filename before extension
