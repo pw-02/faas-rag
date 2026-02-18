@@ -724,13 +724,13 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--max_mined_candidates", type=int, default=40)
 
     # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
-    parser.add_argument("--logit_bias_strength", type=str, default="10000")
+    parser.add_argument("--logit_bias_strength", type=str, default="15")
     parser.add_argument("--max_token_logit_bias", type=str, default="1.5")
     parser.add_argument("--phrase_softmax_temperature", type=str, default="0.5")
 
     parser.add_argument("--clamp_first_line", action="store_true")
     parser.add_argument("--hybrid_prompt", action="store_true")
-    parser.add_argument("--max_bias_steps", type=int, default=2)
+    parser.add_argument("--max_bias_steps", type=int, default=None)
 
     parser.add_argument("--sweep_style", type=str, default="grid", choices=["grid", "zip"])
     args = parser.parse_args()

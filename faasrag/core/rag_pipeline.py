@@ -33,8 +33,9 @@ from faasrag.core.prompts import (
     build_rag_messages,
     build_scoring_messages,
 )
+from faasrag.core.utils import append_csv_row, dedupe_overlapping_phrases
 
-from faasrag.core.utils import append_csv_row
+
 
 @contextmanager
 def timed(store: dict, key: str):
@@ -257,26 +258,31 @@ class RagPipeline:
 
         rr.doc_ids = [str(p.pid) for p in rr.passages]
         return rr
-
+    
     def _candidates_to_token_bias(
         self,
         scored_phrases: list[tuple[str, float]],
         *,
-        max_token_logit_bias: float = None,
-        phrase_softmax_temperature: float = 1.0, #controls how strongly you prefer high-scoring phrases when building the bias map.
+        max_token_logit_bias: float | None = None,
+        phrase_softmax_temperature: float = 1.0,
         drop_junk_tokens: bool = True,
+        dedupe_overlaps: bool = True,
+        split_weight_across_tokens: bool = False,  # keep False for your “don’t divide” fix
     ) -> dict[int, float]:
         """
-        Convert mined candidate phrases into a token_id -> logit_bias map.
-        - We compute phrase weights via softmax(score / score_temperature) (higher score => higher weight).
-        - Each phrase weight is distributed uniformly across the tokens in that phrase.
-        - Token biases are summed across phrases, optionally filtering junk/special tokens.
-        - Bias per token is capped by max_token_logit_bias.
-            | Temperature T | Effect                   |
-            | ------------- | ------------------------ |
-            | T ↓ (< 1)     | Sharper / more confident |
-            | T ↑ (> 1)     | Flatter / more uniform   |
+        Convert mined candidate phrases into token_id -> logit_bias map.
 
+        Steps:
+        1) (Optional) dedupe overlapping phrases (drop "Bruce" if "Bruce Springsteen" exists).
+        2) Softmax weights over phrase scores: w_i = softmax(score_i / T)
+            - Lower T (<1) => sharper (top phrase dominates)
+            - Higher T (>1) => flatter (weights more uniform)
+        3) Convert each phrase to token IDs and add weight to each token.
+            - If split_weight_across_tokens=True: per_tok = w / len(tokens)
+            - Else: per_tok = w  (stronger for multi-token phrases)
+        4) (Optional) drop junk tokens and cap per-token bias.
+
+        NOTE: This is token-level steering; very large bias can cause repetition loops.
         """
         if not scored_phrases:
             return {}
@@ -286,13 +292,20 @@ class RagPipeline:
         tokenizer = self.generator.tokenizer
         special_ids = set(getattr(tokenizer, "all_special_ids", []))
 
-        # Softmax over candidate scores (higher score => higher weight)
-        scores = np.array([float(score) for _phrase, score in scored_phrases], dtype=np.float64)
+        items = scored_phrases
+        if dedupe_overlaps:
+            items = dedupe_overlapping_phrases(items)
+
+        if not items:
+            return {}
+
+        # --- softmax over phrase scores ---
+        scores = np.array([float(score) for _phrase, score in items], dtype=np.float64)
         T = max(1e-9, float(phrase_softmax_temperature))
         logits = scores / T
         logits = logits - logits.max()
-        phrase_weights = np.exp(logits)
-        phrase_weights = phrase_weights / (phrase_weights.sum() + 1e-9)
+        w = np.exp(logits)
+        w = w / (w.sum() + 1e-9)
 
         def is_junk_token_id(tid: int) -> bool:
             if tid in special_ids:
@@ -308,9 +321,9 @@ class RagPipeline:
                 return True
             return False
 
-        token_bias: dict[int, float] = {}
+        token_bias: Dict[int, float] = {}
 
-        for (phrase, _score), w in zip(scored_phrases, phrase_weights.tolist()):
+        for (phrase, _score), phrase_w in zip(items, w.tolist()):
             phrase = (phrase or "").strip()
             if not phrase:
                 continue
@@ -319,8 +332,11 @@ class RagPipeline:
             if not token_ids:
                 continue
 
-            # distribute phrase weight across its tokens
-            per_tok = float(w) / max(1, len(token_ids))
+            # --- key change: don't divide by token count (default) ---
+            if split_weight_across_tokens:
+                per_tok = float(phrase_w) / max(1, len(token_ids))
+            else:
+                per_tok = float(phrase_w)
 
             for tid in token_ids:
                 tid = int(tid)
@@ -328,7 +344,7 @@ class RagPipeline:
                     continue
                 token_bias[tid] = token_bias.get(tid, 0.0) + per_tok
 
-        # Cap per-token bias (logit units)
+        # cap
         if max_token_logit_bias is not None and max_token_logit_bias > 0:
             cap = float(max_token_logit_bias)
             for tid in list(token_bias.keys()):
@@ -336,8 +352,7 @@ class RagPipeline:
                     token_bias[tid] = cap
 
         return token_bias
-
-
+  
     # -------------------------
     # Candidate mining (QA reader -> atomic candidate strings)
     # -------------------------
@@ -941,8 +956,9 @@ class RagPipeline:
                 max_token_logit_bias=max_token_logit_bias,
                 phrase_softmax_temperature=phrase_softmax_temperature,
                 drop_junk_tokens=True,
+                dedupe_overlaps=True,
+                split_weight_across_tokens=False,
             )
-
 
         with timed(timings, "prompt_s"):
             # TODO: implement hybrid_prompt if you want different message construction

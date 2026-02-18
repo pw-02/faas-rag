@@ -6,6 +6,35 @@ import string
 from collections import Counter
 from typing import Iterable, List, Optional, Tuple
 
+
+def dedupe_overlapping_phrases(
+    scored_phrases: List[Tuple[str, float]],
+) -> List[Tuple[str, float]]:
+    """
+    Keep longer/more specific phrases; drop phrases that are substrings of an already-kept phrase
+    (after simple normalization). Assumes scored_phrases are roughly best->worst, but we enforce it.
+    """
+    def norm(s: str) -> str:
+        return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+    # sort by score desc, then by normalized length desc
+    ranked = sorted(scored_phrases, key=lambda x: (float(x[1]), len(norm(x[0]))), reverse=True)
+
+    kept: List[Tuple[str, float]] = []
+    kept_norm: List[str] = []
+    for phrase, score in ranked:
+        p = (phrase or "").strip()
+        pn = norm(p)
+        if not pn:
+            continue
+        # if this phrase is contained in any already-kept phrase, skip
+        if any(pn in kn for kn in kept_norm):
+            continue
+        kept.append((p, float(score)))
+        kept_norm.append(pn)
+        
+
+    return kept
 def append_csv_row(path: str, row: dict) -> None:
     file_exists = os.path.exists(path) and os.path.getsize(path) > 0
 
