@@ -577,7 +577,7 @@ def evaluate_one_run(
         "n": agg.n,
         "em": agg.mean(agg.em_sum),
         "f1": agg.mean(agg.f1_sum),
-        "mean_total_tokens": agg.mean_int(agg.total_tok_sum),
+        "mean_total_tokens": agg.mean_int(agg.total_tok_su
         "mean_embed_s": agg.mean(agg.embed_sum),
         "mean_ann_s": agg.mean(agg.ann_sum),
         "mean_docstore_s": agg.mean(agg.docstore_sum),
@@ -621,7 +621,7 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--max_mined_candidates", type=int, default=40)
 
     # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
-    parser.add_argument("--logit_bias_strength", type=str, default="0.8")
+    parser.add_argument("--logit_bias_strength", type=str, default="10")
     parser.add_argument("--max_token_logit_bias", type=str, default="2.0")
     parser.add_argument("--phrase_softmax_temperature", type=str, default="1.0")
 
