@@ -488,10 +488,10 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--stage2_alpha_sweep", type=str, default="1,4,8,10,12,16,20,30,40")  # e.g. "0.1,0.2,0.4,0.8"
     parser.add_argument("--stage2_max_candidates", type=int, default=15)
     parser.add_argument("--stage2_max_candidates_sweep", type=str, default="5,10,15,20,25,30,35,40")  # e.g. "10,15,20"
-    parser.add_argument("--stage2_phrase_score_temperature", type=float, default=1.0)
-    parser.add_argument("--stage2_phrase_temp_sweep", type=str, default="0.1,0.5,1.0,2.0,5.0")  # e.g. "0.1,0.5,1.0,2.0"
-    parser.add_argument("--stage2_per_token_cap", type=float, default=2.0)
-    parser.add_argument("--stage2_per_token_cap_sweep", type=str, default="1,2,5,10")  # e.g. "1,2,5,10"
+    parser.add_argument("--stage2_phrase_score_temperature", type=float, default=0.5)
+    parser.add_argument("--stage2_phrase_temp_sweep", type=str, default="")  # e.g. "0.1,0.5,1.0,2.0"
+    parser.add_argument("--stage2_per_token_cap", type=float, default=1.5)
+    parser.add_argument("--stage2_per_token_cap_sweep", type=str, default="")  # e.g. "1,2,5,10"
     parser.add_argument("--stage2_clamp_first_line", action="store_true")
     parser.add_argument("--stage2_hybrid_prompt", action="store_true")
     parser.add_argument("--stage2_max_bias_steps", type=int, default=None)
