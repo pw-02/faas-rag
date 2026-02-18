@@ -752,8 +752,8 @@ def evaluate_one_run(
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
-
-    parser.add_argument("--mode", type=str, default="prompt_rag", choices=sorted(VALID_MODES))
+    #{"llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"}
+    parser.add_argument("--mode", type=str, default="llm", choices=sorted(VALID_MODES))
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_train.jsonl")
     parser.add_argument("--limit", type=int, default=500)
     parser.add_argument("--print_first_n", type=int, default=10)
