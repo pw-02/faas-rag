@@ -581,12 +581,13 @@ class RagPipeline:
                 enc = self.reader_tokenizer(
                     question,
                     ctx,
-                    truncation="only_second",
+                    # truncation="only_second",
+                    truncation=True,
                     max_length=max_seq_len,
                     stride=doc_stride,
                     return_overflowing_tokens=True,   # multiple windows for long contexts
                     return_offsets_mapping=True,      # map token positions -> character spans
-                    padding=False,
+                    padding=True,
                     return_tensors="pt",
                 )
 
