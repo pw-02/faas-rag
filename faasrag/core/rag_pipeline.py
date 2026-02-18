@@ -262,7 +262,7 @@ class RagPipeline:
         self,
         scored_phrases: list[tuple[str, float]],
         *,
-        max_token_logit_bias: float = 2.0,
+        max_token_logit_bias: float = None,
         phrase_softmax_temperature: float = 1.0, #controls how strongly you prefer high-scoring phrases when building the bias map.
         drop_junk_tokens: bool = True,
     ) -> dict[int, float]:
@@ -329,7 +329,7 @@ class RagPipeline:
                 token_bias[tid] = token_bias.get(tid, 0.0) + per_tok
 
         # Cap per-token bias (logit units)
-        if max_token_logit_bias and max_token_logit_bias > 0:
+        if max_token_logit_bias is not None and max_token_logit_bias > 0:
             cap = float(max_token_logit_bias)
             for tid in list(token_bias.keys()):
                 if token_bias[tid] > cap:
