@@ -958,7 +958,7 @@ class RagPipeline:
                 max_token_logit_bias=max_token_logit_bias,
                 phrase_softmax_temperature=phrase_softmax_temperature,
                 drop_junk_tokens=True,
-                dedupe_overlaps=True,
+                dedupe_overlaps=False,
                 split_weight_across_tokens=False,
             )
 
