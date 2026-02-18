@@ -705,7 +705,7 @@ def main(cfg: RagServiceConfig):
 
     #data/datasets/qa/nq/nq_train.jsonl
     #data/datasets/nq_train_filtered.jsonl
-    parser.add_argument("--mode", type=str, default="logit_rag", choices=sorted(VALID_MODES))
+    parser.add_argument("--mode", type=str, default="prompt_rag", choices=sorted(VALID_MODES))
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_train.jsonl", type=str)
 
     parser.add_argument("--limit", type=int, default=500)
