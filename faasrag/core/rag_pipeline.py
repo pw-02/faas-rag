@@ -949,7 +949,7 @@ class RagPipeline:
 
         timings["total_s"] = time.perf_counter() - start
 
-        mined_phrases = [p for p, _ in mined_candidates]
+        # mined_phrases = [p for p, _ in mined_candidates]
 
         res = RagRunResult(
             mode="logit_rag",
@@ -967,10 +967,8 @@ class RagPipeline:
                 "cache_used": retrieval_result.cache_used,
                 "cache_hits": retrieval_result.cache_hits,
                 "cache_misses": retrieval_result.cache_misses,
-                "num_minded_candidates": len(mined_candidates),
                 "mined_candidates": mined_candidates,   # phrase+score
-                # "mined_phrases": mined_phrases,         # just text
-                "num_biased_token_ids": int(len(logit_bias)),
+                "num_biased_token_ids": len(logit_bias),
                 "logit_bias_strength": float(logit_bias_strength),
             },
         )

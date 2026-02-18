@@ -108,7 +108,7 @@ RESULT_COLUMNS: List[str] = [
     "run_id",
     "mode",
     # cfg (prefixed)
-    "cfg_limit",
+    # "cfg_limit",
     # "cfg_print_first_n",
     # "cfg_tqdm_update_every",
     "cfg_top_k",
@@ -158,7 +158,7 @@ SUMMARY_COLUMNS: List[str] = [
     "run_id",
     "mode",
     # cfg (prefixed)
-    "cfg_limit",
+    # "cfg_limit",
     # "cfg_print_first_n",
     # "cfg_tqdm_update_every",
     "cfg_top_k",
@@ -198,7 +198,7 @@ def _row_with_schema(cols: List[str], values: Dict[str, Any]) -> Dict[str, Any]:
 def cfg_to_prefixed_dict(cfg: RunConfig) -> Dict[str, Any]:
     """One canonical place to format cfg fields and apply prefixes."""
     return {
-        "cfg_limit": cfg.limit,
+        # "cfg_limit": cfg.limit,
         # "cfg_print_first_n": cfg.print_first_n,
         # "cfg_tqdm_update_every": cfg.tqdm_update_every,
         "cfg_top_k": cfg.top_k,
@@ -235,7 +235,7 @@ class ModelOut:
     cache_used: bool
     cache_hits: int
     cache_misses: int
-    mined_phrases: List[str]
+    mined_candidates: List[str]
     num_biased_token_ids: int
 
 
@@ -244,23 +244,12 @@ def parse_model_out(out: Dict[str, Any]) -> ModelOut:
     timings = out.get("timings_s") or {}
     pred = (out.get("raw_answer") or out.get("answer") or "").strip()
 
-    cache_used = bool(out.get("cache_used", extra.get("cache_used", False)))
-    cache_hits = int((out.get("cache_hits", extra.get("cache_hits", 0)) or 0))
-    cache_misses = int((out.get("cache_misses", extra.get("cache_misses", 0)) or 0))
+    cache_used = bool(extra.get("cache_used", False))
+    cache_hits = int(extra.get("cache_hits", 0)) or 0
+    cache_misses = int(extra.get("cache_misses", 0)) or 0
 
-    # prefer mined_phrases if present; else derive from mined_candidates
-    mined_phrases = extra.get("mined_phrases") or out.get("mined_phrases") or []
-    if not mined_phrases:
-        mined_candidates = extra.get("mined_candidates") or out.get("mined_candidates") or []
-        derived: List[str] = []
-        for x in mined_candidates:
-            if isinstance(x, (list, tuple)) and len(x) >= 1:
-                derived.append(str(x[0]))
-            else:
-                derived.append(str(x))
-        mined_phrases = derived
+    mined_candidates = extra.get("mined_candidates")
 
-    # prefer explicit field name, but support older "bias_tokens"
     num_biased_token_ids = int(
         extra.get("num_biased_token_ids")
         or out.get("num_biased_token_ids")
@@ -279,7 +268,7 @@ def parse_model_out(out: Dict[str, Any]) -> ModelOut:
         cache_used=cache_used,
         cache_hits=cache_hits,
         cache_misses=cache_misses,
-        mined_phrases=[str(x) for x in mined_phrases if str(x).strip()],
+        mined_candidates=mined_candidates if mined_candidates is not None else [],
         num_biased_token_ids=num_biased_token_ids,
     )
 
@@ -288,7 +277,7 @@ def compute_logit_diag(mo: ModelOut, golds: List[str], mode: str) -> LogitDiag:
     if mode != "logit_rag":
         return LogitDiag()
 
-    mined_norm = [normalize_answer(x) for x in mo.mined_phrases]
+    mined_norm = [normalize_answer(x) for x in mo.mined_candidates]
     mined_norm = [x for x in mined_norm if x]
 
     pred_norm = normalize_answer(mo.pred)
@@ -614,7 +603,7 @@ def evaluate_one_run(
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
     #logit_rag,prompt_rag,llm
-    parser.add_argument("--mode", type=str, default="llm", choices=sorted(VALID_MODES))
+    parser.add_argument("--mode", type=str, default="logit_rag", choices=sorted(VALID_MODES))
     parser.add_argument("--data", default="data/datasets/nq_train_filtered.jsonl")
 
     parser.add_argument("--limit", type=int, default=500)

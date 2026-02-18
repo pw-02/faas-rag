@@ -255,7 +255,7 @@ class HFCausalLMGenerator:
             logits_processor=processors,
             clamp_first_line=clamp_first_line,
             metrics={
-                "logit_bias_alpha": float(alpha),
+                "logit_bias_strength": float(logit_bias_strength),
                 "logit_bias_tokens": int(len(bias) if bias else 0),
                 "max_bias_steps": int(max_bias_steps) if max_bias_steps is not None else -1,
             },
