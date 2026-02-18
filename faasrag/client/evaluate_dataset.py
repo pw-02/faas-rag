@@ -694,7 +694,8 @@ def evaluate_one_run(
             tqdm.write(f"tokens: prompt={res.prompt_tokens} completion={res.completion_tokens} total={res.total_tokens}")
             tqdm.write(f"timings_s: total={res.total_s:.3f} decode={res.decode_s:.3f}")
             if hasattr(res, "messages") and res.messages:
-                tqdm.write(f"messages: {res.messages:10}")
+                preview = res.messages[:5]
+                tqdm.write(f"messages (first 5): {preview}")
 
         if cfg.tqdm_update_every > 0 and agg.n % cfg.tqdm_update_every == 0:
             pbar.set_postfix(agg.postfix(mode))
