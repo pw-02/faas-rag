@@ -979,7 +979,7 @@ class RagPipeline:
                 "cache_used": retrieval_result.cache_used,
                 "cache_hits": retrieval_result.cache_hits,
                 "cache_misses": retrieval_result.cache_misses,
-                "mined_candidates": mined_candidates,   # phrase+score
+                "mined_candidates": top_phrases,   # phrase+score
                 "num_biased_token_ids": len(logit_bias),
                 "logit_bias_strength": float(logit_bias_strength),
             },
