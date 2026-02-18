@@ -39,15 +39,6 @@ def load_jsonl(path: str) -> List[Dict[str, Any]]:
     return data
 
 
-def append_summary_row(path: str, row: Dict[str, Any]) -> None:
-    file_exists = os.path.exists(path) and os.path.getsize(path) > 0
-    with open(path, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(row)
-
-
 def get_question_and_answers(ex: Dict[str, Any]) -> Tuple[str, List[str]]:
     q = (ex.get("question") or "").strip()
     golds = ex.get("golden_answers") or []
@@ -703,7 +694,7 @@ def evaluate_one_run(
             tqdm.write(f"tokens: prompt={res.prompt_tokens} completion={res.completion_tokens} total={res.total_tokens}")
             tqdm.write(f"timings_s: total={res.total_s:.3f} decode={res.decode_s:.3f}")
             if hasattr(res, "messages") and res.messages:
-                tqdm.write(f"messages: {len(res.messages)} messages")
+                tqdm.write(f"messages: {res.messages:10}")
 
         if cfg.tqdm_update_every > 0 and agg.n % cfg.tqdm_update_every == 0:
             pbar.set_postfix(agg.postfix(mode))
@@ -924,7 +915,7 @@ def main(cfg: RagServiceConfig):
         print(json.dumps(summary, indent=2, default=str))
 
         if args.summary_csv:
-            append_summary_row(args.summary_csv, summary)
+            append_csv_row(args.summary_csv, summary)
             logger.info("Appended summary row to %s (run_id=%s)", args.summary_csv, summary.get("run_id"))
 
 
