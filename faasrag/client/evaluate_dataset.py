@@ -159,8 +159,8 @@ SUMMARY_COLUMNS: List[str] = [
     "mode",
     # cfg (prefixed)
     "cfg_limit",
-    "cfg_print_first_n",
-    "cfg_tqdm_update_every",
+    # "cfg_print_first_n",
+    # "cfg_tqdm_update_every",
     "cfg_top_k",
     "cfg_logit_max_mined_candidates",
     "cfg_logit_bias_strength",
