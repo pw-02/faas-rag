@@ -463,10 +463,10 @@ def evaluate_one_run(
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--mode", type=str, default="logit_rag_stage2",
+    parser.add_argument("--mode", type=str, default="llm",
                         choices=["llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"])
-    parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl")
-    parser.add_argument("--limit", type=int, default=5000)
+    parser.add_argument("--data", default="data/datasets/qa/nq/nq_train.jsonl")
+    parser.add_argument("--limit", type=int, default=2500)
     parser.add_argument("--print_first_n", type=int, default=10)
     parser.add_argument("--tqdm_update_every", type=int, default=10)
 
