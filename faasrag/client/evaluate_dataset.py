@@ -485,7 +485,7 @@ def main(cfg: RagServiceConfig):
 
     # Stage-2 knobs + sweeps (allow sweeps for multiple params)
     parser.add_argument("--stage2_alpha", type=float, default=10)
-    parser.add_argument("--stage2_alpha_sweep", type=str, default="1,4,8,10,12,16,20,30,40")  # e.g. "0.1,0.2,0.4,0.8"
+    parser.add_argument("--stage2_alpha_sweep", type=str, default="40,20,20,16,12,10,8")  # e.g. "0.1,0.2,0.4,0.8"
     parser.add_argument("--stage2_max_candidates", type=int, default=15)
     parser.add_argument("--stage2_max_candidates_sweep", type=str, default="5,10,15,20,25,30,35,40")  # e.g. "10,15,20"
     parser.add_argument("--stage2_phrase_score_temperature", type=float, default=0.5)
