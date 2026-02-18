@@ -896,13 +896,14 @@ class RagPipeline:
         self,
         question: str,
         max_mined_candidates: int = 40,
-        bias_top_n: int = 4,
         logit_bias_strength: float = 0.8,
         max_token_logit_bias: float = 2.0,
         phrase_softmax_temperature: float = 1.0,
         clamp_first_line: bool = True,
         hybrid_prompt: bool = False,
         max_bias_steps: Optional[int] = None,
+        bias_top_n: Optional[int] = 1,
+
     ) -> dict[str, Any]:
 
         q = (question or "").strip()
@@ -912,6 +913,11 @@ class RagPipeline:
             raise RuntimeError("Stage2 requires generator (retrieve_only=False).")
         if self.top_k <= 0:
             raise ValueError("Stage2 requires retrieval (top_k > 0).")
+        
+        if bias_top_n is not None and bias_top_n <= 0:
+            raise ValueError("bias_top_n must be positive if specified.")
+        if bias_top_n is None:
+            bias_top_n = max_mined_candidates
 
         timings: dict[str, float] = {}
         start = time.perf_counter()
@@ -979,7 +985,7 @@ class RagPipeline:
                 "cache_used": retrieval_result.cache_used,
                 "cache_hits": retrieval_result.cache_hits,
                 "cache_misses": retrieval_result.cache_misses,
-                "mined_candidates": top_phrases,   # phrase+score
+                "mined_candidates": mined_candidates,   # phrase+score
                 "num_biased_token_ids": len(logit_bias),
                 "logit_bias_strength": float(logit_bias_strength),
             },
