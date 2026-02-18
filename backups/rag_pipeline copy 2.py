@@ -1,3 +1,11 @@
+# =========================
+# FILE 1: faasrag/core/rag_pipeline.py
+# Cleaned pipeline with:
+# - consistent output schema (RagRunResult)
+# - lazy reader loading
+# - no duplicate helper functions
+# - retrieval returns a RetrievalResult object
+# =========================
 from __future__ import annotations
 
 import logging
@@ -31,16 +39,17 @@ from faasrag.core.indexes import load_index
 from faasrag.core.prompts import (
     PromptBuildMethodType,
     build_rag_messages,
-    build_scoring_messages,
+    build_stage1_scoring_messages,
 )
-
 from faasrag.core.utils import append_csv_row
+
 
 @contextmanager
 def timed(store: dict, key: str):
     t0 = time.perf_counter()
     yield
     store[key] = time.perf_counter() - t0
+
 
 # -------------------------
 # Result types
@@ -54,6 +63,7 @@ class RetrievalResult:
     cache_hits: int = 0
     cache_misses: int = 0
 
+
 @dataclass
 class RagRunResult:
     mode: str
@@ -62,11 +72,14 @@ class RagRunResult:
     raw_answer: str
     messages: List[dict] = field(default_factory=list)
     retrieved_doc_ids: List[str] = field(default_factory=list)
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     finish_reason: str = ""
+
     timings_s: Dict[str, float] = field(default_factory=dict)
+
     # For extra diagnostics without breaking schema
     extra: Dict[str, Any] = field(default_factory=dict)
 
@@ -128,8 +141,8 @@ class RagPipeline:
             self.prompt_build_method = PromptBuildMethodType.LLM_ONLY
         elif pbm == "LOGIT_RAG_STAGE1":
             self.prompt_build_method = PromptBuildMethodType.LOGIT_RAG_STAGE1
-        elif pbm == "LOGIT_RAG":
-            self.prompt_build_method = PromptBuildMethodType.LOGIT_RAG
+        elif pbm == "LOGIT_RAG_STAGE2":
+            self.prompt_build_method = PromptBuildMethodType.LOGIT_RAG_STAGE2
         else:
             raise ValueError(f"Invalid prompt_build_method {prompt_build_method}")
         
@@ -258,48 +271,38 @@ class RagPipeline:
         rr.doc_ids = [str(p.pid) for p in rr.passages]
         return rr
 
+    # -------------------------
+    # Option-B: candidates -> token bias
+    # -------------------------
     def _candidates_to_token_bias(
         self,
-        scored_phrases: list[tuple[str, float]],
+        candidates: list[tuple[str, float]],
         *,
-        max_token_logit_bias: float = 2.0,
-        phrase_softmax_temperature: float = 1.0, #controls how strongly you prefer high-scoring phrases when building the bias map.
-        drop_junk_tokens: bool = True,
+        per_token_cap: float = 2.0, #Limits how much any single token’s logit can be boosted.
+        phrase_score_temperature: float = 1.0, #controls how sharp your phrase weights are. Higher temp => more even weights, lower temp => sharper focus on top candidates.
+        drop_junk_tokens: bool = True, #drop_junk_tokens: bool = True
     ) -> dict[int, float]:
-        """
-        Convert mined candidate phrases into a token_id -> logit_bias map.
-        - We compute phrase weights via softmax(score / score_temperature) (higher score => higher weight).
-        - Each phrase weight is distributed uniformly across the tokens in that phrase.
-        - Token biases are summed across phrases, optionally filtering junk/special tokens.
-        - Bias per token is capped by max_token_logit_bias.
-            | Temperature T | Effect                   |
-            | ------------- | ------------------------ |
-            | T ↓ (< 1)     | Sharper / more confident |
-            | T ↑ (> 1)     | Flatter / more uniform   |
-
-        """
-        if not scored_phrases:
+        if not candidates:
             return {}
         if self.generator is None or not hasattr(self.generator, "tokenizer"):
             raise RuntimeError("Need HF generator exposing .tokenizer for stage2 biasing.")
 
-        tokenizer = self.generator.tokenizer
-        special_ids = set(getattr(tokenizer, "all_special_ids", []))
+        tok = self.generator.tokenizer
+        special_ids = set(getattr(tok, "all_special_ids", []))
+        items = candidates
 
-        # Softmax over candidate scores (higher score => higher weight)
-        scores = np.array([float(score) for _phrase, score in scored_phrases], dtype=np.float64)
-        T = max(1e-9, float(phrase_softmax_temperature))
-        logits = scores / T
-        logits = logits - logits.max()
-        phrase_weights = np.exp(logits)
-        phrase_weights = phrase_weights / (phrase_weights.sum() + 1e-9)
+        scores = np.array([float(s) for _, s in items], dtype=np.float64)
+        scores = scores / max(1e-9, float(phrase_score_temperature))
+        scores = scores - scores.max()
+        w = np.exp(scores)
+        w = w / (w.sum() + 1e-9)
 
         def is_junk_token_id(tid: int) -> bool:
             if tid in special_ids:
                 return True
             if not drop_junk_tokens:
                 return False
-            s = tokenizer.decode([tid]).strip()
+            s = tok.decode([tid]).strip()
             if s == "":
                 return True
             if re.fullmatch(r"[^\w]+", s):
@@ -308,45 +311,37 @@ class RagPipeline:
                 return True
             return False
 
-        token_bias: dict[int, float] = {}
-
-        for (phrase, _score), w in zip(scored_phrases, phrase_weights.tolist()):
+        bias: dict[int, float] = {}
+        for (phrase, _), phrase_w in zip(items, w.tolist()):
             phrase = (phrase or "").strip()
             if not phrase:
                 continue
-
-            token_ids = tokenizer(phrase, add_special_tokens=False)["input_ids"]
-            if not token_ids:
+            ids = tok(phrase, add_special_tokens=False)["input_ids"]
+            if not ids:
                 continue
-
-            # distribute phrase weight across its tokens
-            per_tok = float(w) / max(1, len(token_ids))
-
-            for tid in token_ids:
+            per_tok = float(phrase_w) / max(1, len(ids))
+            for tid in ids:
                 tid = int(tid)
                 if is_junk_token_id(tid):
                     continue
-                token_bias[tid] = token_bias.get(tid, 0.0) + per_tok
+                bias[tid] = bias.get(tid, 0.0) + per_tok
 
-        # Cap per-token bias (logit units)
-        if max_token_logit_bias and max_token_logit_bias > 0:
-            cap = float(max_token_logit_bias)
-            for tid in list(token_bias.keys()):
-                if token_bias[tid] > cap:
-                    token_bias[tid] = cap
+        if per_token_cap and per_token_cap > 0:
+            for tid in list(bias.keys()):
+                if bias[tid] > per_token_cap:
+                    bias[tid] = float(per_token_cap)
 
-        return token_bias
-
+        return bias
 
     # -------------------------
     # Candidate mining (QA reader -> atomic candidate strings)
     # -------------------------
-    def _mine_candidates_from_passages(
+    def _mine_candidates_qa1(
         self,
         question: str,
         passages: list[Passage],
         *,
-        max_mined_candidates: int = 50,
+        max_candidates: int = 50,
         per_passage_nbest: int = 8,
         max_answer_chars: int = 80,
         max_seq_len: int = 384,
@@ -379,7 +374,7 @@ class RagPipeline:
             4. You refine/clean them (your regex / heuristics)and optionally extract “atomic” subspans (years, numbers+units, name-like chunks)
             5. You aggregate scores across passages/windows into cand_scores.If the same candidate appears multiple times (or in strong passages), it rises.
             6. You deduplicate/merge near-duplicates
-            7. Finally you sort candidates and return the top max_mined_candidates as [(candidate_string, aggregated_score), ...].
+            7. Finally you sort candidates and return the top max_candidatesas [(candidate_string, aggregated_score), ...].
         """
         self._ensure_reader()
         assert self.reader_model is not None
@@ -720,7 +715,7 @@ class RagPipeline:
 
         # Sort by merged score and cap output size
         items = sorted(((surface[k], v) for k, v in merged.items()), key=lambda x: x[1], reverse=True)
-        return items[:max_mined_candidates]
+        return items[:max_candidates]
 
 
     # -------------------------
@@ -778,13 +773,12 @@ class RagPipeline:
         
 
         return res.to_dict()
-    
 
     def run_logit_rag_stage1(
         self,
         question: str,
         *,
-        top_candidates: int = 40,
+        max_candidates: int = 40,
         score_top_n: int = 20,
         length_normalize: bool = True,
         alpha_prior: float = 0.0,
@@ -805,14 +799,15 @@ class RagPipeline:
         score_completion_tok_sum = 0
         score_total_tok_sum = 0
 
-        scoring_messages = build_scoring_messages(q)
+
+        scoring_messages = build_stage1_scoring_messages(q)
 
         with timed(timings, "retrieve_total_s"):
             rr = self._retrieve(q, self.top_k)
         timings.update(rr.timings_s)
 
         with timed(timings, "candidate_mine_s"):
-            mined = self._mine_candidates_from_passages(q, rr.passages, top_candidates=top_candidates)
+            mined = self._mine_candidates_qa1(q, rr.passages, max_candidates=max_candidates)
 
         if not mined:
             with timed(timings, "decode_s"):
@@ -891,19 +886,19 @@ class RagPipeline:
         )
 
         return res.to_dict()
-            
-    def run_logit_rag(
+
+    def run_logit_rag_stage2(
         self,
         question: str,
-        max_mined_candidates: int = 40,
-        logit_bias_strength: float = 0.8,
-        max_token_logit_bias: float = 2.0,
-        phrase_softmax_temperature: float = 1.0,
+        *,
+        max_candidates: int = 40, #Keep only the top 40 candidate answer strings
+        alpha: float = 0.8,
+        phrase_score_temperature: float = 1.0,
+        per_token_cap: float = 2.0,
         clamp_first_line: bool = True,
         hybrid_prompt: bool = False,
-        max_bias_steps: Optional[int] = None,
+        max_bias_steps: int = None
     ) -> dict[str, Any]:
-
         q = (question or "").strip()
         if not q:
             raise ValueError("question must be non-empty")
@@ -913,69 +908,66 @@ class RagPipeline:
             raise ValueError("Stage2 requires retrieval (top_k > 0).")
 
         timings: dict[str, float] = {}
+
         start = time.perf_counter()
 
         with timed(timings, "retrieve_total_s"):
-            retrieval_result = self._retrieve(q, self.top_k)
-        timings.update(retrieval_result.timings_s)
+            rr = self._retrieve(q, self.top_k)
+        timings.update(rr.timings_s)
 
         with timed(timings, "candidate_mine_s"):
-            mined_candidates = self._mine_candidates_from_passages(
-                q,
-                retrieval_result.passages,
-                max_mined_candidates=max_mined_candidates,
-            )
+            mined = self._mine_candidates_qa1(q, rr.passages, max_candidates=max_candidates)
+        mined_strings = [c for c, _ in mined]
 
-        with timed(timings, "token_bias_build_s"):
-            logit_bias = self._candidates_to_token_bias(
-                scored_phrases=mined_candidates,
-                max_token_logit_bias=max_token_logit_bias,
-                phrase_softmax_temperature=phrase_softmax_temperature,
+        with timed(timings, "bias_build_s"):
+            bias = self._candidates_to_token_bias(
+                candidates=mined,
+                per_token_cap=per_token_cap,
+                phrase_score_temperature=phrase_score_temperature,
                 drop_junk_tokens=True,
             )
 
         with timed(timings, "prompt_s"):
-            # TODO: implement hybrid_prompt if you want different message construction
-            messages, _ = build_rag_messages(q, retrieval_result.passages, self.prompt_build_method)
+            if hybrid_prompt:
+                messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
+            else:
+                messages, _ = build_rag_messages(q, rr.passages, self.prompt_build_method)
+
+        
 
         with timed(timings, "decode_s"):
             gen = self.generator.generate_chat_with_logit_bias(
                 messages=messages,
-                bias=logit_bias,
-                logit_bias_strength=logit_bias_strength,
-                max_bias_steps=max_bias_steps,
+                bias=bias,
+
+                alpha=float(alpha),
+                bias_steps=max_bias_steps,
                 clamp_first_line=clamp_first_line,
             )
 
         timings["total_s"] = time.perf_counter() - start
-
-        mined_phrases = [p for p, _ in mined_candidates]
-
         res = RagRunResult(
-            mode="logit_rag",
+            mode="logit_rag_stage2",
             question=q,
             answer=gen.text,
             raw_answer=gen.text,
             messages=messages,
-            retrieved_doc_ids=retrieval_result.doc_ids,
+            retrieved_doc_ids=rr.doc_ids,
             prompt_tokens=gen.prompt_tokens,
             completion_tokens=gen.completion_tokens,
             total_tokens=gen.total_tokens,
             finish_reason=gen.metrics.get("finish_reason") or "",
             timings_s=timings,
             extra={
-                "cache_used": retrieval_result.cache_used,
-                "cache_hits": retrieval_result.cache_hits,
-                "cache_misses": retrieval_result.cache_misses,
-                "num_minded_candidates": len(mined_candidates),
-                "mined_candidates": mined_candidates,   # phrase+score
-                # "mined_phrases": mined_phrases,         # just text
-                "num_biased_token_ids": int(len(logit_bias)),
-                "logit_bias_strength": float(logit_bias_strength),
+                "cache_used": rr.cache_used,
+                "cache_hits": rr.cache_hits,
+                "cache_misses": rr.cache_misses,
+                "mined_candidates": mined_strings[: min(30, len(mined_strings))],
+                "bias_tokens": int(len(bias)),
+                "alpha": float(alpha),
             },
         )
         return res.to_dict()
-
 
     def log_result(self, result: dict[str, Any], log_path: Optional[str] = None):
         append_csv_row(

@@ -17,7 +17,7 @@ class PromptBuildMethodType(Enum):
     LLM_ONLY = auto()
     FEW_SHOT = auto()
     LOGIT_RAG_STAGE1 = auto()  # not a prompt method, but used to trigger LLM_ONLY with top_k>0
-    LOGIT_RAG_STAGE2 = auto()  # not a prompt method, but used to trigger hybrid prompt with top_k>0
+    LOGIT_RAG = auto()  # not a prompt method, but used to trigger hybrid prompt with top_k>0
 
 
 # ============================================================
@@ -212,9 +212,9 @@ def build_fewshot_messages(passages: List[Passage], max_ctx_chars: int = 4000) -
     ]
 
 
-def build_stage1_scoring_messages(question: str) -> List[ChatMessage]:
+def build_scoring_messages(question: str) -> List[ChatMessage]:
     """
-    Messages used when scoring a candidate completion in Stage-1.
+    Messages used when scoring a candidate completion.
     Your generator will compute log P(candidate | these messages).
     """
     q = normalize_question(question)
@@ -301,10 +301,10 @@ def build_rag_messages(
         passages_used = passages
 
     elif prompt_build_method == PromptBuildMethodType.LOGIT_RAG_STAGE1:
-        messages = build_stage1_scoring_messages(question)
+        messages = build_scoring_messages(question)
         passages_used = []
     
-    elif prompt_build_method == PromptBuildMethodType.LOGIT_RAG_STAGE2:
+    elif prompt_build_method == PromptBuildMethodType.LOGIT_RAG:
         messages = build_stage2_messages(question)
         passages_used = []
 

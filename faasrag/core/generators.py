@@ -48,14 +48,14 @@ class SparseAddBiasProcessor(LogitsProcessor):
         self,
         *,
         bias: Dict[int, float],
-        alpha: float, #Global strength multiplier.
+        logit_bias_strength: float, #Global strength multiplier.
         device: torch.device,
         max_steps: Optional[int] = None, #Only apply bias during first N generated tokens. Early tokens determine the direction of the answer.
         per_token_cap: Optional[float] = None, #Clamp individual bias magnitudes.
         eos_token_id: Optional[int] = None, #Avoid biasing EOS token.
         ignore_eos: bool = True, #Avoid biasing EOS token.
     ):
-        self.alpha = float(alpha)
+        self.alpha = float(logit_bias_strength)
         self.max_steps = max_steps
         self._steps_seen = 0  # safe because we create a new processor per generate call
 
@@ -222,8 +222,8 @@ class HFCausalLMGenerator:
         messages: List[dict],
         bias: Dict[int, float],
         *,
-        alpha: float = 2.0,
-        bias_steps: Optional[int] = None,
+        logit_bias_strength: float = 2.0,
+        max_bias_steps: Optional[int] = None,
         clamp_first_line: bool = True,
         max_new_tokens: Optional[int] = None,
         prompt_max_length: Optional[int] = None,
@@ -237,9 +237,9 @@ class HFCausalLMGenerator:
         if bias:
             proc = SparseAddBiasProcessor(
                 bias=bias,
-                alpha=alpha,
+                logit_bias_strength=logit_bias_strength,
                 device=device,
-                max_steps=bias_steps,
+                max_steps=max_bias_steps,
                 per_token_cap=per_token_cap,
                 eos_token_id=self.eos_id,
                 ignore_eos=ignore_eos,
@@ -257,7 +257,7 @@ class HFCausalLMGenerator:
             metrics={
                 "logit_bias_alpha": float(alpha),
                 "logit_bias_tokens": int(len(bias) if bias else 0),
-                "bias_steps": int(bias_steps) if bias_steps is not None else -1,
+                "max_bias_steps": int(max_bias_steps) if max_bias_steps is not None else -1,
             },
         )
 

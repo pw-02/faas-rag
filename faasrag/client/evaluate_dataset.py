@@ -1,14 +1,12 @@
-# evaluate_dataset.py (second pass: cleaner loop, unified row schema, typed results/diags)
+# evaluate_dataset.py (third pass: stage1 removed, stage2 -> logit_rag, cleaner sweeps, prefixed cfg fields)
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import json
 import logging
-import os
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
 from tqdm.auto import tqdm
@@ -66,9 +64,9 @@ def _i(d: Dict[str, Any], key: str, default: int = 0) -> int:
 
 
 # =============================================================================
-# Mode / config
+# Modes / config
 # =============================================================================
-VALID_MODES = {"llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"}
+VALID_MODES = {"llm", "prompt_rag", "logit_rag"}
 
 
 def validate_mode(mode: str) -> str:
@@ -81,51 +79,46 @@ def validate_mode(mode: str) -> str:
 @dataclass(frozen=True)
 class RunConfig:
     mode: str
-    k: int
+    top_k: int
 
     # general
     limit: Optional[int]
     print_first_n: int
     tqdm_update_every: int
 
-    # stage1 knobs
-    stage1_max_candidates: int
-    stage1_score_top_n: int
-    stage1_length_normalize: bool
-    stage1_alpha_prior: float
-
-    # stage2 knobs
-    stage2_alpha: float
-    stage2_hybrid_prompt: bool
-    stage2_max_candidates: int
-    stage2_phrase_score_temperature: float
-    stage2_per_token_cap: float
-    stage2_clamp_first_line: bool
-    stage2_max_bias_steps: Optional[int]
+    # logit-only (None for other modes)
+    logit_max_mined_candidates: Optional[int] = None
+    logit_bias_strength: Optional[float] = None
+    logit_max_token_logit_bias: Optional[float] = None
+    logit_phrase_softmax_temperature: Optional[float] = None
+    logit_clamp_first_line: Optional[bool] = None
+    logit_hybrid_prompt: Optional[bool] = None
+    logit_max_bias_steps: Optional[int] = None
 
     def run_id(self) -> str:
-        payload = json.dumps(asdict(self), sort_keys=True)
+        payload = json.dumps(asdict(self), sort_keys=True, default=str)
         return hashlib.md5(payload.encode("utf-8")).hexdigest()[:10]
 
 
 # =============================================================================
-# Unified schemas (big win: stable CSV columns across modes)
+# Stable CSV schemas (prefixed cfg fields)
 # =============================================================================
 RESULT_COLUMNS: List[str] = [
-    # run identity + config
+    # run identity
     "run_id",
     "mode",
-    "stage1_max_candidates",
-    "stage1_score_top_n",
-    "stage1_length_normalize",
-    "stage1_alpha_prior",
-    "stage2_alpha",
-    "stage2_hybrid_prompt",
-    "stage2_max_candidates",
-    "stage2_phrase_score_temperature",
-    "stage2_per_token_cap",
-    "stage2_clamp_first_line",
-    "stage2_max_bias_steps",
+    # cfg (prefixed)
+    "cfg_general_limit",
+    "cfg_general_print_first_n",
+    "cfg_general_tqdm_update_every",
+    "cfg_general_top_k",
+    "cfg_logit_max_mined_candidates",
+    "cfg_logit_bias_strength",
+    "cfg_logit_max_token_logit_bias",
+    "cfg_logit_phrase_softmax_temperature",
+    "cfg_logit_clamp_first_line",
+    "cfg_logit_hybrid_prompt",
+    "cfg_logit_max_bias_steps",
     # example
     "id",
     "question",
@@ -135,7 +128,6 @@ RESULT_COLUMNS: List[str] = [
     "em",
     "f1",
     # retrieval
-    "top_k",
     "retrieved_count",
     "retrieved_doc_ids",
     # tokens
@@ -150,19 +142,12 @@ RESULT_COLUMNS: List[str] = [
     "decode_s",
     "total_s",
     "candidate_mine_s",
-    "candidate_score_s",
     # cache
     "cache_used",
     "cache_hits",
     "cache_misses",
-    # stage1 diagnostics (always present, even if blank)
-    "gold_in_candidates",
-    "selected_gold_given_present",
-    "best_candidate",
-    "num_candidates_scored",
-    "mean_tokens_per_candidate",
-    # stage2 diagnostics (always present, even if blank)
-    "bias_tokens",
+    # logit diagnostics (always present, blank for non-logit)
+    "num_biased_token_ids",
     "mined_hit",
     "gold_in_mined",
     "oracle_em_from_mined",
@@ -172,10 +157,24 @@ RESULT_COLUMNS: List[str] = [
 SUMMARY_COLUMNS: List[str] = [
     "run_id",
     "mode",
+    # cfg (prefixed)
+    "cfg_general_limit",
+    "cfg_general_print_first_n",
+    "cfg_general_tqdm_update_every",
+    "cfg_general_top_k",
+    "cfg_logit_max_mined_candidates",
+    "cfg_logit_bias_strength",
+    "cfg_logit_max_token_logit_bias",
+    "cfg_logit_phrase_softmax_temperature",
+    "cfg_logit_clamp_first_line",
+    "cfg_logit_hybrid_prompt",
+    "cfg_logit_max_bias_steps",
+    # aggregate metrics
     "n",
     "em",
     "f1",
     "mean_total_tokens",
+    # timing means
     "mean_embed_s",
     "mean_ann_s",
     "mean_docstore_s",
@@ -183,57 +182,42 @@ SUMMARY_COLUMNS: List[str] = [
     "mean_decode_s",
     "mean_total_s",
     "mean_candidate_mine_s",
-    "mean_candidate_score_s",
-    # stage1 summary
-    "candidate_recall",
-    "selection_accuracy_given_present",
-    "mean_num_candidates_scored",
-    "mean_tokens_per_candidate",
-    # stage2 summary
+    # logit summaries (0 for non-logit)
     "mined_hit_rate",
     "gold_in_mined_rate",
     "oracle_em_from_mined_rate",
     "selection_accuracy_given_gold_in_mined",
     "selection_total_where_gold_in_mined",
-    # cfg dump (for convenience / joins)
-    # (added dynamically as cfg_* fields)
 ]
 
 
 def _row_with_schema(cols: List[str], values: Dict[str, Any]) -> Dict[str, Any]:
-    """Ensure every column exists (stable CSV), fill missing with None."""
     return {c: values.get(c, None) for c in cols}
 
 
+def cfg_to_prefixed_dict(cfg: RunConfig) -> Dict[str, Any]:
+    """One canonical place to format cfg fields and apply prefixes."""
+    return {
+        "cfg_general_limit": cfg.limit,
+        "cfg_general_print_first_n": cfg.print_first_n,
+        "cfg_general_tqdm_update_every": cfg.tqdm_update_every,
+        "cfg_general_top_k": cfg.top_k,
+        "cfg_logit_max_mined_candidates": cfg.logit_max_mined_candidates,
+        "cfg_logit_bias_strength": cfg.logit_bias_strength,
+        "cfg_logit_max_token_logit_bias": cfg.logit_max_token_logit_bias,
+        "cfg_logit_phrase_softmax_temperature": cfg.logit_phrase_softmax_temperature,
+        "cfg_logit_clamp_first_line": int(cfg.logit_clamp_first_line) if cfg.logit_clamp_first_line is not None else None,
+        "cfg_logit_hybrid_prompt": int(cfg.logit_hybrid_prompt) if cfg.logit_hybrid_prompt is not None else None,
+        "cfg_logit_max_bias_steps": cfg.logit_max_bias_steps,
+    }
+
+
 # =============================================================================
-# Output parsing + stage diagnostics
+# Output parsing + diagnostics
 # =============================================================================
-def gold_in_candidates(candidates: List[Dict[str, Any]], golds: List[str]) -> bool:
-    if not candidates or not golds:
-        return False
-    cand_norm = {normalize_answer(str(c.get("candidate", ""))) for c in candidates}
-    return any(normalize_answer(g) in cand_norm for g in golds)
-
-
-def model_selected_gold(best_candidate: str, golds: List[str]) -> bool:
-    if not best_candidate or not golds:
-        return False
-    b = normalize_answer(best_candidate)
-    return any(b == normalize_answer(g) for g in golds)
-
-
 @dataclass
-class Stage1Diag:
-    gold_in_candidates: bool = False
-    selected_gold_given_present: bool = False
-    best_candidate: str = ""
-    num_candidates_scored: int = 0
-    mean_tokens_per_candidate: float = 0.0
-
-
-@dataclass
-class Stage2Diag:
-    bias_tokens: int = 0
+class LogitDiag:
+    num_biased_token_ids: int = 0
     mined_hit: bool = False
     gold_in_mined: bool = False
     oracle_em_from_mined: bool = False
@@ -251,30 +235,39 @@ class ModelOut:
     cache_used: bool
     cache_hits: int
     cache_misses: int
-    candidates: List[Dict[str, Any]]
-    best_candidate: str
-    mined_candidates: List[Any]
-    bias_tokens: int
+    mined_phrases: List[str]
+    num_biased_token_ids: int
 
 
 def parse_model_out(out: Dict[str, Any]) -> ModelOut:
     extra = out.get("extra") or {}
     timings = out.get("timings_s") or {}
-
     pred = (out.get("raw_answer") or out.get("answer") or "").strip()
-
-    candidates = out.get("candidates") or extra.get("candidates") or []
-    if not isinstance(candidates, list):
-        candidates = []
-
-    best = out.get("best_candidate") or extra.get("best_candidate") or ""
 
     cache_used = bool(out.get("cache_used", extra.get("cache_used", False)))
     cache_hits = int((out.get("cache_hits", extra.get("cache_hits", 0)) or 0))
     cache_misses = int((out.get("cache_misses", extra.get("cache_misses", 0)) or 0))
 
-    mined_candidates = out.get("mined_candidates") or []
-    bias_tokens = _i(out, "bias_tokens", 0)
+    # prefer mined_phrases if present; else derive from mined_candidates
+    mined_phrases = extra.get("mined_phrases") or out.get("mined_phrases") or []
+    if not mined_phrases:
+        mined_candidates = extra.get("mined_candidates") or out.get("mined_candidates") or []
+        derived: List[str] = []
+        for x in mined_candidates:
+            if isinstance(x, (list, tuple)) and len(x) >= 1:
+                derived.append(str(x[0]))
+            else:
+                derived.append(str(x))
+        mined_phrases = derived
+
+    # prefer explicit field name, but support older "bias_tokens"
+    num_biased_token_ids = int(
+        extra.get("num_biased_token_ids")
+        or out.get("num_biased_token_ids")
+        or extra.get("bias_tokens")
+        or out.get("bias_tokens")
+        or 0
+    )
 
     return ModelOut(
         pred=pred,
@@ -286,41 +279,20 @@ def parse_model_out(out: Dict[str, Any]) -> ModelOut:
         cache_used=cache_used,
         cache_hits=cache_hits,
         cache_misses=cache_misses,
-        candidates=candidates,
-        best_candidate=str(best or ""),
-        mined_candidates=mined_candidates,
-        bias_tokens=bias_tokens,
+        mined_phrases=[str(x) for x in mined_phrases if str(x).strip()],
+        num_biased_token_ids=num_biased_token_ids,
     )
 
 
-def compute_stage1_diag(mo: ModelOut, golds: List[str], mode: str) -> Stage1Diag:
-    if mode != "logit_rag_stage1":
-        return Stage1Diag()
+def compute_logit_diag(mo: ModelOut, golds: List[str], mode: str) -> LogitDiag:
+    if mode != "logit_rag":
+        return LogitDiag()
 
-    num = len(mo.candidates)
-    has_gold = gold_in_candidates(mo.candidates, golds)
-    selected = model_selected_gold(mo.best_candidate, golds) if has_gold else False
-    mean_tok = (float(mo.total_tokens) / float(num)) if num > 0 else 0.0
-
-    return Stage1Diag(
-        gold_in_candidates=has_gold,
-        selected_gold_given_present=selected,
-        best_candidate=mo.best_candidate,
-        num_candidates_scored=num,
-        mean_tokens_per_candidate=mean_tok,
-    )
-
-
-def compute_stage2_diag(mo: ModelOut, golds: List[str], mode: str) -> Stage2Diag:
-    if mode != "logit_rag_stage2":
-        return Stage2Diag()
-
-    mined = mo.mined_candidates or []
-    mined_norm = [normalize_answer(str(x)) for x in mined]
+    mined_norm = [normalize_answer(x) for x in mo.mined_phrases]
     mined_norm = [x for x in mined_norm if x]
 
     pred_norm = normalize_answer(mo.pred)
-    mined_hit = any(m and (m in pred_norm) for m in mined_norm[:30])
+    mined_hit = any(m in pred_norm for m in mined_norm if m)
 
     gold_norms = [normalize_answer(str(g)) for g in golds]
     gold_norms = [g for g in gold_norms if g]
@@ -331,8 +303,8 @@ def compute_stage2_diag(mo: ModelOut, golds: List[str], mode: str) -> Stage2Diag
     oracle = gold_in_mined
     selected_given_oracle = oracle and any(pred_norm == g for g in gold_norms)
 
-    return Stage2Diag(
-        bias_tokens=int(mo.bias_tokens),
+    return LogitDiag(
+        num_biased_token_ids=int(mo.num_biased_token_ids),
         mined_hit=mined_hit,
         gold_in_mined=gold_in_mined,
         oracle_em_from_mined=oracle,
@@ -341,59 +313,44 @@ def compute_stage2_diag(mo: ModelOut, golds: List[str], mode: str) -> Stage2Diag
 
 
 # =============================================================================
-# Runner (single dispatch point)
+# Runner (single dispatch)
 # =============================================================================
 def run_query(pipeline: RagPipeline, q: str, cfg: RunConfig) -> Dict[str, Any]:
     mode = validate_mode(cfg.mode)
 
-    if mode == "logit_rag_stage1":
-        return pipeline.run_logit_rag_stage1(
+    if mode == "logit_rag":
+        return pipeline.run_logit_rag(
             q,
-            max_candidates=cfg.stage1_max_candidates,
-            score_top_n=cfg.stage1_score_top_n,
-            length_normalize=cfg.stage1_length_normalize,
-            alpha_prior=cfg.stage1_alpha_prior,
+            max_mined_candidates=int(cfg.logit_max_mined_candidates or 40),
+            logit_bias_strength=float(cfg.logit_bias_strength or 0.8),
+            max_token_logit_bias=float(cfg.logit_max_token_logit_bias or 2.0),
+            phrase_softmax_temperature=float(cfg.logit_phrase_softmax_temperature or 1.0),
+            clamp_first_line=bool(cfg.logit_clamp_first_line),
+            hybrid_prompt=bool(cfg.logit_hybrid_prompt),
+            max_bias_steps=cfg.logit_max_bias_steps,
         )
 
-    if mode == "logit_rag_stage2":
-        return pipeline.run_logit_rag_stage2(
-            q,
-            max_candidates=cfg.stage2_max_candidates,
-            alpha=cfg.stage2_alpha,
-            phrase_score_temperature=cfg.stage2_phrase_score_temperature,
-            per_token_cap=cfg.stage2_per_token_cap,
-            clamp_first_line=cfg.stage2_clamp_first_line,
-            hybrid_prompt=cfg.stage2_hybrid_prompt,
-            max_bias_steps=cfg.stage2_max_bias_steps,
-        )
-
-    if mode in {"prompt_rag", "llm"}:
-        # If you truly want LLM-only, consider adding pipeline.run_llm_only(q)
-        return pipeline.run_prompt_rag(q)
-
-    raise RuntimeError("unreachable")
+    # For llm / prompt_rag, your pipeline currently uses run_prompt_rag.
+    # If you add run_llm_only, you can dispatch llm separately.
+    return pipeline.run_prompt_rag(q)
 
 
 # =============================================================================
-# Evaluation result (per example)
+# Per-example result
 # =============================================================================
 @dataclass
 class ExampleResult:
     ex_id: str
     question: str
-    messages: List[str]
     golds: List[str]
-
     prediction: str
     em: float
     f1: float
 
-    # tokens
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
 
-    # timings
     embed_s: float
     ann_s: float
     docstore_s: float
@@ -401,37 +358,25 @@ class ExampleResult:
     decode_s: float
     total_s: float
     candidate_mine_s: float
-    candidate_score_s: float
 
-    # retrieval
-    top_k: int
     retrieved_doc_ids: List[Any]
 
-    # cache
     cache_used: bool
     cache_hits: int
     cache_misses: int
 
-    # diags
-    stage1: Stage1Diag
-    stage2: Stage2Diag
+    logit: LogitDiag
 
 
-def evaluate_example(
-    *,
-    pipeline: RagPipeline,
-    ex: Dict[str, Any],
-    cfg: RunConfig,
-) -> Optional[ExampleResult]:
+def evaluate_example(*, pipeline: RagPipeline, ex: Dict[str, Any], cfg: RunConfig) -> Optional[ExampleResult]:
     ex_id = ex.get("id", "")
     q, golds = get_question_and_answers(ex)
     if not q:
         return None
 
-
     out = run_query(pipeline, q, cfg)
     mo = parse_model_out(out)
-    messages =out.get("messages") or []  
+
     em = float(metric_max_over_ground_truths(exact_match_score, mo.pred, golds))
     f1 = float(metric_max_over_ground_truths(f1_score, mo.pred, golds))
 
@@ -443,16 +388,13 @@ def evaluate_example(
     decode_s = _f(tim, "decode_s")
     total_s = _f(tim, "total_s")
     mine_s = _f(tim, "candidate_mine_s")
-    cand_score_s = _f(tim, "candidate_score_s")
 
     mode = validate_mode(cfg.mode)
-    s1 = compute_stage1_diag(mo, golds, mode)
-    s2 = compute_stage2_diag(mo, golds, mode)
+    logit_diag = compute_logit_diag(mo, golds, mode)
 
     return ExampleResult(
         ex_id=str(ex_id),
         question=q,
-        messages=messages,  # TODO if we want to save messages, need to add to pipeline output
         golds=golds,
         prediction=mo.pred,
         em=em,
@@ -467,19 +409,16 @@ def evaluate_example(
         decode_s=decode_s,
         total_s=total_s,
         candidate_mine_s=mine_s,
-        candidate_score_s=cand_score_s,
-        top_k=int(getattr(pipeline, "top_k", 0)),
         retrieved_doc_ids=mo.retrieved_doc_ids,
         cache_used=bool(mo.cache_used),
         cache_hits=int(mo.cache_hits),
         cache_misses=int(mo.cache_misses),
-        stage1=s1,
-        stage2=s2,
+        logit=logit_diag,
     )
 
 
 # =============================================================================
-# Aggregator (keeps loop tiny)
+# Aggregator
 # =============================================================================
 @dataclass
 class Aggregator:
@@ -495,25 +434,15 @@ class Aggregator:
     decode_sum: float = 0.0
     total_s_sum: float = 0.0
     mine_sum: float = 0.0
-    score_sum: float = 0.0
 
-    # stage1
-    cand_recall_hits: int = 0
-    cand_recall_total: int = 0
-    select_hits: int = 0
-    select_total: int = 0
-    stage1_num_scored_sum: int = 0
-    stage1_tok_per_cand_sum: float = 0.0
-    stage1_tok_per_cand_n: int = 0
-
-    # stage2
-    stage2_n: int = 0
-    stage2_mined_hit_sum: int = 0
-    stage2_gold_in_mined_sum: int = 0
-    stage2_oracle_hits: int = 0
-    stage2_oracle_total: int = 0
-    stage2_select_hits_given_oracle: int = 0
-    stage2_select_total_given_oracle: int = 0
+    # logit
+    logit_n: int = 0
+    mined_hit_sum: int = 0
+    gold_in_mined_sum: int = 0
+    oracle_hits: int = 0
+    oracle_total: int = 0
+    select_hits_given_oracle: int = 0
+    select_total_given_oracle: int = 0
 
     def add(self, res: ExampleResult, mode: str) -> None:
         self.n += 1
@@ -528,30 +457,17 @@ class Aggregator:
         self.decode_sum += res.decode_s
         self.total_s_sum += res.total_s
         self.mine_sum += res.candidate_mine_s
-        self.score_sum += res.candidate_score_s
 
-        if mode == "logit_rag_stage1":
-            self.cand_recall_total += 1
-            self.cand_recall_hits += int(res.stage1.gold_in_candidates)
-            if res.stage1.gold_in_candidates:
-                self.select_total += 1
-                self.select_hits += int(res.stage1.selected_gold_given_present)
+        if mode == "logit_rag":
+            self.logit_n += 1
+            self.mined_hit_sum += int(res.logit.mined_hit)
+            self.gold_in_mined_sum += int(res.logit.gold_in_mined)
+            self.oracle_total += 1
+            self.oracle_hits += int(res.logit.oracle_em_from_mined)
 
-            self.stage1_num_scored_sum += int(res.stage1.num_candidates_scored)
-            if res.stage1.num_candidates_scored > 0:
-                self.stage1_tok_per_cand_sum += float(res.stage1.mean_tokens_per_candidate)
-                self.stage1_tok_per_cand_n += 1
-
-        if mode == "logit_rag_stage2":
-            self.stage2_n += 1
-            self.stage2_mined_hit_sum += int(res.stage2.mined_hit)
-            self.stage2_gold_in_mined_sum += int(res.stage2.gold_in_mined)
-            self.stage2_oracle_total += 1
-            self.stage2_oracle_hits += int(res.stage2.oracle_em_from_mined)
-
-            if res.stage2.oracle_em_from_mined:
-                self.stage2_select_total_given_oracle += 1
-                self.stage2_select_hits_given_oracle += int(res.stage2.selected_gold_given_gold_in_mined)
+            if res.logit.oracle_em_from_mined:
+                self.select_total_given_oracle += 1
+                self.select_hits_given_oracle += int(res.logit.selected_gold_given_gold_in_mined)
 
     def mean(self, x: float) -> float:
         return x / self.n if self.n else 0.0
@@ -568,68 +484,38 @@ class Aggregator:
             "tok": f"{(self.total_tok_sum/self.n):.0f}",
             "tot_s": f"{(self.total_s_sum/self.n):.2f}",
         }
-        if mode == "logit_rag_stage1":
-            cand_rec = (self.cand_recall_hits / self.cand_recall_total) if self.cand_recall_total else 0.0
-            sel_acc = (self.select_hits / self.select_total) if self.select_total else 0.0
-            post["cand@"] = f"{cand_rec:.2f}"
-            post["sel@"] = f"{sel_acc:.2f}"
-            if self.stage1_tok_per_cand_n:
-                post["tok/cand"] = f"{(self.stage1_tok_per_cand_sum / self.stage1_tok_per_cand_n):.1f}"
-        if mode == "logit_rag_stage2" and self.stage2_n:
-            post["mined_hit"] = f"{(self.stage2_mined_hit_sum/self.stage2_n):.2f}"
-            post["gold_in_m"] = f"{(self.stage2_gold_in_mined_sum/self.stage2_n):.2f}"
-            post["oracle"] = f"{(self.stage2_oracle_hits/self.stage2_oracle_total):.2f}" if self.stage2_oracle_total else "0.00"
+        if mode == "logit_rag" and self.logit_n:
+            post["mined_hit"] = f"{(self.mined_hit_sum/self.logit_n):.2f}"
+            post["gold_in_m"] = f"{(self.gold_in_mined_sum/self.logit_n):.2f}"
+            post["oracle"] = f"{(self.oracle_hits/self.oracle_total):.2f}" if self.oracle_total else "0.00"
             post["sel|oracle"] = (
-                f"{(self.stage2_select_hits_given_oracle/self.stage2_select_total_given_oracle):.2f}"
-                if self.stage2_select_total_given_oracle else "0.00"
+                f"{(self.select_hits_given_oracle/self.select_total_given_oracle):.2f}"
+                if self.select_total_given_oracle else "0.00"
             )
         return post
 
 
 # =============================================================================
-# Row building (single place, stable schema)
+# Row building
 # =============================================================================
-def build_result_row(
-    *,
-    run_id: str,
-    cfg: RunConfig,
-    pipeline: RagPipeline,
-    res: ExampleResult,
-) -> Dict[str, Any]:
-    mode = validate_mode(cfg.mode)
+def build_result_row(*, run_id: str, cfg: RunConfig, res: ExampleResult) -> Dict[str, Any]:
+    cfg_vals = cfg_to_prefixed_dict(cfg)
 
     values: Dict[str, Any] = {
-        # run identity + config
         "run_id": run_id,
-        "mode": mode,
-        "stage1_max_candidates": cfg.stage1_max_candidates,
-        "stage1_score_top_n": cfg.stage1_score_top_n,
-        "stage1_length_normalize": int(cfg.stage1_length_normalize),
-        "stage1_alpha_prior": cfg.stage1_alpha_prior,
-        "stage2_alpha": cfg.stage2_alpha,
-        "stage2_hybrid_prompt": int(cfg.stage2_hybrid_prompt),
-        "stage2_max_candidates": cfg.stage2_max_candidates,
-        "stage2_phrase_score_temperature": cfg.stage2_phrase_score_temperature,
-        "stage2_per_token_cap": cfg.stage2_per_token_cap,
-        "stage2_clamp_first_line": int(cfg.stage2_clamp_first_line),
-        "stage2_max_bias_steps": cfg.stage2_max_bias_steps,
-        # example
+        "mode": cfg.mode,
+        **cfg_vals,
         "id": res.ex_id,
         "question": res.question,
         "prediction": res.prediction,
         "golden_answers": json.dumps(res.golds, ensure_ascii=False),
-        # metrics
         "em": float(res.em),
         "f1": float(res.f1),
-        # retrieval
-        "top_k": int(getattr(pipeline, "top_k", 0)),
         "retrieved_count": len(res.retrieved_doc_ids),
         "retrieved_doc_ids": json.dumps(res.retrieved_doc_ids),
-        # tokens
         "prompt_tokens": res.prompt_tokens,
         "completion_tokens": res.completion_tokens,
         "total_tokens": res.total_tokens,
-        # timing
         "embed_s": res.embed_s,
         "ann_s": res.ann_s,
         "docstore_s": res.docstore_s,
@@ -637,30 +523,21 @@ def build_result_row(
         "decode_s": res.decode_s,
         "total_s": res.total_s,
         "candidate_mine_s": res.candidate_mine_s,
-        "candidate_score_s": res.candidate_score_s,
-        # cache
         "cache_used": int(bool(res.cache_used)),
         "cache_hits": int(res.cache_hits),
         "cache_misses": int(res.cache_misses),
-        # stage1 (always present)
-        "gold_in_candidates": int(res.stage1.gold_in_candidates),
-        "selected_gold_given_present": int(res.stage1.selected_gold_given_present),
-        "best_candidate": res.stage1.best_candidate,
-        "num_candidates_scored": int(res.stage1.num_candidates_scored),
-        "mean_tokens_per_candidate": float(res.stage1.mean_tokens_per_candidate),
-        # stage2 (always present)
-        "bias_tokens": int(res.stage2.bias_tokens),
-        "mined_hit": int(res.stage2.mined_hit),
-        "gold_in_mined": int(res.stage2.gold_in_mined),
-        "oracle_em_from_mined": int(res.stage2.oracle_em_from_mined),
-        "selected_gold_given_gold_in_mined": int(res.stage2.selected_gold_given_gold_in_mined),
+        "num_biased_token_ids": int(res.logit.num_biased_token_ids),
+        "mined_hit": int(res.logit.mined_hit),
+        "gold_in_mined": int(res.logit.gold_in_mined),
+        "oracle_em_from_mined": int(res.logit.oracle_em_from_mined),
+        "selected_gold_given_gold_in_mined": int(res.logit.selected_gold_given_gold_in_mined),
     }
 
     return _row_with_schema(RESULT_COLUMNS, values)
 
 
 # =============================================================================
-# Core evaluation (now orchestration-only)
+# Core evaluation
 # =============================================================================
 def evaluate_one_run(
     pipeline: RagPipeline,
@@ -670,10 +547,10 @@ def evaluate_one_run(
     results_csv: Optional[str],
     save_to_file: bool = True,
 ) -> Dict[str, Any]:
-    
     mode = validate_mode(cfg.mode)
     run_id = cfg.run_id()
     agg = Aggregator()
+
     subset = examples[: cfg.limit] if cfg.limit else examples
     pbar = tqdm(subset, total=len(subset), desc=f"Evaluating ({mode})", dynamic_ncols=True)
 
@@ -688,29 +565,25 @@ def evaluate_one_run(
             tqdm.write("\n---")
             tqdm.write(f"run_id: {run_id}  mode: {mode}  id: {res.ex_id}")
             tqdm.write(f"Q: {res.question}")
-            # if hasattr(res, "messages") and res.messages:
-            #     preview = res.messages[:1]
-            #     tqdm.write(f"messages (first 5): {preview}")
             tqdm.write(f"PRED: {res.prediction}")
             tqdm.write(f"GOLDS: {res.golds}")
             tqdm.write(f"EM={res.em} F1={res.f1:.3f}")
             tqdm.write(f"tokens: prompt={res.prompt_tokens} completion={res.completion_tokens} total={res.total_tokens}")
             tqdm.write(f"timings_s: total={res.total_s:.3f} decode={res.decode_s:.3f}")
-            
 
         if cfg.tqdm_update_every > 0 and agg.n % cfg.tqdm_update_every == 0:
             pbar.set_postfix(agg.postfix(mode))
 
         if save_to_file and results_csv:
-            row = build_result_row(run_id=run_id, cfg=cfg, pipeline=pipeline, res=res)
-            # uses your faasrag.core.utils.append_csv_row; stable schema means consistent columns
+            row = build_result_row(run_id=run_id, cfg=cfg, res=res)
             append_csv_row(results_csv, row)
 
-    # summary (stable-ish keys)
+    cfg_vals = cfg_to_prefixed_dict(cfg)
+
     summary_values: Dict[str, Any] = {
         "run_id": run_id,
         "mode": mode,
-        "top_k": int(getattr(pipeline, "top_k", 0)),
+        **cfg_vals,
         "n": agg.n,
         "em": agg.mean(agg.em_sum),
         "f1": agg.mean(agg.f1_sum),
@@ -722,29 +595,17 @@ def evaluate_one_run(
         "mean_decode_s": agg.mean(agg.decode_sum),
         "mean_total_s": agg.mean(agg.total_s_sum),
         "mean_candidate_mine_s": agg.mean(agg.mine_sum),
-        "mean_candidate_score_s": agg.mean(agg.score_sum),
-        # stage1
-        "candidate_recall": (agg.cand_recall_hits / agg.cand_recall_total) if agg.cand_recall_total else 0.0,
-        "selection_accuracy_given_present": (agg.select_hits / agg.select_total) if agg.select_total else 0.0,
-        "mean_num_candidates_scored": (agg.stage1_num_scored_sum / agg.n) if agg.n else 0.0,
-        "mean_tokens_per_candidate": (agg.stage1_tok_per_cand_sum / agg.stage1_tok_per_cand_n) if agg.stage1_tok_per_cand_n else 0.0,
-        # stage2
-        "mined_hit_rate": (agg.stage2_mined_hit_sum / agg.stage2_n) if agg.stage2_n else 0.0,
-        "gold_in_mined_rate": (agg.stage2_gold_in_mined_sum / agg.stage2_n) if agg.stage2_n else 0.0,
-        "oracle_em_from_mined_rate": (agg.stage2_oracle_hits / agg.stage2_oracle_total) if agg.stage2_oracle_total else 0.0,
+        "mined_hit_rate": (agg.mined_hit_sum / agg.logit_n) if agg.logit_n else 0.0,
+        "gold_in_mined_rate": (agg.gold_in_mined_sum / agg.logit_n) if agg.logit_n else 0.0,
+        "oracle_em_from_mined_rate": (agg.oracle_hits / agg.oracle_total) if agg.oracle_total else 0.0,
         "selection_accuracy_given_gold_in_mined": (
-            (agg.stage2_select_hits_given_oracle / agg.stage2_select_total_given_oracle)
-            if agg.stage2_select_total_given_oracle else 0.0
+            (agg.select_hits_given_oracle / agg.select_total_given_oracle)
+            if agg.select_total_given_oracle else 0.0
         ),
-        "selection_total_where_gold_in_mined": agg.stage2_select_total_given_oracle,
+        "selection_total_where_gold_in_mined": agg.select_total_given_oracle,
     }
 
-    # add cfg_* fields
-    summary_values.update({f"cfg_{k}": v for k, v in asdict(cfg).items()})
-
-    # (optional) enforce a stable subset of columns
-    # keep all cfg_* fields, so we won't hard-truncate.
-    return summary_values
+    return _row_with_schema(SUMMARY_COLUMNS, summary_values)
 
 
 # =============================================================================
@@ -753,9 +614,10 @@ def evaluate_one_run(
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
-    #{"llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"}
-    parser.add_argument("--mode", type=str, default="logit_rag_stage2", choices=sorted(VALID_MODES))
+
+    parser.add_argument("--mode", type=str, default="logit_rag", choices=sorted(VALID_MODES))
     parser.add_argument("--data", default="data/datasets/nq_train_filtered.jsonl")
+
     parser.add_argument("--limit", type=int, default=500)
     parser.add_argument("--print_first_n", type=int, default=10)
     parser.add_argument("--tqdm_update_every", type=int, default=10)
@@ -764,27 +626,19 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--summary_csv", type=str, default="run_summaries.csv")
     parser.add_argument("--save_to_file", action="store_true", default=True)
 
-    # Stage-1 knobs
-    parser.add_argument("--stage1_max_candidates", type=int, default=40)
-    parser.add_argument("--stage1_score_top_n", type=int, default=20)
-    parser.add_argument("--stage1_alpha_prior", type=float, default=0.0)
-    parser.add_argument("--stage1_no_length_norm", action="store_true")
+    # logit-only knobs
+    parser.add_argument("--max_mined_candidates", type=int, default=40)
 
-    # Stage-2 knobs + sweeps
-    parser.add_argument("--stage2_alpha", type=float, default=10)
-    parser.add_argument("--stage2_alpha_sweep", type=str, default="")
-    parser.add_argument("--stage2_max_candidates", type=int, default=2)
-    parser.add_argument("--stage2_max_candidates_sweep", type=str, default="")
-    parser.add_argument("--stage2_phrase_score_temperature", type=float, default=0.5)
-    parser.add_argument("--stage2_phrase_temp_sweep", type=str, default="")
-    parser.add_argument("--stage2_per_token_cap", type=float, default=1.5)
-    parser.add_argument("--stage2_per_token_cap_sweep", type=str, default="")
-    parser.add_argument("--stage2_clamp_first_line", action="store_true")
-    parser.add_argument("--stage2_hybrid_prompt", action="store_true")
-    parser.add_argument("--stage2_max_bias_steps", type=int, default=None)
+    # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
+    parser.add_argument("--logit_bias_strength", type=str, default="0.8")
+    parser.add_argument("--max_token_logit_bias", type=str, default="2.0")
+    parser.add_argument("--phrase_softmax_temperature", type=str, default="1.0")
+
+    parser.add_argument("--clamp_first_line", action="store_true")
+    parser.add_argument("--hybrid_prompt", action="store_true")
+    parser.add_argument("--max_bias_steps", type=int, default=None)
 
     parser.add_argument("--sweep_style", type=str, default="grid", choices=["grid", "zip"])
-
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -792,19 +646,16 @@ def main(cfg: RagServiceConfig):
 
     mode = validate_mode(args.mode)
 
-    # Configure pipeline based on mode
+    # Configure pipeline
     if mode == "llm":
         top_k = 0
         cfg.prompt_build_method = "LLM_ONLY"
     elif mode == "prompt_rag":
         top_k = 10
         cfg.prompt_build_method = "QA_OPEN"
-    elif mode == "logit_rag_stage1":
-        top_k = 10
-        cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
     else:
         top_k = 10
-        cfg.prompt_build_method = "LOGIT_RAG_STAGE2"
+        cfg.prompt_build_method = "LOGIT_RAG"  # ensure your pipeline supports this method name
 
     pipeline = RagPipeline(
         generator_cfg=cfg.generator,
@@ -824,74 +675,47 @@ def main(cfg: RagServiceConfig):
 
     examples = load_jsonl(args.data)
 
-    # sweeps
-    def sweep_list(s: str, default_val: float) -> List[float]:
-        vals = parse_float_list(s) if s.strip() else []
-        return vals if vals else [default_val]
+    # Sweep parsing
+    strength_list = parse_float_list(args.logit_bias_strength)
+    cap_list = parse_float_list(args.max_token_logit_bias)
+    temp_list = parse_float_list(args.phrase_softmax_temperature)
 
-    alpha_list = sweep_list(args.stage2_alpha_sweep, args.stage2_alpha)
-    maxcand_list = [int(x) for x in sweep_list(args.stage2_max_candidates_sweep, float(args.stage2_max_candidates))]
-    temp_list = sweep_list(args.stage2_phrase_temp_sweep, args.stage2_phrase_score_temperature)
-    cap_list = sweep_list(args.stage2_per_token_cap_sweep, args.stage2_per_token_cap)
-
-    runs: List[RunConfig] = []
-    if mode != "logit_rag_stage2":
-        runs = [
-            RunConfig(
-                mode=mode,
-                k=top_k,
-                limit=(args.limit if args.limit > 0 else None),
-                print_first_n=args.print_first_n,
-                tqdm_update_every=args.tqdm_update_every,
-                stage1_max_candidates=args.stage1_max_candidates,
-                stage1_score_top_n=args.stage1_score_top_n,
-                stage1_length_normalize=(not args.stage1_no_length_norm),
-                stage1_alpha_prior=args.stage1_alpha_prior,
-                stage2_alpha=args.stage2_alpha,
-                stage2_hybrid_prompt=bool(args.stage2_hybrid_prompt),
-                stage2_max_candidates=args.stage2_max_candidates,
-                stage2_phrase_score_temperature=args.stage2_phrase_score_temperature,
-                stage2_per_token_cap=args.stage2_per_token_cap,
-                stage2_clamp_first_line=bool(args.stage2_clamp_first_line),
-                stage2_max_bias_steps=args.stage2_max_bias_steps,
-            )
-        ]
-    else:
+    # combos: zip or grid
+    if mode == "logit_rag":
         if args.sweep_style == "zip":
-            k = max(len(alpha_list), len(maxcand_list), len(temp_list), len(cap_list))
+            k = max(len(strength_list), len(cap_list), len(temp_list))
 
-            def pad(xs: List[Any], k_: int) -> List[Any]:
+            def pad(xs: List[float], k_: int) -> List[float]:
                 return xs + [xs[-1]] * (k_ - len(xs))
 
-            alpha_list = pad(alpha_list, k)
-            maxcand_list = pad(maxcand_list, k)
-            temp_list = pad(temp_list, k)
+            strength_list = pad(strength_list, k)
             cap_list = pad(cap_list, k)
-            combos = zip(alpha_list, maxcand_list, temp_list, cap_list)
+            temp_list = pad(temp_list, k)
+            combos = list(zip(strength_list, cap_list, temp_list))
         else:
-            combos = ((a, mc, t, c) for a in alpha_list for mc in maxcand_list for t in temp_list for c in cap_list)
+            combos = [(s, c, t) for s in strength_list for c in cap_list for t in temp_list]
+    else:
+        # non-logit runs ignore these; still produce exactly one run
+        combos = [(strength_list[0], cap_list[0], temp_list[0])]
 
-        for a, mc, t, c in combos:
-            runs.append(
-                RunConfig(
-                    mode=mode,
-                    k=top_k,
-                    limit=(args.limit if args.limit > 0 else None),
-                    print_first_n=args.print_first_n,
-                    tqdm_update_every=args.tqdm_update_every,
-                    stage1_max_candidates=args.stage1_max_candidates,
-                    stage1_score_top_n=args.stage1_score_top_n,
-                    stage1_length_normalize=(not args.stage1_no_length_norm),
-                    stage1_alpha_prior=args.stage1_alpha_prior,
-                    stage2_alpha=float(a),
-                    stage2_hybrid_prompt=bool(args.stage2_hybrid_prompt),
-                    stage2_max_candidates=int(mc),
-                    stage2_phrase_score_temperature=float(t),
-                    stage2_per_token_cap=float(c),
-                    stage2_clamp_first_line=bool(args.stage2_clamp_first_line),
-                    stage2_max_bias_steps=args.stage2_max_bias_steps,
-                )
+    runs: List[RunConfig] = []
+    for strength, cap, temp in combos:
+        runs.append(
+            RunConfig(
+                mode=mode,
+                top_k=top_k,
+                limit=(args.limit if args.limit and args.limit > 0 else None),
+                print_first_n=args.print_first_n,
+                tqdm_update_every=args.tqdm_update_every,
+                logit_max_mined_candidates=args.max_mined_candidates if mode == "logit_rag" else None,
+                logit_bias_strength=float(strength) if mode == "logit_rag" else None,
+                logit_max_token_logit_bias=float(cap) if mode == "logit_rag" else None,
+                logit_phrase_softmax_temperature=float(temp) if mode == "logit_rag" else None,
+                logit_clamp_first_line=bool(args.clamp_first_line) if mode == "logit_rag" else None,
+                logit_hybrid_prompt=bool(args.hybrid_prompt) if mode == "logit_rag" else None,
+                logit_max_bias_steps=args.max_bias_steps if mode == "logit_rag" else None,
             )
+        )
 
     logger.info(
         "Running %d configs (mode=%s). results_csv=%s summary_csv=%s save=%s",
