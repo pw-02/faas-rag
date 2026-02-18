@@ -198,10 +198,10 @@ def _row_with_schema(cols: List[str], values: Dict[str, Any]) -> Dict[str, Any]:
 def cfg_to_prefixed_dict(cfg: RunConfig) -> Dict[str, Any]:
     """One canonical place to format cfg fields and apply prefixes."""
     return {
-        "cfg_general_limit": cfg.limit,
-        "cfg_general_print_first_n": cfg.print_first_n,
-        "cfg_general_tqdm_update_every": cfg.tqdm_update_every,
-        "cfg_general_top_k": cfg.top_k,
+        "cfg_limit": cfg.limit,
+        # "cfg_general_print_first_n": cfg.print_first_n,
+        # "cfg_general_tqdm_update_every": cfg.tqdm_update_every,
+        "cfg_top_k": cfg.top_k,
         "cfg_logit_max_mined_candidates": cfg.logit_max_mined_candidates,
         "cfg_logit_bias_strength": cfg.logit_bias_strength,
         "cfg_logit_max_token_logit_bias": cfg.logit_max_token_logit_bias,
@@ -614,8 +614,8 @@ def evaluate_one_run(
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
-
-    parser.add_argument("--mode", type=str, default="logit_rag", choices=sorted(VALID_MODES))
+    #logit_rag,prompt_rag,llm
+    parser.add_argument("--mode", type=str, default="llm", choices=sorted(VALID_MODES))
     parser.add_argument("--data", default="data/datasets/nq_train_filtered.jsonl")
 
     parser.add_argument("--limit", type=int, default=500)
