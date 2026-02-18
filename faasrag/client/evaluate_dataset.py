@@ -688,14 +688,15 @@ def evaluate_one_run(
             tqdm.write("\n---")
             tqdm.write(f"run_id: {run_id}  mode: {mode}  id: {res.ex_id}")
             tqdm.write(f"Q: {res.question}")
+            # if hasattr(res, "messages") and res.messages:
+            #     preview = res.messages[:1]
+            #     tqdm.write(f"messages (first 5): {preview}")
             tqdm.write(f"PRED: {res.prediction}")
             tqdm.write(f"GOLDS: {res.golds}")
             tqdm.write(f"EM={res.em} F1={res.f1:.3f}")
             tqdm.write(f"tokens: prompt={res.prompt_tokens} completion={res.completion_tokens} total={res.total_tokens}")
             tqdm.write(f"timings_s: total={res.total_s:.3f} decode={res.decode_s:.3f}")
-            if hasattr(res, "messages") and res.messages:
-                preview = res.messages[:5]
-                tqdm.write(f"messages (first 5): {preview}")
+            
 
         if cfg.tqdm_update_every > 0 and agg.n % cfg.tqdm_update_every == 0:
             pbar.set_postfix(agg.postfix(mode))
@@ -754,7 +755,7 @@ def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
     #{"llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"}
     parser.add_argument("--mode", type=str, default="logit_rag_stage2", choices=sorted(VALID_MODES))
-    parser.add_argument("--data", default="data/datasets/qa/nq/nq_train.jsonl")
+    parser.add_argument("--data", default="data/datasets/qa/nq/nq_train_filtered.jsonl")
     parser.add_argument("--limit", type=int, default=500)
     parser.add_argument("--print_first_n", type=int, default=10)
     parser.add_argument("--tqdm_update_every", type=int, default=10)
