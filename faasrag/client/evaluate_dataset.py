@@ -181,13 +181,13 @@ SUMMARY_COLUMNS: List[str] = [
     "mean_prompt_build_s",
     "mean_decode_s",
     "mean_total_s",
-    "mean_candidate_mine_s",
+    "logit_mean_candidate_mine_s",
     # logit summaries (0 for non-logit)
-    "mined_hit_rate",
-    "gold_in_mined_rate",
-    "oracle_em_from_mined_rate",
-    "selection_accuracy_given_gold_in_mined",
-    "selection_total_where_gold_in_mined",
+    "logit_mined_hit_rate",
+    "logit_gold_in_mined_rate",
+    "logit_oracle_em_from_mined_rate",
+    "logit_selection_accuracy_given_gold_in_mined",
+    "logit_selection_total_where_gold_in_mined",
 ]
 
 
@@ -276,8 +276,10 @@ def parse_model_out(out: Dict[str, Any]) -> ModelOut:
 def compute_logit_diag(mo: ModelOut, golds: List[str], mode: str) -> LogitDiag:
     if mode != "logit_rag":
         return LogitDiag()
+    
+    phrases_only = [phrase for phrase, _ in mo.mined_candidates]
 
-    mined_norm = [normalize_answer(x) for x in mo.mined_candidates]
+    mined_norm = [normalize_answer(x) for x in phrases_only]
     mined_norm = [x for x in mined_norm if x]
 
     pred_norm = normalize_answer(mo.pred)
@@ -582,15 +584,15 @@ def evaluate_one_run(
         "mean_prompt_build_s": agg.mean(agg.prompt_build_sum),
         "mean_decode_s": agg.mean(agg.decode_sum),
         "mean_total_s": agg.mean(agg.total_s_sum),
-        "mean_candidate_mine_s": agg.mean(agg.mine_sum),
-        "mined_hit_rate": (agg.mined_hit_sum / agg.logit_n) if agg.logit_n else 0.0,
-        "gold_in_mined_rate": (agg.gold_in_mined_sum / agg.logit_n) if agg.logit_n else 0.0,
-        "oracle_em_from_mined_rate": (agg.oracle_hits / agg.oracle_total) if agg.oracle_total else 0.0,
-        "selection_accuracy_given_gold_in_mined": (
+        "logit_mean_candidate_mine_s": agg.mean(agg.mine_sum),
+        "logit_mined_hit_rate": (agg.mined_hit_sum / agg.logit_n) if agg.logit_n else 0.0,
+        "logit_gold_in_mined_rate": (agg.gold_in_mined_sum / agg.logit_n) if agg.logit_n else 0.0,
+        "logit_oracle_em_from_mined_rate": (agg.oracle_hits / agg.oracle_total) if agg.oracle_total else 0.0,
+        "logit_selection_accuracy_given_gold_in_mined": (
             (agg.select_hits_given_oracle / agg.select_total_given_oracle)
             if agg.select_total_given_oracle else 0.0
         ),
-        "selection_total_where_gold_in_mined": agg.select_total_given_oracle,
+        "logit_selection_total_where_gold_in_mined": agg.select_total_given_oracle,
     }
 
     return _row_with_schema(SUMMARY_COLUMNS, summary_values)
