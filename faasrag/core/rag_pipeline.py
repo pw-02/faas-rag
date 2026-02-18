@@ -458,15 +458,15 @@ class RagPipeline:
         #   r"\b(?:[A-Z][a-z]+|[A-Z]\.)(?:\s+(?:...))*\b"
         #
 
-        name_pat = re.compile(
-            r"\b([A-Z][a-z]+|[A-Z]\.)"
-            r"(?:\s+(?:[A-Z][a-z]+|[A-Z]\.|de|da|del|van|von|al|bin|ibn|la|le|of))*\b"
-        )
+        # name_pat = re.compile(
+        #     r"\b([A-Z][a-z]+|[A-Z]\.)"
+        #     r"(?:\s+(?:[A-Z][a-z]+|[A-Z]\.|de|da|del|van|von|al|bin|ibn|la|le|of))*\b"
+        # )
 
         #change to non-capturing group to get full name spans instead of just first token
-        # name_pat = re.compile(
-        #     r"\b(?:[A-Z][a-z]+|[A-Z]\.)"
-        #     r"(?:\s+(?:[A-Z][a-z]+|[A-Z]\.|de|da|del|van|von|al|bin|ibn|la|le|of))*\b")
+        name_pat = re.compile(
+            r"\b(?:[A-Z][a-z]+|[A-Z]\.)"
+            r"(?:\s+(?:[A-Z][a-z]+|[A-Z]\.|de|da|del|van|von|al|bin|ibn|la|le|of))*\b")
 
 
         def clean_span(s: str) -> str:
@@ -926,7 +926,7 @@ class RagPipeline:
                 retrieval_result.passages,
                 max_mined_candidates=max_mined_candidates,
             )
-
+        
         with timed(timings, "token_bias_build_s"):
             logit_bias = self._candidates_to_token_bias(
                 scored_phrases=mined_candidates[: bias_top_n],
