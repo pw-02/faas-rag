@@ -472,7 +472,7 @@ def main(cfg: RagServiceConfig):
     parser.add_argument(
         "--mode",
         type=str,
-        default="prompt_rag",
+        default="llm",
         choices=["llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"],
     )
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl")
@@ -591,14 +591,15 @@ def main(cfg: RagServiceConfig):
 
         # annotate summary with sweep params
         metrics = dict(metrics)
-        metrics["sweep_alpha"] = float(alpha)
-        metrics["sweep_max_candidates"] = int(args.stage2_max_candidates)
-        metrics["sweep_hybrid_prompt"] = int(bool(args.stage2_hybrid_prompt))
-        metrics["sweep_phrase_score_temperature"] = float(args.stage2_phrase_score_temperature)
-        metrics["sweep_per_token_cap"] = float(args.stage2_per_token_cap)
-        metrics["sweep_clamp_first_line"] = int(bool(args.stage2_clamp_first_line))
-        metrics["sweep_max_bias_steps"] = int(args.stage2_max_bias_steps) if args.stage2_max_bias_steps is not None else None   
-        all_summaries.append(metrics)
+        if args.mode == "logit_rag_stage2":
+            metrics["sweep_alpha"] = float(alpha)
+            metrics["sweep_max_candidates"] = int(args.stage2_max_candidates)
+            metrics["sweep_hybrid_prompt"] = int(bool(args.stage2_hybrid_prompt))
+            metrics["sweep_phrase_score_temperature"] = float(args.stage2_phrase_score_temperature)
+            metrics["sweep_per_token_cap"] = float(args.stage2_per_token_cap)
+            metrics["sweep_clamp_first_line"] = int(bool(args.stage2_clamp_first_line))
+            metrics["sweep_max_bias_steps"] = int(args.stage2_max_bias_steps) if args.stage2_max_bias_steps is not None else None   
+            all_summaries.append(metrics)
 
         print("\n==== FINAL (alpha={:g}) ====".format(alpha))
         print(json.dumps(metrics, indent=2))
