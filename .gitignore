@@ -1,7 +1,7 @@
 *.index*
 *.csv*
 *.db*
-*.jsonl*
+# *.jsonl*
 *.faiss*
 *.gz*
 *.npy*
@@ -11,9 +11,14 @@ figures/
 runs/
 *pycache*/
 faiss_wiki_dpr/
-# data/datasets/
 data/indexes/wiki-dpr/hnsw_100k
 data/indexes/wiki-dpr/wiki-passages
 backups/lambda/
 artifacts/
 *.log*
+data/datasets/mmlu
+data/datasets/long_form
+data/datasets/multi_hop
+data/datasets/multiple_choice
+data/datasets/qa
+data/datasets/fact_verification
