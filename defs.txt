@@ -1,3 +1,7 @@
-gold_in_mined_rate --> In what fraction of questions does the mined candidate set already contain the correct answer?
-oracle_em_from_mined --> What EM would you get if you always selected the correct mined candidate whenever it exists?
-selection_accuracy_given_gold_in_mined --> When the correct answer exists in mined candidates, how often does the model actually choose it?
+| Field                               | What it literally means                                | What it tells you                                                   |
+| ----------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------- |
+| `num_biased_token_ids`              | Number of unique token IDs that received logit bias    | How “wide” your biasing is. Large = spread thin. Small = focused.   |
+| `mined_hit`                         | Any mined phrase appears inside the model’s prediction | Did the model visibly use *something* from mining?                  |
+| `gold_in_mined`                     | Any gold answer exactly equals a mined phrase          | Did retrieval+mining surface the correct answer? (candidate recall) |
+| `oracle_em_from_mined`              | Same as `gold_in_mined` (currently)                    | Best possible EM if an oracle picked from mined list                |
+| `selected_gold_given_gold_in_mined` | Model output equals gold when gold was mined           | When the answer was available, did generation actually pick it?     |
