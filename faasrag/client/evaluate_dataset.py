@@ -730,7 +730,7 @@ def main(cfg: RagServiceConfig):
 
     parser.add_argument("--clamp_first_line", action="store_true")
     parser.add_argument("--hybrid_prompt", action="store_true")
-    parser.add_argument("--max_bias_steps", type=int, default=8)
+    parser.add_argument("--max_bias_steps", type=int, default=4)
 
     parser.add_argument("--sweep_style", type=str, default="grid", choices=["grid", "zip"])
     args = parser.parse_args()
