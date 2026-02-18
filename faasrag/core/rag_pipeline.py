@@ -896,6 +896,7 @@ class RagPipeline:
         per_token_cap: float = 2.0,
         clamp_first_line: bool = True,
         hybrid_prompt: bool = False,
+        max_bias_steps: int = None
     ) -> dict[str, Any]:
         q = (question or "").strip()
         if not q:
@@ -937,7 +938,9 @@ class RagPipeline:
             gen = self.generator.generate_chat_with_logit_bias(
                 messages=messages,
                 bias=bias,
+
                 alpha=float(alpha),
+                bias_steps=max_bias_steps,
                 clamp_first_line=clamp_first_line,
             )
 
