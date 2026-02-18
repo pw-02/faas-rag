@@ -1,4 +1,6 @@
-# evaluate_dataset.py (third pass: stage1 removed, stage2 -> logit_rag, cleaner sweeps, prefixed cfg fields)
+# evaluate_dataset.py (fourth pass: stage1 removed, stage2 -> logit_rag, single-flag sweeps,
+# prefixed cfg fields, robust mined-candidate parsing, optional debug JSONL, top-10 console preview)
+
 from __future__ import annotations
 
 import argparse
@@ -46,6 +48,11 @@ def get_question_and_answers(ex: Dict[str, Any]) -> Tuple[str, List[str]]:
     return q, golds
 
 
+def append_jsonl(path: str, obj: Dict[str, Any]) -> None:
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(obj, ensure_ascii=False, default=str) + "\n")
+
+
 # =============================================================================
 # Small coercion helpers
 # =============================================================================
@@ -61,6 +68,45 @@ def _i(d: Dict[str, Any], key: str, default: int = 0) -> int:
         return int(d.get(key, default) or default)
     except Exception:
         return int(default)
+
+
+def _coerce_mined_candidates(x: Any) -> List[Tuple[str, float]]:
+    """
+    Accepts:
+      - [("phrase", score), ...]
+      - [{"candidate": "...", "score": ...}, ...]
+      - ["phrase", ...]  (score becomes 0.0)
+    Returns: [(phrase, score), ...] with non-empty phrases only.
+    """
+    if not x:
+        return []
+    out: List[Tuple[str, float]] = []
+    if not isinstance(x, list):
+        return out
+
+    for item in x:
+        if isinstance(item, dict):
+            phrase = str(item.get("candidate") or item.get("phrase") or "").strip()
+            score_val = item.get("score", item.get("llm_score", item.get("prior", 0.0)))
+            try:
+                score = float(score_val) if score_val is not None else 0.0
+            except Exception:
+                score = 0.0
+            if phrase:
+                out.append((phrase, score))
+        elif isinstance(item, (tuple, list)) and len(item) >= 2:
+            phrase = str(item[0]).strip()
+            try:
+                score = float(item[1]) if item[1] is not None else 0.0
+            except Exception:
+                score = 0.0
+            if phrase:
+                out.append((phrase, score))
+        else:
+            phrase = str(item).strip()
+            if phrase:
+                out.append((phrase, 0.0))
+    return out
 
 
 # =============================================================================
@@ -101,16 +147,13 @@ class RunConfig:
 
 
 # =============================================================================
-# Stable CSV schemas (prefixed cfg fields)
+# Stable CSV schemas (prefixed cfg fields + mined top10)
 # =============================================================================
 RESULT_COLUMNS: List[str] = [
     # run identity
     "run_id",
     "mode",
     # cfg (prefixed)
-    # "cfg_limit",
-    # "cfg_print_first_n",
-    # "cfg_tqdm_update_every",
     "cfg_top_k",
     "cfg_logit_max_mined_candidates",
     "cfg_logit_bias_strength",
@@ -146,21 +189,21 @@ RESULT_COLUMNS: List[str] = [
     "cache_used",
     "cache_hits",
     "cache_misses",
-    # logit diagnostics (always present, blank for non-logit)
+    # logit diagnostics
     "num_biased_token_ids",
     "mined_hit",
     "gold_in_mined",
     "oracle_em_from_mined",
     "selected_gold_given_gold_in_mined",
+    # debugging
+    "mined_candidates_count",
+    "mined_candidates_top10_json",
 ]
 
 SUMMARY_COLUMNS: List[str] = [
     "run_id",
     "mode",
     # cfg (prefixed)
-    # "cfg_limit",
-    # "cfg_print_first_n",
-    # "cfg_tqdm_update_every",
     "cfg_top_k",
     "cfg_logit_max_mined_candidates",
     "cfg_logit_bias_strength",
@@ -181,8 +224,8 @@ SUMMARY_COLUMNS: List[str] = [
     "mean_prompt_build_s",
     "mean_decode_s",
     "mean_total_s",
-    "logit_mean_candidate_mine_s",
-    # logit summaries (0 for non-logit)
+    "mean_candidate_mine_s",
+    # logit summaries
     "logit_mined_hit_rate",
     "logit_gold_in_mined_rate",
     "logit_oracle_em_from_mined_rate",
@@ -196,11 +239,7 @@ def _row_with_schema(cols: List[str], values: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def cfg_to_prefixed_dict(cfg: RunConfig) -> Dict[str, Any]:
-    """One canonical place to format cfg fields and apply prefixes."""
     return {
-        # "cfg_limit": cfg.limit,
-        # "cfg_print_first_n": cfg.print_first_n,
-        # "cfg_tqdm_update_every": cfg.tqdm_update_every,
         "cfg_top_k": cfg.top_k,
         "cfg_logit_max_mined_candidates": cfg.logit_max_mined_candidates,
         "cfg_logit_bias_strength": cfg.logit_bias_strength,
@@ -235,7 +274,7 @@ class ModelOut:
     cache_used: bool
     cache_hits: int
     cache_misses: int
-    mined_candidates: List[str]
+    mined_candidates: List[Tuple[str, float]]
     num_biased_token_ids: int
 
 
@@ -244,11 +283,13 @@ def parse_model_out(out: Dict[str, Any]) -> ModelOut:
     timings = out.get("timings_s") or {}
     pred = (out.get("raw_answer") or out.get("answer") or "").strip()
 
-    cache_used = bool(extra.get("cache_used", False))
-    cache_hits = int(extra.get("cache_hits", 0)) or 0
-    cache_misses = int(extra.get("cache_misses", 0)) or 0
+    # read from out first, then extra
+    cache_used = bool(out.get("cache_used", extra.get("cache_used", False)))
+    cache_hits = int(out.get("cache_hits", extra.get("cache_hits", 0)) or 0)
+    cache_misses = int(out.get("cache_misses", extra.get("cache_misses", 0)) or 0)
 
-    mined_candidates = extra.get("mined_candidates")
+    mined_raw = extra.get("mined_candidates") or out.get("mined_candidates") or extra.get("mined_phrases") or out.get("mined_phrases")
+    mined_candidates = _coerce_mined_candidates(mined_raw)
 
     num_biased_token_ids = int(
         extra.get("num_biased_token_ids")
@@ -268,7 +309,7 @@ def parse_model_out(out: Dict[str, Any]) -> ModelOut:
         cache_used=cache_used,
         cache_hits=cache_hits,
         cache_misses=cache_misses,
-        mined_candidates=mined_candidates if mined_candidates is not None else [],
+        mined_candidates=mined_candidates,
         num_biased_token_ids=num_biased_token_ids,
     )
 
@@ -276,9 +317,8 @@ def parse_model_out(out: Dict[str, Any]) -> ModelOut:
 def compute_logit_diag(mo: ModelOut, golds: List[str], mode: str) -> LogitDiag:
     if mode != "logit_rag":
         return LogitDiag()
-    
-    phrases_only = [phrase for phrase, _ in mo.mined_candidates]
 
+    phrases_only = [phrase for phrase, _ in mo.mined_candidates]
     mined_norm = [normalize_answer(x) for x in phrases_only]
     mined_norm = [x for x in mined_norm if x]
 
@@ -321,7 +361,7 @@ def run_query(pipeline: RagPipeline, q: str, cfg: RunConfig) -> Dict[str, Any]:
             max_bias_steps=cfg.logit_max_bias_steps,
         )
 
-    # For llm / prompt_rag, your pipeline currently uses run_prompt_ra but llm uses k=0
+    # For llm / prompt_rag, your pipeline uses run_prompt_rag; llm should use top_k=0.
     return pipeline.run_prompt_rag(q)
 
 
@@ -356,6 +396,7 @@ class ExampleResult:
     cache_misses: int
 
     logit: LogitDiag
+    mined_candidates: List[Tuple[str, float]]  # full list (for debug JSONL / top10 preview)
 
 
 def evaluate_example(*, pipeline: RagPipeline, ex: Dict[str, Any], cfg: RunConfig) -> Optional[ExampleResult]:
@@ -404,6 +445,7 @@ def evaluate_example(*, pipeline: RagPipeline, ex: Dict[str, Any], cfg: RunConfi
         cache_hits=int(mo.cache_hits),
         cache_misses=int(mo.cache_misses),
         logit=logit_diag,
+        mined_candidates=mo.mined_candidates,
     )
 
 
@@ -488,8 +530,14 @@ class Aggregator:
 # =============================================================================
 # Row building
 # =============================================================================
+def _topk_candidates(cands: List[Tuple[str, float]], k: int = 10) -> List[Tuple[str, float]]:
+    # sort high->low by score; stable for ties
+    return sorted(cands, key=lambda x: float(x[1]), reverse=True)[:k]
+
+
 def build_result_row(*, run_id: str, cfg: RunConfig, res: ExampleResult) -> Dict[str, Any]:
     cfg_vals = cfg_to_prefixed_dict(cfg)
+    top10 = _topk_candidates(res.mined_candidates, 10)
 
     values: Dict[str, Any] = {
         "run_id": run_id,
@@ -521,6 +569,8 @@ def build_result_row(*, run_id: str, cfg: RunConfig, res: ExampleResult) -> Dict
         "gold_in_mined": int(res.logit.gold_in_mined),
         "oracle_em_from_mined": int(res.logit.oracle_em_from_mined),
         "selected_gold_given_gold_in_mined": int(res.logit.selected_gold_given_gold_in_mined),
+        "mined_candidates_count": len(res.mined_candidates),
+        "mined_candidates_top10_json": json.dumps(top10, ensure_ascii=False),
     }
 
     return _row_with_schema(RESULT_COLUMNS, values)
@@ -536,6 +586,8 @@ def evaluate_one_run(
     cfg: RunConfig,
     results_csv: Optional[str],
     save_to_file: bool = True,
+    debug_jsonl: Optional[str] = None,
+    print_topk_candidates: int = 0,  # e.g. 10 prints top 10 mined candidates for first N samples
 ) -> Dict[str, Any]:
     mode = validate_mode(cfg.mode)
     run_id = cfg.run_id()
@@ -551,6 +603,7 @@ def evaluate_one_run(
 
         agg.add(res, mode)
 
+        # console preview for first N examples
         if agg.n <= cfg.print_first_n:
             tqdm.write("\n---")
             tqdm.write(f"run_id: {run_id}  mode: {mode}  id: {res.ex_id}")
@@ -561,12 +614,35 @@ def evaluate_one_run(
             tqdm.write(f"tokens: prompt={res.prompt_tokens} completion={res.completion_tokens} total={res.total_tokens}")
             tqdm.write(f"timings_s: total={res.total_s:.3f} decode={res.decode_s:.3f}")
 
+            if print_topk_candidates and mode == "logit_rag":
+                topk = _topk_candidates(res.mined_candidates, print_topk_candidates)
+                preview = ", ".join([f"{p}({s:.2f})" for p, s in topk])
+                tqdm.write(f"mined_top{print_topk_candidates}: {preview}")
+
         if cfg.tqdm_update_every > 0 and agg.n % cfg.tqdm_update_every == 0:
             pbar.set_postfix(agg.postfix(mode))
 
         if save_to_file and results_csv:
             row = build_result_row(run_id=run_id, cfg=cfg, res=res)
             append_csv_row(results_csv, row)
+
+        # optional full debug JSONL (per-example)
+        if debug_jsonl:
+            append_jsonl(
+                debug_jsonl,
+                {
+                    "run_id": run_id,
+                    "mode": mode,
+                    "id": res.ex_id,
+                    "question": res.question,
+                    "prediction": res.prediction,
+                    "golds": res.golds,
+                    "em": res.em,
+                    "f1": res.f1,
+                    "retrieved_doc_ids": res.retrieved_doc_ids,
+                    "mined_candidates": res.mined_candidates,  # full list
+                },
+            )
 
     cfg_vals = cfg_to_prefixed_dict(cfg)
 
@@ -584,7 +660,7 @@ def evaluate_one_run(
         "mean_prompt_build_s": agg.mean(agg.prompt_build_sum),
         "mean_decode_s": agg.mean(agg.decode_sum),
         "mean_total_s": agg.mean(agg.total_s_sum),
-        "logit_mean_candidate_mine_s": agg.mean(agg.mine_sum),
+        "mean_candidate_mine_s": agg.mean(agg.mine_sum),
         "logit_mined_hit_rate": (agg.mined_hit_sum / agg.logit_n) if agg.logit_n else 0.0,
         "logit_gold_in_mined_rate": (agg.gold_in_mined_sum / agg.logit_n) if agg.logit_n else 0.0,
         "logit_oracle_em_from_mined_rate": (agg.oracle_hits / agg.oracle_total) if agg.oracle_total else 0.0,
@@ -604,10 +680,10 @@ def evaluate_one_run(
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
-    #logit_rag,prompt_rag,llm
-    #data/datasets/nq_train_filtered.jsonl
+
+    # modes: logit_rag, prompt_rag, llm
     parser.add_argument("--mode", type=str, default="logit_rag", choices=sorted(VALID_MODES))
-    parser.add_argument("--data", default="data/datasets/qa/nq/nq_train.jsonl", type=str)
+    parser.add_argument("--data", default="data/datasets/nq_train_filtered.jsonl", type=str)
 
     parser.add_argument("--limit", type=int, default=500)
     parser.add_argument("--print_first_n", type=int, default=10)
@@ -616,6 +692,10 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--results_csv", type=str, default="all_results.csv")
     parser.add_argument("--summary_csv", type=str, default="run_summaries.csv")
     parser.add_argument("--save_to_file", action="store_true", default=True)
+
+    # optional debug output
+    parser.add_argument("--debug_jsonl", type=str, default="", help="If set, append per-example debug records here.")
+    parser.add_argument("--print_top_candidates", type=int, default=5, help="If >0, print top-K mined candidates for the first N examples.")
 
     # logit-only knobs
     parser.add_argument("--max_mined_candidates", type=int, default=40)
@@ -666,7 +746,7 @@ def main(cfg: RagServiceConfig):
 
     examples = load_jsonl(args.data)
 
-    # Sweep parsing
+    # Sweep parsing (single flag -> list)
     strength_list = parse_float_list(args.logit_bias_strength)
     cap_list = parse_float_list(args.max_token_logit_bias)
     temp_list = parse_float_list(args.phrase_softmax_temperature)
@@ -717,6 +797,10 @@ def main(cfg: RagServiceConfig):
         args.save_to_file,
     )
 
+    debug_jsonl = args.debug_jsonl.strip() or None
+    if debug_jsonl:
+        logger.info("Debug JSONL enabled: %s", debug_jsonl)
+
     for rc in runs:
         logger.info("RUN %s cfg=%s", rc.run_id(), json.dumps(asdict(rc), default=str))
 
@@ -726,6 +810,8 @@ def main(cfg: RagServiceConfig):
             cfg=rc,
             results_csv=args.results_csv,
             save_to_file=args.save_to_file,
+            debug_jsonl=debug_jsonl,
+            print_topk_candidates=int(args.print_top_candidates or 0),
         )
 
         print("\n==== FINAL (run_id={}) ====".format(rc.run_id()))
