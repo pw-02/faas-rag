@@ -470,7 +470,7 @@ def evaluate(
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--mode",
+        "--llm",
         type=str,
         default="prompt_rag",
         choices=["llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"],
