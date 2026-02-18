@@ -437,9 +437,10 @@ def evaluate_example(
     if not q:
         return None
 
+
     out = run_query(pipeline, q, cfg)
     mo = parse_model_out(out)
-
+    messages =out.get("messages") or []  
     em = float(metric_max_over_ground_truths(exact_match_score, mo.pred, golds))
     f1 = float(metric_max_over_ground_truths(f1_score, mo.pred, golds))
 
@@ -460,7 +461,7 @@ def evaluate_example(
     return ExampleResult(
         ex_id=str(ex_id),
         question=q,
-        messages=[],  # TODO if we want to save messages, need to add to pipeline output
+        messages=messages,  # TODO if we want to save messages, need to add to pipeline output
         golds=golds,
         prediction=mo.pred,
         em=em,
@@ -701,6 +702,8 @@ def evaluate_one_run(
             tqdm.write(f"EM={res.em} F1={res.f1:.3f}")
             tqdm.write(f"tokens: prompt={res.prompt_tokens} completion={res.completion_tokens} total={res.total_tokens}")
             tqdm.write(f"timings_s: total={res.total_s:.3f} decode={res.decode_s:.3f}")
+            if hasattr(res, "messages") and res.messages:
+                tqdm.write(f"messages: {len(res.messages)} messages")
 
         if cfg.tqdm_update_every > 0 and agg.n % cfg.tqdm_update_every == 0:
             pbar.set_postfix(agg.postfix(mode))
@@ -714,6 +717,7 @@ def evaluate_one_run(
     summary_values: Dict[str, Any] = {
         "run_id": run_id,
         "mode": mode,
+        "top_k": int(getattr(pipeline, "top_k", 0)),
         "n": agg.n,
         "em": agg.mean(agg.em_sum),
         "f1": agg.mean(agg.f1_sum),
@@ -800,7 +804,7 @@ def main(cfg: RagServiceConfig):
         top_k = 0
         cfg.prompt_build_method = "LLM_ONLY"
     elif mode == "prompt_rag":
-        top_k = 5
+        top_k = 10
         cfg.prompt_build_method = "QA_OPEN"
     elif mode == "logit_rag_stage1":
         top_k = 10
