@@ -896,6 +896,7 @@ class RagPipeline:
         self,
         question: str,
         max_mined_candidates: int = 40,
+        bias_top_n: int = 4,
         logit_bias_strength: float = 0.8,
         max_token_logit_bias: float = 2.0,
         phrase_softmax_temperature: float = 1.0,
@@ -928,7 +929,7 @@ class RagPipeline:
 
         with timed(timings, "token_bias_build_s"):
             logit_bias = self._candidates_to_token_bias(
-                scored_phrases=mined_candidates,
+                scored_phrases=mined_candidates[: bias_top_n],
                 max_token_logit_bias=max_token_logit_bias,
                 phrase_softmax_temperature=phrase_softmax_temperature,
                 drop_junk_tokens=True,
