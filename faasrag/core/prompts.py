@@ -48,8 +48,10 @@ STRICT_SYSTEM = (
 
 OPEN_SYSTEM = (
     "Answer the question using the provided passages if relevant, but you may also rely on general knowledge. "
-    "Output ONLY the answer (max 5 words)."
-)
+    "Return ONLY the answer. "
+    "No extra words. No punctuation. "
+    "Maximum 5 words."
+    )
 
 LLM_ONLY_SYSTEM = (
     "Answer using general knowledge. "

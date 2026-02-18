@@ -492,8 +492,8 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--stage2_alpha", type=float, default=10)
     parser.add_argument("--stage2_alpha_sweep", type=str, default="")  # <-- NEW 0.1,0.2,0.4,0.8  8,10,12
     parser.add_argument("--stage2_max_bias_steps", type=int) #default=None means no limit, use bias for entire generation
-    parser.add_argument("--stage2_max_candidates", type=int, default=40)
-    parser.add_argument("--stage2_phrase_score_temperature", type=float, default=0.5)
+    parser.add_argument("--stage2_max_candidates", type=int, default=15)
+    parser.add_argument("--stage2_phrase_score_temperature", type=float, default=1.0)
     parser.add_argument("--stage2_per_token_cap", type=float, default=2.0)
     parser.add_argument("--stage2_clamp_first_line", action="store_true")
     parser.add_argument("--stage2_hybrid_prompt", action="store_true")
@@ -511,7 +511,7 @@ def main(cfg: RagServiceConfig):
         cfg.prompt_build_method = "LLM_ONLY"
     elif args.mode == "prompt_rag":
         top_k = 5
-        cfg.prompt_build_method = "QA_STRICT"
+        cfg.prompt_build_method = "QA_OPEN"
     elif args.mode == "logit_rag_stage1":
         top_k = 10
         cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
