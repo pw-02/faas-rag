@@ -256,11 +256,11 @@ def cfg_to_prefixed_dict(cfg: RunConfig) -> Dict[str, Any]:
 # =============================================================================
 @dataclass
 class LogitDiag:
-    num_biased_token_ids: int = 0
-    mined_hit: bool = False
-    gold_in_mined: bool = False
-    oracle_em_from_mined: bool = False
-    selected_gold_given_gold_in_mined: bool = False
+    num_biased_token_ids: int = 0 #How many unique token IDs ended up in your logit_bias dictionary.
+    mined_hit: bool = False #If any mined phrase appears as a substring inside the model’s final prediction (after normalization).
+    gold_in_mined: bool = False #If any gold answer string exactly matches one of the mined phrases (after normalization), i.e. the correct answer was present in the mined set.
+    oracle_em_from_mined: bool = False #best possible EM given the mined list”
+    selected_gold_given_gold_in_mined: bool = False #When the correct answer was available in mined candidates, did the model actually output it?
 
 
 @dataclass
@@ -684,7 +684,7 @@ def main(cfg: RagServiceConfig):
     # modes: logit_rag, prompt_rag, llm
     #data/datasets/qa/nq/nq_train.jsonl
     #data/datasets/nq_train_filtered.jsonl
-    parser.add_argument("--mode", type=str, default="logit_rag", choices=sorted(VALID_MODES))
+    parser.add_argument("--mode", type=str, default="prompt_rag", choices=sorted(VALID_MODES))
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_train.jsonl", type=str)
 
     parser.add_argument("--limit", type=int, default=500)
