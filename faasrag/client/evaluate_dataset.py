@@ -682,8 +682,10 @@ def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
 
     # modes: logit_rag, prompt_rag, llm
+    #data/datasets/qa/nq/nq_train.jsonl
+    #data/datasets/nq_train_filtered.jsonl
     parser.add_argument("--mode", type=str, default="logit_rag", choices=sorted(VALID_MODES))
-    parser.add_argument("--data", default="data/datasets/nq_train_filtered.jsonl", type=str)
+    parser.add_argument("--data", default="data/datasets/qa/nq/nq_train.jsonl", type=str)
 
     parser.add_argument("--limit", type=int, default=500)
     parser.add_argument("--print_first_n", type=int, default=10)
