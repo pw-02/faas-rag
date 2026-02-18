@@ -6,15 +6,17 @@ import string
 from collections import Counter
 from typing import Iterable, List, Optional, Tuple
 
+def append_csv_row(path: str, row: dict) -> None:
+    file_exists = os.path.exists(path) and os.path.getsize(path) > 0
 
-
-def append_csv_row(path: str, row: dict):
-    exists = os.path.exists(path)
     with open(path, "a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(row.keys()))
-        if not exists:
-            w.writeheader()
-        w.writerow(row)
+        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+
+        # ✅ write header once
+        if not file_exists:
+            writer.writeheader()
+
+        writer.writerow(row)
 
 
 def extract_short_answer(text: str, max_chars: Optional[int] = None) -> str:
