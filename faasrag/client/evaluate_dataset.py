@@ -470,9 +470,9 @@ def evaluate(
 def main(cfg: RagServiceConfig):
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--llm",
+        "--mode",
         type=str,
-        default="prompt_rag",
+        default="llm",
         choices=["llm", "prompt_rag", "logit_rag_stage1", "logit_rag_stage2"],
     )
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_dev.jsonl")
