@@ -491,7 +491,7 @@ def main(cfg: RagServiceConfig):
     # Stage-2 knobs
     parser.add_argument("--stage2_alpha", type=float, default=0.2)
     parser.add_argument("--stage2_alpha_sweep", type=str, default="8,10,12")  # <-- NEW 0.1,0.2,0.4,0.8
-    parser.add_argument("--stage2_max_bias_steps", type=int, default="")
+    parser.add_argument("--stage2_max_bias_steps", type=int, default=None) #default=None means no limit, use bias for entire generation
 
     parser.add_argument("--stage2_max_candidates", type=int, default=40)
     parser.add_argument("--stage2_phrase_score_temperature", type=float, default=0.5)
@@ -585,7 +585,7 @@ def main(cfg: RagServiceConfig):
             stage2_phrase_score_temperature=args.stage2_phrase_score_temperature,
             stage2_per_token_cap=args.stage2_per_token_cap,
             stage2_clamp_first_line=bool(args.stage2_clamp_first_line),
-            stage2_max_bias_steps=args.stage2_max_bias_steps,
+            stage2_max_bias_steps=args.stage2_max_bias_steps if args.stage2_max_bias_steps is not None else None,
             save_to_file=args.save_to_file,
         )
 
@@ -597,7 +597,7 @@ def main(cfg: RagServiceConfig):
         metrics["sweep_phrase_score_temperature"] = float(args.stage2_phrase_score_temperature)
         metrics["sweep_per_token_cap"] = float(args.stage2_per_token_cap)
         metrics["sweep_clamp_first_line"] = int(bool(args.stage2_clamp_first_line))
-        metrics["sweep_max_bias_steps"] = int(args.stage2_max_bias_steps)
+        metrics["sweep_max_bias_steps"] = int(args.stage2_max_bias_steps) if args.stage2_max_bias_steps is not None else None   
         all_summaries.append(metrics)
 
         print("\n==== FINAL (alpha={:g}) ====".format(alpha))
