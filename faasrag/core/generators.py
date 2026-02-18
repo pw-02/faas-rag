@@ -48,12 +48,12 @@ class SparseAddBiasProcessor(LogitsProcessor):
         self,
         *,
         bias: Dict[int, float],
-        alpha: float,
+        alpha: float, #Global strength multiplier.
         device: torch.device,
-        max_steps: Optional[int] = None,
-        per_token_cap: Optional[float] = None,
-        eos_token_id: Optional[int] = None,
-        ignore_eos: bool = True,
+        max_steps: Optional[int] = None, #Only apply bias during first N generated tokens. Early tokens determine the direction of the answer.
+        per_token_cap: Optional[float] = None, #Clamp individual bias magnitudes.
+        eos_token_id: Optional[int] = None, #Avoid biasing EOS token.
+        ignore_eos: bool = True, #Avoid biasing EOS token.
     ):
         self.alpha = float(alpha)
         self.max_steps = max_steps
