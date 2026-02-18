@@ -126,6 +126,7 @@ def validate_mode(mode: str) -> str:
 class RunConfig:
     mode: str
     top_k: int
+    dataset: str
 
     # general
     limit: Optional[int]
@@ -241,6 +242,7 @@ def _row_with_schema(cols: List[str], values: Dict[str, Any]) -> Dict[str, Any]:
 def cfg_to_prefixed_dict(cfg: RunConfig) -> Dict[str, Any]:
     return {
         "cfg_top_k": cfg.top_k,
+        "cfg_dataset": cfg.dataset,
         "cfg_logit_max_mined_candidates": cfg.logit_max_mined_candidates,
         "cfg_logit_bias_strength": cfg.logit_bias_strength,
         "cfg_logit_max_token_logit_bias": cfg.logit_max_token_logit_bias,
@@ -794,6 +796,7 @@ def main(cfg: RagServiceConfig):
         runs.append(
             RunConfig(
                 mode=mode,
+                dataset=args.data,
                 top_k=top_k,
                 limit=(args.limit if args.limit and args.limit > 0 else None),
                 print_first_n=args.print_first_n,
