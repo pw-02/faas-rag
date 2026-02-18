@@ -592,13 +592,13 @@ def main(cfg: RagServiceConfig):
         # annotate summary with sweep params
         metrics = dict(metrics)
         if args.mode == "logit_rag_stage2":
-            metrics["sweep_alpha"] = float(alpha)
-            metrics["sweep_max_candidates"] = int(args.stage2_max_candidates)
-            metrics["sweep_hybrid_prompt"] = int(bool(args.stage2_hybrid_prompt))
-            metrics["sweep_phrase_score_temperature"] = float(args.stage2_phrase_score_temperature)
-            metrics["sweep_per_token_cap"] = float(args.stage2_per_token_cap)
-            metrics["sweep_clamp_first_line"] = int(bool(args.stage2_clamp_first_line))
-            metrics["sweep_max_bias_steps"] = int(args.stage2_max_bias_steps) if args.stage2_max_bias_steps is not None else None   
+            metrics["alpha"] = float(alpha)
+            metrics["max_candidates"] = int(args.stage2_max_candidates)
+            metrics["hybrid_prompt"] = int(bool(args.stage2_hybrid_prompt))
+            metrics["phrase_score_temperature"] = float(args.stage2_phrase_score_temperature)
+            metrics["per_token_cap"] = float(args.stage2_per_token_cap)
+            metrics["clamp_first_line"] = int(bool(args.stage2_clamp_first_line))
+            metrics["max_bias_steps"] = int(args.stage2_max_bias_steps) if args.stage2_max_bias_steps is not None else None   
             all_summaries.append(metrics)
 
         print("\n==== FINAL (alpha={:g}) ====".format(alpha))
