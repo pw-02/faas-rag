@@ -943,14 +943,6 @@ class RagPipeline:
                 drop_junk_tokens=True,
             )
 
-        
-        with timed(timings, "token_bias_build_s"):
-            logit_bias = self._candidates_to_token_bias(
-                scored_phrases=mined_candidates[: bias_top_n],
-                max_token_logit_bias=max_token_logit_bias,
-                phrase_softmax_temperature=phrase_softmax_temperature,
-                drop_junk_tokens=True,
-            )
 
         with timed(timings, "prompt_s"):
             # TODO: implement hybrid_prompt if you want different message construction
