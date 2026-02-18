@@ -108,10 +108,10 @@ RESULT_COLUMNS: List[str] = [
     "run_id",
     "mode",
     # cfg (prefixed)
-    "cfg_general_limit",
-    "cfg_general_print_first_n",
-    "cfg_general_tqdm_update_every",
-    "cfg_general_top_k",
+    "cfg_limit",
+    "cfg_print_first_n",
+    "cfg_tqdm_update_every",
+    "cfg_top_k",
     "cfg_logit_max_mined_candidates",
     "cfg_logit_bias_strength",
     "cfg_logit_max_token_logit_bias",
@@ -158,10 +158,10 @@ SUMMARY_COLUMNS: List[str] = [
     "run_id",
     "mode",
     # cfg (prefixed)
-    "cfg_general_limit",
-    "cfg_general_print_first_n",
-    "cfg_general_tqdm_update_every",
-    "cfg_general_top_k",
+    "cfg_limit",
+    "cfg_print_first_n",
+    "cfg_tqdm_update_every",
+    "cfg_top_k",
     "cfg_logit_max_mined_candidates",
     "cfg_logit_bias_strength",
     "cfg_logit_max_token_logit_bias",
@@ -199,8 +199,8 @@ def cfg_to_prefixed_dict(cfg: RunConfig) -> Dict[str, Any]:
     """One canonical place to format cfg fields and apply prefixes."""
     return {
         "cfg_limit": cfg.limit,
-        # "cfg_general_print_first_n": cfg.print_first_n,
-        # "cfg_general_tqdm_update_every": cfg.tqdm_update_every,
+        # "cfg_print_first_n": cfg.print_first_n,
+        # "cfg_tqdm_update_every": cfg.tqdm_update_every,
         "cfg_top_k": cfg.top_k,
         "cfg_logit_max_mined_candidates": cfg.logit_max_mined_candidates,
         "cfg_logit_bias_strength": cfg.logit_bias_strength,
@@ -330,8 +330,7 @@ def run_query(pipeline: RagPipeline, q: str, cfg: RunConfig) -> Dict[str, Any]:
             max_bias_steps=cfg.logit_max_bias_steps,
         )
 
-    # For llm / prompt_rag, your pipeline currently uses run_prompt_rag.
-    # If you add run_llm_only, you can dispatch llm separately.
+    # For llm / prompt_rag, your pipeline currently uses run_prompt_ra but llm uses k=0
     return pipeline.run_prompt_rag(q)
 
 
