@@ -492,7 +492,6 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--stage2_alpha", type=float, default=10)
     parser.add_argument("--stage2_alpha_sweep", type=str, default="")  # <-- NEW 0.1,0.2,0.4,0.8  8,10,12
     parser.add_argument("--stage2_max_bias_steps", type=int) #default=None means no limit, use bias for entire generation
-
     parser.add_argument("--stage2_max_candidates", type=int, default=40)
     parser.add_argument("--stage2_phrase_score_temperature", type=float, default=0.5)
     parser.add_argument("--stage2_per_token_cap", type=float, default=2.0)
@@ -512,7 +511,7 @@ def main(cfg: RagServiceConfig):
         cfg.prompt_build_method = "LLM_ONLY"
     elif args.mode == "prompt_rag":
         top_k = 5
-        cfg.prompt_build_method = "QA_OPEN"
+        cfg.prompt_build_method = "QA_STRICT"
     elif args.mode == "logit_rag_stage1":
         top_k = 10
         cfg.prompt_build_method = "LOGIT_RAG_STAGE1"
@@ -591,6 +590,7 @@ def main(cfg: RagServiceConfig):
 
         # annotate summary with sweep params
         metrics = dict(metrics)
+
         if args.mode == "logit_rag_stage2":
             metrics["alpha"] = float(alpha)
             metrics["max_candidates"] = int(args.stage2_max_candidates)
@@ -599,7 +599,9 @@ def main(cfg: RagServiceConfig):
             metrics["per_token_cap"] = float(args.stage2_per_token_cap)
             metrics["clamp_first_line"] = int(bool(args.stage2_clamp_first_line))
             metrics["max_bias_steps"] = int(args.stage2_max_bias_steps) if args.stage2_max_bias_steps is not None else None   
-            all_summaries.append(metrics)
+        
+        all_summaries.append(metrics)
+        metrics["prompt_build_method"] = cfg.prompt_build_method
 
         print("\n==== FINAL (alpha={:g}) ====".format(alpha))
         print(json.dumps(metrics, indent=2))
