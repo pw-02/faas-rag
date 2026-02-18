@@ -467,7 +467,7 @@ def main(cfg: RagServiceConfig):
                         help="One big CSV with per-example rows across all sweeps.")
     parser.add_argument("--summary_csv", type=str, default="run_summaries.csv",
                         help="One row per run (config) for quick comparison.")
-    parser.add_argument("--save_to_file", action="store_true", default=False)
+    parser.add_argument("--save_to_file", action="store_true", default=True)
 
     # Stage-1 knobs
     parser.add_argument("--stage1_max_candidates", type=int, default=40)
