@@ -38,6 +38,14 @@ def load_jsonl(path: str) -> List[Dict[str, Any]]:
             data.append(json.loads(line))
     return data
 
+def append_summary_row(path: str, row: Dict[str, Any]) -> None:
+    file_exists = os.path.exists(path) and os.path.getsize(path) > 0
+    with open(path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(row)
+
 
 def get_question_and_answers(ex: Dict[str, Any]) -> Tuple[str, List[str]]:
     q = (ex.get("question") or "").strip()
@@ -605,10 +613,11 @@ def main(cfg: RagServiceConfig):
 
     logger.info("Running %d configs (mode=%s). results_csv=%s summary_csv=%s save=%s",
                 len(runs), mode, args.results_csv, args.summary_csv, args.save_to_file)
+    
 
-    summaries: List[Dict[str, Any]] = []
     for rc in runs:
         logger.info("RUN %s cfg=%s", rc.run_id(), json.dumps(asdict(rc), default=str))
+
         summary = evaluate_one_run(
             pipeline,
             examples,
@@ -616,22 +625,14 @@ def main(cfg: RagServiceConfig):
             results_csv=args.results_csv,
             save_to_file=args.save_to_file,
         )
-        summaries.append(summary)
+
         print("\n==== FINAL (run_id={}) ====".format(rc.run_id()))
         print(json.dumps(summary, indent=2, default=str))
 
-    # Write summary CSV (one row per run)
-    if args.save_to_file and args.summary_csv and summaries:
-        file_exists = os.path.exists(args.summary_csv) and os.path.getsize(args.summary_csv) > 0
-        with open(args.summary_csv, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=list(summaries[0].keys()))
-            if not file_exists:
-                writer.writeheader()
-            for row in summaries:
-                writer.writerow(row)
-
-        logger.info("Wrote run summaries to %s", args.summary_csv)
-
+        # ✅ write immediately (one row per run)
+        if args.save_to_file and args.summary_csv:
+            append_summary_row(args.summary_csv, summary)
+            logger.info("Appended summary row to %s (run_id=%s)", args.summary_csv, summary.get("run_id"))
 
 if __name__ == "__main__":
     main()
