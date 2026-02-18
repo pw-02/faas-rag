@@ -926,6 +926,17 @@ class RagPipeline:
                 retrieval_result.passages,
                 max_mined_candidates=max_mined_candidates,
             )
+
+        with timed(timings, "token_bias_build_s"):
+            ranked = sorted(mined_candidates, key=lambda x: float(x[1]), reverse=True)
+            top_phrases = ranked[:bias_top_n] if bias_top_n and bias_top_n > 0 else []
+            logit_bias = self._candidates_to_token_bias(
+                scored_phrases=top_phrases,
+                max_token_logit_bias=max_token_logit_bias,
+                phrase_softmax_temperature=phrase_softmax_temperature,
+                drop_junk_tokens=True,
+            )
+
         
         with timed(timings, "token_bias_build_s"):
             logit_bias = self._candidates_to_token_bias(
