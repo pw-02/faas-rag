@@ -947,7 +947,9 @@ class RagPipeline:
                 retrieval_result.passages,
                 max_mined_candidates=max_mined_candidates,
             )
-
+        
+        mined_candidates = dedupe_overlapping_phrases(mined_candidates)
+        
         with timed(timings, "token_bias_build_s"):
             ranked = sorted(mined_candidates, key=lambda x: float(x[1]), reverse=True)
             top_phrases = ranked[:bias_top_n] if bias_top_n and bias_top_n > 0 else []
