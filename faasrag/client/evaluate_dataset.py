@@ -491,7 +491,7 @@ def main(cfg: RagServiceConfig):
     # Stage-2 knobs
     parser.add_argument("--stage2_alpha", type=float, default=0.2)
     parser.add_argument("--stage2_alpha_sweep", type=str, default="8,10,12")  # <-- NEW 0.1,0.2,0.4,0.8
-    parser.add_argument("--stage2_max_bias_steps", type=int, default=None)
+    parser.add_argument("--stage2_max_bias_steps", type=int, default="")
 
     parser.add_argument("--stage2_max_candidates", type=int, default=40)
     parser.add_argument("--stage2_phrase_score_temperature", type=float, default=0.5)
