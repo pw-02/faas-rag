@@ -257,10 +257,21 @@ def cfg_to_prefixed_dict(cfg: RunConfig) -> Dict[str, Any]:
 @dataclass
 class LogitDiag:
     """
-    Docstring for LogitDiag
-    num_biased_token_ids: How many unique token IDs ended up in your logit_bias dictionary.
-    mined_hit:If any mined phrase appears as a substring inside the model’s final prediction (after normalization).
-
+    num_biased_token_ids:
+        Number of unique token IDs that received logit bias.
+        Indicates how broad vs focused the applied bias was.
+    mined_hit:
+        True if any mined phrase appears as a substring in the model prediction
+        (after normalization). Weak signal that generation used mined content.
+    gold_in_mined:
+        True if any gold answer exactly matches a mined phrase (after normalization).
+        Measures recall of the mining stage.
+    oracle_em_from_mined:
+        True if gold_in_mined. Represents the best-case exact-match outcome assuming
+        an oracle could select from the mined candidates.
+    selected_gold_given_gold_in_mined:
+        True if the model prediction exactly matches a gold answer (after normalization)
+        when the gold answer was present in mined candidates.
     """
 
     num_biased_token_ids: int = 0 
