@@ -949,7 +949,7 @@ class RagPipeline:
             )
         
         mined_candidates = dedupe_overlapping_phrases(mined_candidates)
-        
+
         with timed(timings, "token_bias_build_s"):
             ranked = sorted(mined_candidates, key=lambda x: float(x[1]), reverse=True)
             top_phrases = ranked[:bias_top_n] if bias_top_n and bias_top_n > 0 else []
@@ -959,7 +959,7 @@ class RagPipeline:
                 phrase_softmax_temperature=phrase_softmax_temperature,
                 drop_junk_tokens=True,
                 dedupe_overlaps=True,
-                split_weight_across_tokens=False,
+                split_weight_across_tokens=True,
             )
 
         with timed(timings, "prompt_s"):
