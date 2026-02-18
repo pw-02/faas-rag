@@ -614,7 +614,7 @@ def main(cfg: RagServiceConfig):
     logger.info("Running %d configs (mode=%s). results_csv=%s summary_csv=%s save=%s",
                 len(runs), mode, args.results_csv, args.summary_csv, args.save_to_file)
     
-
+    logger.info("Total runs to execute: %d", len(runs))
     for rc in runs:
         logger.info("RUN %s cfg=%s", rc.run_id(), json.dumps(asdict(rc), default=str))
 
