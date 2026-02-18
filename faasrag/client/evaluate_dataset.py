@@ -489,8 +489,8 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--stage1_no_length_norm", action="store_true")
 
     # Stage-2 knobs
-    parser.add_argument("--stage2_alpha", type=float, default=0.2)
-    parser.add_argument("--stage2_alpha_sweep", type=str, default="8,10,12")  # <-- NEW 0.1,0.2,0.4,0.8
+    parser.add_argument("--stage2_alpha", type=float, default=10)
+    parser.add_argument("--stage2_alpha_sweep", type=str, default="")  # <-- NEW 0.1,0.2,0.4,0.8  8,10,12
     parser.add_argument("--stage2_max_bias_steps", type=int) #default=None means no limit, use bias for entire generation
 
     parser.add_argument("--stage2_max_candidates", type=int, default=40)
