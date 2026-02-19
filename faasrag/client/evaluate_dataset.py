@@ -769,7 +769,7 @@ def main(cfg: RagServiceConfig):
         top_k = 10
         cfg.prompt_build_method = "QA_OPEN"
     else:
-        top_k = 40
+        top_k = 10
         cfg.prompt_build_method = "LOGIT_RAG"  # ensure your pipeline supports this method name
 
     pipeline = RagPipeline(

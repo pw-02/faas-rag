@@ -375,7 +375,7 @@ class RagPipeline:
         max_seq_len: int = 384,
         doc_stride: int = 128,
         max_span_tokens: int = 8,
-        length_penalty: float = 0.35,
+        length_penalty: float = 0,
     ) -> list[tuple[str, float]]:
         """
         PURPOSE
