@@ -32,7 +32,7 @@ def dedupe_overlapping_phrases(
             continue
         kept.append((p, float(score)))
         kept_norm.append(pn)
-        
+
 
     return kept
 def append_csv_row(path: str, row: dict) -> None:
@@ -164,6 +164,10 @@ def parse_float_list(s: str) -> List[float]:
     # supports "0.1,0.2,0.4" or "[0.1, 0.2]" or "0.1 0.2"
     if not s:
         return []
+    s = s.strip().lower()
+    if s in {"none", "null", ""}:
+        return [None]
+    
     s = s.strip()
     s = s.strip("[]()")
     parts = [p.strip() for p in s.replace(",", " ").split()]

@@ -282,6 +282,11 @@ class RagPipeline:
             - Else: per_tok = w  (stronger for multi-token phrases)
         4) (Optional) drop junk tokens and cap per-token bias.
 
+        When you increase temperature: 
+            -The top-scoring phrase becomes less dominant.
+            - Lower-scoring phrases get relatively more weight
+            - Bias is distributed across more candidates
+
         NOTE: This is token-level steering; very large bias can cause repetition loops.
         """
         if not scored_phrases:
