@@ -741,7 +741,7 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--print_top_tokens", type=int, default=5, help="If >0, print top-K biased tokens for the first N examples.")
 
     # logit-only knobs
-    parser.add_argument("--max_mined_candidates", type=int, default=1000)
+    parser.add_argument("--max_mined_candidates", type=int, default=100)
     parser.add_argument("--bias_top_n", type=int, default=5)
 
     # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
