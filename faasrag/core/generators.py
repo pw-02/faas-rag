@@ -127,8 +127,8 @@ class GatedSparseAddBiasProcessor(LogitsProcessor):
         eos_token_id: Optional[int] = None,
         ignore_eos: bool = True,
         # gating config
-        gate_mode: str = "margin",   # "pmax" | "entropy" | "margin" | "pbias"
-        gate_threshold: float = 3.0,  # meaning depends on mode
+        gate_mode: str = "entropy",   # "pmax" | "entropy" | "margin" | "pbias"
+        gate_threshold: float = 8.0,  # meaning depends on mode
         gate_temperature: float = 1.0, # compute confidence at temp=1 for stability
         gate_topk: int = 50,          # approximate entropy on top-k for speed
         enable_gating: bool = True
