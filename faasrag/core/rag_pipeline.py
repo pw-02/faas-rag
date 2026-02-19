@@ -918,6 +918,7 @@ class RagPipeline:
         hybrid_prompt: bool = False,
         max_bias_steps: Optional[int] = None,
         bias_top_n: Optional[int] = None,
+        dedupe_overlaps: bool = True,
 
     ) -> dict[str, Any]:
 
@@ -947,8 +948,9 @@ class RagPipeline:
                 retrieval_result.passages,
                 max_mined_candidates=max_mined_candidates,
             )
-        
-        mined_candidates = dedupe_overlapping_phrases(mined_candidates)
+            
+        if dedupe_overlaps:
+            mined_candidates = dedupe_overlapping_phrases(mined_candidates)
         
         with timed(timings, "token_bias_build_s"):
             ranked = sorted(mined_candidates, key=lambda x: float(x[1]), reverse=True)
@@ -958,7 +960,7 @@ class RagPipeline:
                 max_token_logit_bias=max_token_logit_bias,
                 phrase_softmax_temperature=phrase_softmax_temperature,
                 drop_junk_tokens=True,
-                dedupe_overlaps=True,
+                dedupe_overlaps=dedupe_overlaps,
                 split_weight_across_tokens=False,
             )
 

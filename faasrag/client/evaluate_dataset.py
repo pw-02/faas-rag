@@ -374,10 +374,10 @@ def run_query(pipeline: RagPipeline, q: str, cfg: RunConfig) -> Dict[str, Any]:
     if mode == "logit_rag":
         return pipeline.run_logit_rag(
             q,
-            max_mined_candidates=int(cfg.logit_max_mined_candidates or 40),
-            logit_bias_strength=float(cfg.logit_bias_strength or 0.8),
-            max_token_logit_bias=float(cfg.logit_max_token_logit_bias or 2.0),
-            phrase_softmax_temperature=float(cfg.logit_phrase_softmax_temperature or 1.0),
+            max_mined_candidates=int(cfg.logit_max_mined_candidates),
+            logit_bias_strength=float(cfg.logit_bias_strength),
+            max_token_logit_bias=float(cfg.logit_max_token_logit_bias),
+            phrase_softmax_temperature=float(cfg.logit_phrase_softmax_temperature),
             clamp_first_line=bool(cfg.logit_clamp_first_line),
             hybrid_prompt=bool(cfg.logit_hybrid_prompt),
             max_bias_steps=cfg.logit_max_bias_steps,
@@ -724,8 +724,8 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--print_top_candidates", type=int, default=5, help="If >0, print top-K mined candidates for the first N examples.")
 
     # logit-only knobs
-    parser.add_argument("--max_mined_candidates", type=int, default=40)
-    parser.add_argument("--bias_top_n", type=int, default=1)
+    parser.add_argument("--max_mined_candidates", type=int, default=400)
+    parser.add_argument("--bias_top_n", type=int, default=10)
 
     # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
     parser.add_argument("--logit_bias_strength", type=str, default="10")
