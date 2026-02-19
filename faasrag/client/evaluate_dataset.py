@@ -809,7 +809,7 @@ def main(cfg: RagServiceConfig):
                 tqdm_update_every=args.tqdm_update_every,
                 logit_max_mined_candidates=args.max_mined_candidates if mode == "logit_rag" else None,
                 logit_bias_strength=float(strength) if mode == "logit_rag" else None,
-                logit_max_token_logit_bias=float(cap) if mode == "logit_rag" else None,
+                logit_max_token_logit_bias=float(cap) if cap is not None else None,
                 logit_phrase_softmax_temperature=float(temp) if mode == "logit_rag" else None,
                 logit_clamp_first_line=bool(args.clamp_first_line) if mode == "logit_rag" else None,
                 logit_hybrid_prompt=bool(args.hybrid_prompt) if mode == "logit_rag" else None,
