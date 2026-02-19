@@ -730,7 +730,7 @@ def main(cfg: RagServiceConfig):
     # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
     parser.add_argument("--logit_bias_strength", type=str, default="10")
     parser.add_argument("--max_token_logit_bias", type=str, default="1.5")
-    parser.add_argument("--phrase_softmax_temperature", type=str, default="10")
+    parser.add_argument("--phrase_softmax_temperature", type=str, default="7.5")
 
     parser.add_argument("--clamp_first_line", action="store_true")
     parser.add_argument("--hybrid_prompt", action="store_true")
