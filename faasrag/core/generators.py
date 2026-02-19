@@ -100,7 +100,22 @@ import torch.nn.functional as F
 from transformers import LogitsProcessor
 from typing import Dict, Optional
 
+
+
+
 class GatedSparseAddBiasProcessor(LogitsProcessor):
+    """
+    Adds alpha * bias[token_id] to logits during decoding, but only when a confidence criterion is met.
+    Good starting thresholds (very model/task dependent, but useful ballparks):
+
+    | Gate Mode | What It Measures         | Mathematical Intuition | “Uncertain” When…            | Typical Threshold | Best Used For                  |
+    | --------- | ------------------------ | ---------------------- | ---------------------------- | ----------------- | ------------------------------ |
+    | `pmax`    | Peak probability         | max(softmax(logits))   | Top token probability is low | 0.25 – 0.45       | Simple global confidence       |
+    | `margin`  | Decision gap             | logit₁ − logit₂        | Top two tokens are close     | 1.0 – 3.0         | Detecting ambiguity            |
+    | `entropy` | Distribution flatness    | −Σ p log p             | Distribution is flat         | 2.0 – 3.5         | General uncertainty            |
+    | `pbias`   | Alignment w/ bias tokens | Σ p(bias_tokens)       | Bias tokens have low mass    | 0.05 – 0.20       | RAG steering / token targeting |
+
+    """
     def __init__(
         self,
         *,
@@ -112,8 +127,8 @@ class GatedSparseAddBiasProcessor(LogitsProcessor):
         eos_token_id: Optional[int] = None,
         ignore_eos: bool = True,
         # gating config
-        gate_mode: str = "pbias",   # "pmax" | "entropy" | "margin" | "pbias"
-        gate_threshold: float = 0.10,  # meaning depends on mode
+        gate_mode: str = "pmax",   # "pmax" | "entropy" | "margin" | "pbias"
+        gate_threshold: float = 0.30,  # meaning depends on mode
         gate_temperature: float = 1.0, # compute confidence at temp=1 for stability
         gate_topk: int = 50,          # approximate entropy on top-k for speed
         enable_gating: bool = True
