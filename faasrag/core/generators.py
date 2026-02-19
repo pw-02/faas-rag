@@ -31,38 +31,100 @@ class GenResult:
     metrics: Dict[str, Any]  # e.g. ttft_s, total_s, prefill_tps, decode_tps, finish_reason
 
 
-# =========================
-# Logits processor
-# =========================
-class SparseAddBiasProcessor(LogitsProcessor):
-    """
-    Adds alpha * bias[token_id] to logits during decoding.
+# # =========================
+# # Logits processor
+# # =========================
+# class SparseAddBiasProcessor(LogitsProcessor):
+#     """
+#     Adds alpha * bias[token_id] to logits during decoding.
 
-    Options:
-      - max_steps: apply only for first N generated tokens
-      - per_token_cap: clamp each bias value magnitude
-      - ignore_eos: optionally avoid biasing EOS token
-    """
+#     Options:
+#       - max_steps: apply only for first N generated tokens
+#       - per_token_cap: clamp each bias value magnitude
+#       - ignore_eos: optionally avoid biasing EOS token
+#     """
 
+#     def __init__(
+#         self,
+#         *,
+#         bias: Dict[int, float],
+#         logit_bias_strength: float, #Global strength multiplier.
+#         device: torch.device,
+#         max_steps: Optional[int] = None, #Only apply bias during first N generated tokens. Early tokens determine the direction of the answer.
+#         per_token_cap: Optional[float] = None, #Clamp individual bias magnitudes.
+#         eos_token_id: Optional[int] = None, #Avoid biasing EOS token.
+#         ignore_eos: bool = True, #Avoid biasing EOS token.
+#     ):
+#         self.alpha = float(logit_bias_strength)
+#         self.max_steps = max_steps
+#         self._steps_seen = 0  # safe because we create a new processor per generate call
+
+#         if not bias:
+#             self.token_ids = None
+#             self.bias_vals = None
+#             return
+
+#         items = list(bias.items())
+#         if ignore_eos and eos_token_id is not None:
+#             items = [(tid, val) for tid, val in items if tid != eos_token_id]
+
+#         if not items:
+#             self.token_ids = None
+#             self.bias_vals = None
+#             return
+
+#         token_ids, bias_vals = zip(*items)
+#         bias_vals_t = torch.tensor(bias_vals, dtype=torch.float32, device=device)
+
+#         if per_token_cap is not None:
+#             cap = float(per_token_cap)
+#             bias_vals_t = torch.clamp(bias_vals_t, -cap, cap)
+
+#         self.token_ids = torch.tensor(token_ids, dtype=torch.long, device=device)
+#         self.bias_vals = bias_vals_t
+
+#     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+#         if self.token_ids is None:
+#             return scores
+
+#         if self.max_steps is not None and self._steps_seen >= self.max_steps:
+#             return scores
+
+#         scores[:, self.token_ids] += self.alpha * self.bias_vals
+#         self._steps_seen += 1
+#         return scores
+
+
+import torch
+import torch.nn.functional as F
+from transformers import LogitsProcessor
+from typing import Dict, Optional
+
+class GatedSparseAddBiasProcessor(LogitsProcessor):
     def __init__(
         self,
         *,
         bias: Dict[int, float],
-        logit_bias_strength: float, #Global strength multiplier.
+        logit_bias_strength: float,
         device: torch.device,
-        max_steps: Optional[int] = None, #Only apply bias during first N generated tokens. Early tokens determine the direction of the answer.
-        per_token_cap: Optional[float] = None, #Clamp individual bias magnitudes.
-        eos_token_id: Optional[int] = None, #Avoid biasing EOS token.
-        ignore_eos: bool = True, #Avoid biasing EOS token.
+        max_steps: Optional[int] = None,
+        per_token_cap: Optional[float] = None,
+        eos_token_id: Optional[int] = None,
+        ignore_eos: bool = True,
+        # gating config
+        gate_mode: str = "entropy",   # "pmax" | "entropy" | "margin" | "pbias"
+        gate_threshold: float = 1.5,  # meaning depends on mode
+        gate_temperature: float = 1.0, # compute confidence at temp=1 for stability
+        gate_topk: int = 50,          # approximate entropy on top-k for speed
     ):
         self.alpha = float(logit_bias_strength)
         self.max_steps = max_steps
-        self._steps_seen = 0  # safe because we create a new processor per generate call
+        self._steps_seen = 0
 
-        if not bias:
-            self.token_ids = None
-            self.bias_vals = None
-            return
+        self.gate_mode = gate_mode
+        self.gate_threshold = float(gate_threshold)
+        self.gate_temperature = float(gate_temperature)
+        self.gate_topk = int(gate_topk)
 
         items = list(bias.items())
         if ignore_eos and eos_token_id is not None:
@@ -75,7 +137,6 @@ class SparseAddBiasProcessor(LogitsProcessor):
 
         token_ids, bias_vals = zip(*items)
         bias_vals_t = torch.tensor(bias_vals, dtype=torch.float32, device=device)
-
         if per_token_cap is not None:
             cap = float(per_token_cap)
             bias_vals_t = torch.clamp(bias_vals_t, -cap, cap)
@@ -83,16 +144,50 @@ class SparseAddBiasProcessor(LogitsProcessor):
         self.token_ids = torch.tensor(token_ids, dtype=torch.long, device=device)
         self.bias_vals = bias_vals_t
 
+    def _confidence(self, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # scores: [batch, vocab]
+        s = scores / max(1e-6, self.gate_temperature)
+
+        if self.gate_mode == "pmax":
+            p = F.softmax(s, dim=-1)
+            return p.max(dim=-1).values  # higher = more confident
+
+        if self.gate_mode == "margin":
+            top2 = torch.topk(s, k=2, dim=-1).values
+            return top2[:, 0] - top2[:, 1]  # higher = more confident
+
+        if self.gate_mode == "pbias":
+            # probability mass on the biased tokens
+            p = F.softmax(s, dim=-1)
+            return p.index_select(dim=-1, index=self.token_ids).sum(dim=-1)  # higher = more aligned
+
+        # default: entropy (approx on top-k for speed)
+        k = min(self.gate_topk, s.size(-1))
+        vals, idx = torch.topk(s, k=k, dim=-1)
+        p = F.softmax(vals, dim=-1)
+        ent = -(p * torch.log(p.clamp_min(1e-9))).sum(dim=-1)  # higher = less confident
+        return ent
+
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if self.token_ids is None:
             return scores
-
         if self.max_steps is not None and self._steps_seen >= self.max_steps:
             return scores
 
-        scores[:, self.token_ids] += self.alpha * self.bias_vals
+        conf = self._confidence(scores)
+
+        # Decide gating: for entropy, HIGH => uncertain; for others, LOW => uncertain.
+        if self.gate_mode == "entropy":
+            apply = conf > self.gate_threshold
+        else:
+            apply = conf < self.gate_threshold
+
+        if apply.any():
+            scores[apply, self.token_ids] += self.alpha * self.bias_vals
+
         self._steps_seen += 1
         return scores
+
 
 
 # =========================
