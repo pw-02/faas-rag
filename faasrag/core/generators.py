@@ -116,7 +116,7 @@ class GatedSparseAddBiasProcessor(LogitsProcessor):
         gate_threshold: float = 1.5,  # meaning depends on mode
         gate_temperature: float = 1.0, # compute confidence at temp=1 for stability
         gate_topk: int = 50,          # approximate entropy on top-k for speed
-        enable_gating: bool = True
+        enable_gating: bool = False
 
     ):
         self.alpha = float(logit_bias_strength)
@@ -193,7 +193,7 @@ class GatedSparseAddBiasProcessor(LogitsProcessor):
 
         if apply.any():
             scores[apply, self.token_ids] += self.alpha * self.bias_vals
-            
+
         self._steps_seen += 1
         return scores
 
