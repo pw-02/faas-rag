@@ -741,8 +741,8 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--print_top_tokens", type=int, default=5, help="If >0, print top-K biased tokens for the first N examples.")
 
     # logit-only knobs
-    parser.add_argument("--max_mined_candidates", type=int, default=40)
-    parser.add_argument("--bias_top_n", type=int, default=10)
+    parser.add_argument("--max_mined_candidates", type=int, default=1000)
+    parser.add_argument("--bias_top_n", type=int, default=5)
 
     # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
     parser.add_argument("--logit_bias_strength", type=str, default="10")
@@ -769,7 +769,7 @@ def main(cfg: RagServiceConfig):
         top_k = 10
         cfg.prompt_build_method = "QA_OPEN"
     else:
-        top_k = 10
+        top_k = 40
         cfg.prompt_build_method = "LOGIT_RAG"  # ensure your pipeline supports this method name
 
     pipeline = RagPipeline(
