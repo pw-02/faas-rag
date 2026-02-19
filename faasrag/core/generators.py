@@ -330,7 +330,7 @@ class HFCausalLMGenerator:
 
         processors: Optional[LogitsProcessorList]
         if bias:
-            proc = SparseAddBiasProcessor(
+            proc = GatedSparseAddBiasProcessor(
                 bias=bias,
                 logit_bias_strength=logit_bias_strength,
                 device=device,
