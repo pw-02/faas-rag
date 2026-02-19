@@ -742,7 +742,7 @@ def main(cfg: RagServiceConfig):
 
     # logit-only knobs
     parser.add_argument("--max_mined_candidates", type=int, default=1000)
-    parser.add_argument("--bias_top_n", type=int, default=100)
+    parser.add_argument("--bias_top_n", type=int, default=5)
 
     # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
     parser.add_argument("--logit_bias_strength", type=str, default="10")
