@@ -189,3 +189,20 @@ def pretty_print_top_biased_tokens(tokenizer, top_bias, k: int = 20) -> str:
         s = tokenizer.decode([int(tid)])
         lines.append(f"{repr(s):>16}  id={int(tid):<7}  bias={float(val):.4f}")
     return "\n".join(lines)
+
+def top_biased_tokens_dict(tokenizer, bias: dict[int, float], k: int = 20):
+    top_bias = _topk_bias(bias, k)
+    out = []
+    for tid, val in top_bias[:k]:
+        out.append({
+            "token_id": int(tid),
+            "token": tokenizer.decode([int(tid)]),
+            "bias": float(val),
+        })
+    return out
+def top_biased_tokens_pairs(tokenizer, bias: dict[int, float], k: int = 20) -> List[Tuple[str, float]]:
+    out: List[Tuple[str, float]] = []
+    for tid, val in _topk_bias(bias, k):
+        token = tokenizer.decode([int(tid)])
+        out.append((token, float(val)))
+    return out

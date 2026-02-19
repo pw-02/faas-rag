@@ -35,7 +35,8 @@ from faasrag.core.prompts import (
     
 )
 from faasrag.core.utils import (
-    append_csv_row, dedupe_overlapping_phrases, _topk_bias, pretty_print_top_biased_tokens)
+    append_csv_row, dedupe_overlapping_phrases,
+      top_biased_tokens_pairs)
 
 
 
@@ -988,9 +989,7 @@ class RagPipeline:
         timings["total_s"] = time.perf_counter() - start
 
         # mined_phrases = [p for p, _ in mined_candidates]
-        top_bias = _topk_bias(logit_bias, k=50)
-        print("Top biased tokens:\n" + pretty_print_top_biased_tokens(self.generator.tokenizer, top_bias, 20))
-        
+        top_bias = top_biased_tokens_pairs(self.generator.tokenizer, logit_bias, k=20)
 
         res = RagRunResult(
             mode="logit_rag",

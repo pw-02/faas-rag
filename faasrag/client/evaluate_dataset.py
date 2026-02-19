@@ -200,6 +200,7 @@ RESULT_COLUMNS: List[str] = [
     # debugging
     "mined_candidates_count",
     "mined_candidates_top10_json",
+    "top_biased_tokens_json",
 ]
 
 SUMMARY_COLUMNS: List[str] = [
@@ -298,7 +299,7 @@ class ModelOut:
     cache_misses: int
     mined_candidates: List[Tuple[str, float]]
     num_biased_token_ids: int
-
+    top_biased_tokens: List[Tuple[int, float]]
 
 def parse_model_out(out: Dict[str, Any]) -> ModelOut:
     extra = out.get("extra") or {}
@@ -312,6 +313,8 @@ def parse_model_out(out: Dict[str, Any]) -> ModelOut:
 
     mined_raw = extra.get("mined_candidates") or out.get("mined_candidates") or extra.get("mined_phrases") or out.get("mined_phrases")
     mined_candidates = _coerce_mined_candidates(mined_raw)
+
+    top_biased_tokens = extra.get("top_biased_tokens") or out.get("top_biased_tokens") or []
 
     num_biased_token_ids = int(
         extra.get("num_biased_token_ids")
@@ -333,6 +336,7 @@ def parse_model_out(out: Dict[str, Any]) -> ModelOut:
         cache_misses=cache_misses,
         mined_candidates=mined_candidates,
         num_biased_token_ids=num_biased_token_ids,
+        top_biased_tokens=top_biased_tokens,
     )
 
 
@@ -420,6 +424,7 @@ class ExampleResult:
 
     logit: LogitDiag
     mined_candidates: List[Tuple[str, float]]  # full list (for debug JSONL / top10 preview)
+    top_biased_tokens: List[Tuple[int, float]]  # top biased tokens (for debugging)
 
 
 def evaluate_example(*, pipeline: RagPipeline, ex: Dict[str, Any], cfg: RunConfig) -> Optional[ExampleResult]:
@@ -469,6 +474,7 @@ def evaluate_example(*, pipeline: RagPipeline, ex: Dict[str, Any], cfg: RunConfi
         cache_misses=int(mo.cache_misses),
         logit=logit_diag,
         mined_candidates=mo.mined_candidates,
+        top_biased_tokens=mo.top_biased_tokens,
     )
 
 
@@ -594,6 +600,7 @@ def build_result_row(*, run_id: str, cfg: RunConfig, res: ExampleResult) -> Dict
         "selected_gold_given_gold_in_mined": int(res.logit.selected_gold_given_gold_in_mined),
         "mined_candidates_count": len(res.mined_candidates),
         "mined_candidates_top10_json": json.dumps(top10, ensure_ascii=False),
+        "top_biased_tokens_json": json.dumps(res.top_biased_tokens, ensure_ascii=False),
     }
 
     return _row_with_schema(RESULT_COLUMNS, values)
@@ -611,6 +618,7 @@ def evaluate_one_run(
     save_to_file: bool = True,
     debug_jsonl: Optional[str] = None,
     print_topk_candidates: int = 0,  # e.g. 10 prints top 10 mined candidates for first N samples
+    print_top_tokens: int = 0,  # e.g. 5 prints top 5 biased tokens for first N samples
 ) -> Dict[str, Any]:
     mode = validate_mode(cfg.mode)
     run_id = cfg.run_id()
@@ -642,6 +650,12 @@ def evaluate_one_run(
                 preview = ", ".join([f"{p}({s:.2f})" for p, s in topk])
                 tqdm.write(f"mined_top{print_topk_candidates}: {preview}")
 
+            if print_top_tokens and mode == "logit_rag":
+                # This assumes that the logit bias was applied to the top-N mined candidates; adjust if your pipeline differs.
+                topk = res.top_biased_tokens[:print_top_tokens]
+                tqdm.write(f"top {print_top_tokens} biased tokens: {topk}")
+                # If you have the specific token IDs and their bias values, you could print them here as well.
+
 
         if cfg.tqdm_update_every > 0 and agg.n % cfg.tqdm_update_every == 0:
             pbar.set_postfix(agg.postfix(mode))
@@ -665,6 +679,7 @@ def evaluate_one_run(
                     "f1": res.f1,
                     "retrieved_doc_ids": res.retrieved_doc_ids,
                     "mined_candidates": res.mined_candidates,  # full list
+                    "top_biased_tokens": res.top_biased_tokens,  # full list
                 },
             )
 
@@ -723,6 +738,7 @@ def main(cfg: RagServiceConfig):
     # optional debug output
     parser.add_argument("--debug_jsonl", type=str, default="", help="If set, append per-example debug records here.")
     parser.add_argument("--print_top_candidates", type=int, default=5, help="If >0, print top-K mined candidates for the first N examples.")
+    parser.add_argument("--print_top_tokens", type=int, default=5, help="If >0, print top-K biased tokens for the first N examples.")
 
     # logit-only knobs
     parser.add_argument("--max_mined_candidates", type=int, default=40)
@@ -842,6 +858,7 @@ def main(cfg: RagServiceConfig):
             save_to_file=args.save_to_file,
             debug_jsonl=debug_jsonl,
             print_topk_candidates=int(args.print_top_candidates or 0),
+            print_top_tokens=int(args.print_top_tokens or 0),
         )
 
         print("\n==== FINAL (run_id={}) ====".format(rc.run_id()))
