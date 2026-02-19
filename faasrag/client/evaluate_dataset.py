@@ -141,6 +141,7 @@ class RunConfig:
     logit_clamp_first_line: Optional[bool] = None
     logit_hybrid_prompt: Optional[bool] = None
     logit_max_bias_steps: Optional[int] = None
+    logit_bias_top_n: Optional[int] = None
 
     def run_id(self) -> str:
         payload = json.dumps(asdict(self), sort_keys=True, default=str)
@@ -250,6 +251,7 @@ def cfg_to_prefixed_dict(cfg: RunConfig) -> Dict[str, Any]:
         "cfg_logit_clamp_first_line": int(cfg.logit_clamp_first_line) if cfg.logit_clamp_first_line is not None else None,
         "cfg_logit_hybrid_prompt": int(cfg.logit_hybrid_prompt) if cfg.logit_hybrid_prompt is not None else None,
         "cfg_logit_max_bias_steps": cfg.logit_max_bias_steps,
+        "cfg_logit_bias_top_n": cfg.logit_bias_top_n,
     }
 
 
@@ -379,6 +381,7 @@ def run_query(pipeline: RagPipeline, q: str, cfg: RunConfig) -> Dict[str, Any]:
             clamp_first_line=bool(cfg.logit_clamp_first_line),
             hybrid_prompt=bool(cfg.logit_hybrid_prompt),
             max_bias_steps=cfg.logit_max_bias_steps,
+            bias_top_n=cfg.logit_bias_top_n,
         )
 
     # For llm / prompt_rag, your pipeline uses run_prompt_rag; llm should use top_k=0.
@@ -722,6 +725,7 @@ def main(cfg: RagServiceConfig):
 
     # logit-only knobs
     parser.add_argument("--max_mined_candidates", type=int, default=40)
+    parser.add_argument("--bias_top_n", type=int, default=10)
 
     # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
     parser.add_argument("--logit_bias_strength", type=str, default="10")
@@ -809,6 +813,7 @@ def main(cfg: RagServiceConfig):
                 logit_clamp_first_line=bool(args.clamp_first_line) if mode == "logit_rag" else None,
                 logit_hybrid_prompt=bool(args.hybrid_prompt) if mode == "logit_rag" else None,
                 logit_max_bias_steps=args.max_bias_steps if mode == "logit_rag" else None,
+                logit_bias_top_n=args.bias_top_n if mode == "logit_rag" else None,
             )
         )
 

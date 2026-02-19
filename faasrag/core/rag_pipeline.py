@@ -917,7 +917,7 @@ class RagPipeline:
         clamp_first_line: bool = True,
         hybrid_prompt: bool = False,
         max_bias_steps: Optional[int] = None,
-        bias_top_n: Optional[int] = 1,
+        bias_top_n: Optional[int] = None,
 
     ) -> dict[str, Any]:
 
