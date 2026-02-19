@@ -724,13 +724,13 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--print_top_candidates", type=int, default=5, help="If >0, print top-K mined candidates for the first N examples.")
 
     # logit-only knobs
-    parser.add_argument("--max_mined_candidates", type=int, default=400)
+    parser.add_argument("--max_mined_candidates", type=int, default=40)
     parser.add_argument("--bias_top_n", type=int, default=10)
 
     # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
     parser.add_argument("--logit_bias_strength", type=str, default="10")
     parser.add_argument("--max_token_logit_bias", type=str, default="1.5")
-    parser.add_argument("--phrase_softmax_temperature", type=str, default="5")
+    parser.add_argument("--phrase_softmax_temperature", type=str, default="0.5")
 
     parser.add_argument("--clamp_first_line", action="store_true")
     parser.add_argument("--hybrid_prompt", action="store_true")

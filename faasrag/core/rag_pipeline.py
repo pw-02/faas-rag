@@ -388,11 +388,12 @@ class RagPipeline:
 
         What happens (in order)
             1. For each retrieved passage (and each sliding window of that passage)
-            you run the reader QA model to get start_logits and end_logits.
+                you run the reader QA model to get start_logits and end_logits.
             2. You form lots of candidate spans by pairing high-scoring start positions with high-scoring end positions, 
             3. You turn those spans into text using offset_mapping to map token indices → character offsets → substring of the passage.
             4. You refine/clean them (your regex / heuristics)and optionally extract “atomic” subspans (years, numbers+units, name-like chunks)
-            5. You aggregate scores across passages/windows into cand_scores.If the same candidate appears multiple times (or in strong passages), it rises.
+            5. You aggregate scores across passages/windows into cand_scores.If the same candidate appears 
+                multiple times (or in strong passages), it rises.
             6. You deduplicate/merge near-duplicates
             7. Finally you sort candidates and return the top max_mined_candidates as [(candidate_string, aggregated_score), ...].
         """
@@ -948,7 +949,7 @@ class RagPipeline:
                 retrieval_result.passages,
                 max_mined_candidates=max_mined_candidates,
             )
-            
+
         if dedupe_overlaps:
             mined_candidates = dedupe_overlapping_phrases(mined_candidates)
         
