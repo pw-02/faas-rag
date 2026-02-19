@@ -116,6 +116,8 @@ class GatedSparseAddBiasProcessor(LogitsProcessor):
         gate_threshold: float = 1.5,  # meaning depends on mode
         gate_temperature: float = 1.0, # compute confidence at temp=1 for stability
         gate_topk: int = 50,          # approximate entropy on top-k for speed
+        enable_gating: bool = True
+
     ):
         self.alpha = float(logit_bias_strength)
         self.max_steps = max_steps
@@ -125,6 +127,7 @@ class GatedSparseAddBiasProcessor(LogitsProcessor):
         self.gate_threshold = float(gate_threshold)
         self.gate_temperature = float(gate_temperature)
         self.gate_topk = int(gate_topk)
+        self.enable_gating = bool(enable_gating)
 
         items = list(bias.items())
         if ignore_eos and eos_token_id is not None:
@@ -168,15 +171,21 @@ class GatedSparseAddBiasProcessor(LogitsProcessor):
         ent = -(p * torch.log(p.clamp_min(1e-9))).sum(dim=-1)  # higher = less confident
         return ent
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids, scores):
         if self.token_ids is None:
             return scores
+
         if self.max_steps is not None and self._steps_seen >= self.max_steps:
             return scores
 
+        #If gating disabled → behave like original SparseAddBiasProcessor
+        if not self.enable_gating:
+            scores[:, self.token_ids] += self.alpha * self.bias_vals
+            self._steps_seen += 1
+            return scores
+        
+        # Otherwise: gated path
         conf = self._confidence(scores)
-
-        # Decide gating: for entropy, HIGH => uncertain; for others, LOW => uncertain.
         if self.gate_mode == "entropy":
             apply = conf > self.gate_threshold
         else:
@@ -184,9 +193,10 @@ class GatedSparseAddBiasProcessor(LogitsProcessor):
 
         if apply.any():
             scores[apply, self.token_ids] += self.alpha * self.bias_vals
-
+            
         self._steps_seen += 1
         return scores
+
 
 
 
