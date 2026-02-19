@@ -179,3 +179,13 @@ def parse_float_list(s: str) -> List[Optional[float]]:
         out.append(float(p))
 
     return out
+
+def _topk_bias(bias: dict[int, float], k: int = 50):
+    return sorted(bias.items(), key=lambda kv: kv[1], reverse=True)[:k]
+
+def pretty_print_top_biased_tokens(tokenizer, top_bias, k: int = 20) -> str:
+    lines = []
+    for tid, val in top_bias[:k]:
+        s = tokenizer.decode([int(tid)])
+        lines.append(f"{repr(s):>16}  id={int(tid):<7}  bias={float(val):.4f}")
+    return "\n".join(lines)

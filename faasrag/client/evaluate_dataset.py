@@ -642,6 +642,7 @@ def evaluate_one_run(
                 preview = ", ".join([f"{p}({s:.2f})" for p, s in topk])
                 tqdm.write(f"mined_top{print_topk_candidates}: {preview}")
 
+
         if cfg.tqdm_update_every > 0 and agg.n % cfg.tqdm_update_every == 0:
             pbar.set_postfix(agg.postfix(mode))
 
