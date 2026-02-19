@@ -377,7 +377,7 @@ def run_query(pipeline: RagPipeline, q: str, cfg: RunConfig) -> Dict[str, Any]:
             q,
             max_mined_candidates=int(cfg.logit_max_mined_candidates),
             logit_bias_strength=float(cfg.logit_bias_strength),
-            max_token_logit_bias=float(cfg.logit_max_token_logit_bias),
+            max_token_logit_bias=cfg.logit_max_token_logit_bias,
             phrase_softmax_temperature=float(cfg.logit_phrase_softmax_temperature),
             clamp_first_line=bool(cfg.logit_clamp_first_line),
             hybrid_prompt=bool(cfg.logit_hybrid_prompt),
