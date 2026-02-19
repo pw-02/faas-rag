@@ -1,1 +1,71 @@
-{"id": "train_36", "question": "who sang the original blinded by the light", "golden_answers": ["Bruce Springsteen"]}
+{"id": "train_2", "question": "who sang waiting for a girl like you", "golden_answers": ["Foreigner"]}
+{"id": "train_3", "question": "where do you cross the arctic circle in norway", "golden_answers": ["Saltfjellet"]}
+{"id": "train_4", "question": "who is the main character in green eggs and ham", "golden_answers": ["Sam-I-am"]}
+{"id": "train_12", "question": "what is the name of latest version of android", "golden_answers": ["Oreo"]}
+{"id": "train_17", "question": "who sings i can't stop this feeling anymore", "golden_answers": ["American rock band REO Speedwagon"]}
+{"id": "train_19", "question": "who has the most petroleum in the world", "golden_answers": ["Venezuela"]}
+{"id": "train_22", "question": "who plays skyler on lab rats elite force", "golden_answers": ["Paris Berelc"]}
+{"id": "train_32", "question": "in which channel fifa world cup will be broadcasted", "golden_answers": ["NBC", "Telemundo"]}
+{"id": "train_41", "question": "when was the flight of the bumblebee written", "golden_answers": ["in 1899–1900"]}
+{"id": "train_51", "question": "the first life forms to appear on earth were", "golden_answers": ["putative fossilized microorganisms"]}
+{"id": "train_58", "question": "which type of organism produces food in an ecosystem", "golden_answers": ["autotrophs"]}
+{"id": "train_59", "question": "who wrote the song for once in my life", "golden_answers": ["Orlando Murden", "Ron Miller"]}
+{"id": "train_60", "question": "who sang i could not ask for more first", "golden_answers": ["Edwin McCain"]}
+{"id": "train_61", "question": "who is the singer of waiting for love", "golden_answers": ["Simon Aldred"]}
+{"id": "train_63", "question": "when does season 14 of grey's anatomy come out", "golden_answers": ["September 28, 2017"]}
+{"id": "train_69", "question": "when was the masque of the red death written", "golden_answers": ["1842"]}
+{"id": "train_70", "question": "who sings the original version of feeling good", "golden_answers": ["Cy Grant"]}
+{"id": "train_83", "question": "when did the words in god we trust appear on money", "golden_answers": ["1864"]}
+{"id": "train_86", "question": "who sang you won't get me i'm part of the union", "golden_answers": ["Strawbs"]}
+{"id": "train_92", "question": "what is the predominant religion in the ukraine", "golden_answers": ["Orthodoxy"]}
+{"id": "train_102", "question": "what's the dog's name on garfield", "golden_answers": ["Odie"]}
+{"id": "train_105", "question": "who was a in pretty little liars episode", "golden_answers": ["CeCe Drake", "Mona Vanderwaal", "Alex Drake", "Sara Harvey"]}
+{"id": "train_106", "question": "qualification of the members of the supreme court in the philippines", "golden_answers": ["natural-born citizenship", "at least 40 years old"]}
+{"id": "train_108", "question": "which type of technology encapsulates fibre channel communications over tcp/ip", "golden_answers": ["iSCSI"]}
+{"id": "train_117", "question": "who owned the louisiana territory when the constitution was signed", "golden_answers": ["Spain"]}
+{"id": "train_119", "question": "what's the name of the little turtle in finding nemo", "golden_answers": ["Squirt"]}
+{"id": "train_120", "question": "who plays the voice of belle in beauty and the beast", "golden_answers": ["Paige O'Hara"]}
+{"id": "train_124", "question": "when was the last time the falcons were in the super bowl", "golden_answers": ["2016"]}
+{"id": "train_133", "question": "who played dean on wizards of waverly place", "golden_answers": ["Samonas"]}
+{"id": "train_170", "question": "who plays jt in the young and the restless", "golden_answers": ["Thaddeus Rowe Luckinbill"]}
+{"id": "train_197", "question": "who is first on record as proposing a geocentric universe", "golden_answers": ["Anaximander"]}
+{"id": "train_201", "question": "where did they go in the inbetweeners movie", "golden_answers": ["Malia"]}
+{"id": "train_208", "question": "for a molecule to be polar it must have", "golden_answers": ["polar bonds"]}
+{"id": "train_209", "question": "who sings l.o.v.e in the movie the parent trap", "golden_answers": ["Nat King Cole"]}
+{"id": "train_212", "question": "when did ontario get rid of grade 13", "golden_answers": ["1988"]}
+{"id": "train_220", "question": "what happened to many manuscripts of anglo-saxon literature", "golden_answers": ["the Dissolution of the Monasteries"]}
+{"id": "train_234", "question": "based on the residues in the active site what family of proteases does pepsin belong to", "golden_answers": ["Acid proteases"]}
+{"id": "train_239", "question": "when did texting become available on cell phones", "golden_answers": ["1994"]}
+{"id": "train_247", "question": "what is the liquid in a magic 8 ball", "golden_answers": ["alcohol"]}
+{"id": "train_250", "question": "who sings the theme song for republic of doyle", "golden_answers": ["Great Big Sea"]}
+{"id": "train_253", "question": "in the movie turner and hooch what kind of dog was hooch", "golden_answers": ["Dogue de Bordeaux"]}
+{"id": "train_254", "question": "what star wars movie came out before the last jedi", "golden_answers": ["The Empire Strikes Back"]}
+{"id": "train_256", "question": "who wrote the song drive by the cars", "golden_answers": ["Ric Ocasek"]}
+{"id": "train_260", "question": "when is the new episode of suits airing", "golden_answers": ["July 18, 2018"]}
+{"id": "train_263", "question": "when does the full game fortnite come out", "golden_answers": ["in 2018"]}
+{"id": "train_269", "question": "who plays earl's dad in my name is earl", "golden_answers": ["Beau Bridges"]}
+{"id": "train_271", "question": "who is the first lady of the usa", "golden_answers": ["Melania Trump"]}
+{"id": "train_274", "question": "when was the king james bible translated to english", "golden_answers": ["1611"]}
+{"id": "train_280", "question": "japanese baseball players in mlb hall of fame", "golden_answers": ["Hideo Nomo", "Kazuhiro Sasaki", "Hideki Matsui"]}
+{"id": "train_282", "question": "who is the original singer of one day", "golden_answers": ["Matisyahu"]}
+{"id": "train_296", "question": "when was the american society of anesthesiologists founded", "golden_answers": ["1936"]}
+{"id": "train_298", "question": "what team does steph curry brother play for", "golden_answers": ["Dallas Mavericks"]}
+{"id": "train_311", "question": "what is jason's last name in the lost hero", "golden_answers": ["Grace"]}
+{"id": "train_312", "question": "where are the next olympics going to be held", "golden_answers": ["Tokyo"]}
+{"id": "train_325", "question": "when was pot made illegal in the us", "golden_answers": ["1970"]}
+{"id": "train_333", "question": "who won the national college football championship 2018", "golden_answers": ["Alabama Crimson Tide"]}
+{"id": "train_343", "question": "what are the 3 peaks in yorkshire called", "golden_answers": ["Whernside", "Ingleborough", "Pen-y-ghent"]}
+{"id": "train_356", "question": "who has won the popular vote but lost the election", "golden_answers": ["George W. Bush", "Donald Trump", "Rutherford B. Hayes", "John Quincy Adams", "Benjamin Harrison"]}
+{"id": "train_358", "question": "when's the last time toronto maple leafs were in the playoffs", "golden_answers": ["April 23, 2017"]}
+{"id": "train_377", "question": "where does the saying standing on the shoulders of giants come from", "golden_answers": ["Bernard of Chartres"]}
+{"id": "train_386", "question": "who played fdr in the movie pearl harbor", "golden_answers": ["Jon Voight"]}
+{"id": "train_390", "question": "when did the new star wars movies come out", "golden_answers": ["2015"]}
+{"id": "train_396", "question": "who has won bbc sports personality of the year the most", "golden_answers": ["Andy Murray"]}
+{"id": "train_403", "question": "when will new 20 dollar bill be released", "golden_answers": ["by 2020"]}
+{"id": "train_410", "question": "who won the women's fifa world cup", "golden_answers": ["United States"]}
+{"id": "train_424", "question": "what is the furthest point from the sea in the uk", "golden_answers": ["Coton in the Elms"]}
+{"id": "train_433", "question": "where did river niger and river benue meet", "golden_answers": ["at Lokoja in Nigeria"]}
+{"id": "train_465", "question": "when is the new barbie movie coming out", "golden_answers": ["May 8, 2020"]}
+{"id": "train_472", "question": "what is the accent over the i in spanish called", "golden_answers": ["acute accent"]}
+{"id": "train_478", "question": "when did they start singing god bless america at baseball games", "golden_answers": ["September 11 attacks"]}
+{"id": "train_489", "question": "built-in set of machine code instructions of computer are called", "golden_answers": ["a computer program"]}
