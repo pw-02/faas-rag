@@ -742,12 +742,12 @@ def main(cfg: RagServiceConfig):
 
     # logit-only knobs
     parser.add_argument("--max_mined_candidates", type=int, default=1000)
-    parser.add_argument("--bias_top_n", type=int, default=5)
+    parser.add_argument("--bias_top_n", type=int, default=100)
 
     # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
     parser.add_argument("--logit_bias_strength", type=str, default="10")
     parser.add_argument("--max_token_logit_bias", type=str, default="0", help="If 0, no cap on token logit bias; otherwise, cap at this value")
-    parser.add_argument("--phrase_softmax_temperature", type=str, default="5")
+    parser.add_argument("--phrase_softmax_temperature", type=str, default="20", help="Temperature for softmax over mined candidate scores when computing logit bias weights. Higher values make the distribution more uniform, lower values make it peakier.")
 
     parser.add_argument("--clamp_first_line", action="store_true")
     parser.add_argument("--hybrid_prompt", action="store_true")
