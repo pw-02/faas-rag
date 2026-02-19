@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-from html import parser
 import json
 import logging
 from dataclasses import asdict, dataclass
@@ -377,7 +376,7 @@ def run_query(pipeline: RagPipeline, q: str, cfg: RunConfig) -> Dict[str, Any]:
             q,
             max_mined_candidates=int(cfg.logit_max_mined_candidates),
             logit_bias_strength=float(cfg.logit_bias_strength),
-            max_token_logit_bias=cfg.logit_max_token_logit_bias,
+            max_token_logit_bias=float(cfg.logit_max_token_logit_bias),
             phrase_softmax_temperature=float(cfg.logit_phrase_softmax_temperature),
             clamp_first_line=bool(cfg.logit_clamp_first_line),
             hybrid_prompt=bool(cfg.logit_hybrid_prompt),
@@ -730,7 +729,7 @@ def main(cfg: RagServiceConfig):
 
     # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
     parser.add_argument("--logit_bias_strength", type=str, default="10")
-    parser.add_argument("--max_token_logit_bias", type=str, default="none")
+    parser.add_argument("--max_token_logit_bias", type=str, default="0", help="If 0, no cap on token logit bias; otherwise, cap at this value")
     parser.add_argument("--phrase_softmax_temperature", type=str, default="5")
 
     parser.add_argument("--clamp_first_line", action="store_true")
@@ -809,7 +808,7 @@ def main(cfg: RagServiceConfig):
                 tqdm_update_every=args.tqdm_update_every,
                 logit_max_mined_candidates=args.max_mined_candidates if mode == "logit_rag" else None,
                 logit_bias_strength=float(strength) if mode == "logit_rag" else None,
-                logit_max_token_logit_bias=float(cap) if cap is not None else None,
+                logit_max_token_logit_bias=float(cap) if mode == "logit_rag" else None,
                 logit_phrase_softmax_temperature=float(temp) if mode == "logit_rag" else None,
                 logit_clamp_first_line=bool(args.clamp_first_line) if mode == "logit_rag" else None,
                 logit_hybrid_prompt=bool(args.hybrid_prompt) if mode == "logit_rag" else None,
