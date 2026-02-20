@@ -727,7 +727,7 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--mode", type=str, default="logit_rag", choices=sorted(VALID_MODES))
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_train.jsonl", type=str)
 
-    parser.add_argument("--limit", type=int, default=500)
+    parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--print_first_n", type=int, default=10)
     parser.add_argument("--tqdm_update_every", type=int, default=10)
 
