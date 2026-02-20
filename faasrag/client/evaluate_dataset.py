@@ -724,11 +724,11 @@ def main(cfg: RagServiceConfig):
 
     #data/datasets/qa/nq/nq_train.jsonl
     #data/datasets/nq_train_filtered.jsonl
-    parser.add_argument("--mode", type=str, default="prompt_rag", choices=sorted(VALID_MODES))
+    parser.add_argument("--mode", type=str, default="logit_rag", choices=sorted(VALID_MODES))
     parser.add_argument("--data", default="data/datasets/qa/nq/nq_train.jsonl", type=str)
 
-    parser.add_argument("--limit", type=int, default=20)
-    parser.add_argument("--print_first_n", type=int, default=10)
+    parser.add_argument("--limit", type=int, default=500)
+    parser.add_argument("--print_first_n", type=int, default=15)
     parser.add_argument("--tqdm_update_every", type=int, default=10)
 
     parser.add_argument("--results_csv", type=str, default="all_results.csv")
@@ -741,7 +741,7 @@ def main(cfg: RagServiceConfig):
     parser.add_argument("--print_top_tokens", type=int, default=5, help="If >0, print top-K biased tokens for the first N examples.")
 
     # logit-only knobs
-    parser.add_argument("--max_mined_candidates", type=int, default=100)
+    parser.add_argument("--max_mined_candidates", type=int, default=40)
     parser.add_argument("--bias_top_n", type=int, default=5)
 
     # Single-flag sweeps: pass either "0.8" or "0.2,0.5,1.0"
