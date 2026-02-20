@@ -1,0 +1,10 @@
+name: wiki18_100w.yaml
+
+# Source corpus (truth)
+source_uri: home/pwatters/project/LogitRAG/data/wiki_corpus/wiki18_100w.jsonl
+source_format: jsonl
+
+# Field mapping inside JSONL
+source_id_key: id
+source_title_key: 
+source_text_key: contents

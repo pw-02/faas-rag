@@ -3,12 +3,14 @@ from typing import List, Optional, Union
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
+from transformers import AutoTokenizer, AutoModel
 
 from faasrag.core.args import (
     EmbedderConfig,
     DPREmbedderConfig,
     SyntheticEmbedderConfig,
     GemmaEmbedderConfig,
+    e5_base_v2_EmbedderConfig,
 )
 
 
@@ -80,6 +82,27 @@ class DPREmbedder:
             show_progress_bar=self.show_progress_bar,
         )
         return emb.astype(np.float32, copy=False)
+
+
+class e5_base_v2_Embedder:
+    def __init__(self, *, device: str, model_name: str):
+        self.name = "e5-base-v2"
+        self.model = SentenceTransformer(model_name, device=device)
+        self.model.eval()
+
+    def embed_queries(self, queries: List[str]) -> np.ndarray:
+        return self.model.encode(
+            queries,
+            convert_to_numpy=True,
+            normalize_embeddings=False,
+        ).astype(np.float32)
+
+    def embed_passages(self, passages: List[str]) -> np.ndarray:
+        return self.model.encode(
+            passages,
+            convert_to_numpy=True,
+            normalize_embeddings=False,
+        ).astype(np.float32)
 
 
 # -------------------------
@@ -154,7 +177,7 @@ class GemmaEmbedder:
 # Builder
 # -------------------------
 
-Embedder = Union[DPREmbedder, SyntheticEmbedder, GemmaEmbedder]
+Embedder = Union[DPREmbedder, SyntheticEmbedder, GemmaEmbedder, e5_base_v2_Embedder]
 
 
 def build_embedder(cfg: EmbedderConfig) -> Embedder:
@@ -180,6 +203,12 @@ def build_embedder(cfg: EmbedderConfig) -> Embedder:
     if cfg.type == "gemma":
         c: GemmaEmbedderConfig = cfg
         return GemmaEmbedder(
+            device=c.device,
+            model_name=c.model_name,
+        )
+    if cfg.type == "e5-base-v2":
+        c: e5_base_v2_EmbedderConfig = cfg
+        return e5_base_v2_Embedder(
             device=c.device,
             model_name=c.model_name,
         )

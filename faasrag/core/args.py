@@ -89,7 +89,14 @@ class CacheConfig:
 # -------------------------
 # Embedders
 # -------------------------
-EmbedderType = Literal["dpr", "synthetic", "gemma"]
+EmbedderType = Literal["dpr", "synthetic", "gemma", "e5-base-v2"]
+
+@dataclass
+class e5_base_v2_EmbedderConfig:
+    type: Literal["e5-base-v2"] = "e5-base-v2"
+    model_name: str = "intfloat/e5-base-v2"
+    batch_size: int = 32
+    device: str = "auto"
 
 
 @dataclass
@@ -157,9 +164,9 @@ class EmbedderConfig:
     dpr: Optional[DPREmbedderConfig] = None
     synthetic: Optional[SyntheticEmbedderConfig] = None
     gemma: Optional[GemmaEmbedderConfig] = None
-
+    e5_base_v2: Optional[e5_base_v2_EmbedderConfig] = None
     def __post_init__(self) -> None:
-        mapping = {"dpr": self.dpr, "synthetic": self.synthetic, "gemma": self.gemma}
+        mapping = {"dpr": self.dpr, "synthetic": self.synthetic, "gemma": self.gemma, "e5-base-v2": self.e5_base_v2}
         chosen = mapping.get(self.type)
 
         if chosen is None:

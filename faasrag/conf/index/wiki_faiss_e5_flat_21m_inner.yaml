@@ -1,0 +1,3 @@
+type: flat
+path: home/pwatters/project/LogitRAG/data/indexes/wiki_dpr_100w/e5_flat_inner.index
+use_gpu: false

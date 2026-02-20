@@ -1,0 +1,4 @@
+type: e5-base-v2
+model_name: intfloat/e5-base-v2
+batch_size: 32
+device: cuda:0
