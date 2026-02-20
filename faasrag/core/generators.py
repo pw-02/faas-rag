@@ -271,6 +271,7 @@ class HFCausalLMGenerator:
         eot = self.tokenizer.convert_tokens_to_ids("<|eot_id|>")
         self.eot_id = None if eot == self.tokenizer.unk_token_id else eot
 
+    
     def _move_to_model_device(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         model_device = next(self.model.parameters()).device
         return {k: v.to(model_device) for k, v in inputs.items()}
@@ -441,7 +442,7 @@ class HFCausalLMGenerator:
         This is critical for an accurate token-length sweep microbenchmark.
         """
         inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
-        inputs = self._move_inputs_to_model_device(inputs)
+        inputs = self._move_to_model_device(inputs)
 
         out = self.model.generate(
             **inputs,
