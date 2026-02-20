@@ -2,7 +2,7 @@ defaults:
   - generator: llama3_8b_instruct #qwen2_5_instruct, llama3_8b_instruct, synthetic
   - embedder: dpr #dpr, e5-base-v2
   - index: wiki_faiss_hnsw_21m #wiki_faiss_hnsw_21m, wiki_faiss_e5_flat_21m_inner
-  - docstore: wiki_dpr_100k #wiki_dpr_100k,  wiki18_100w
+  - docstore: wiki_dpr_21m #wiki_dpr_100k,  wiki18_100w
   - cache: null #proximity,  _null_
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled
