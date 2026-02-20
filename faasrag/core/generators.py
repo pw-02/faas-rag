@@ -429,6 +429,39 @@ class HFCausalLMGenerator:
         length_normalize: bool = False,
     ) -> Tuple[float, int, int, int]:
         return self.score(self._chat_prompt(messages), completion, length_normalize=length_normalize)
+    
+
+    # ---- Added for exact-length microbench ----
+    @torch.no_grad()
+    def generate_from_ids(
+        self, input_ids: torch.Tensor, attention_mask: torch.Tensor
+    ) -> tuple[str, int, int, int]:
+        """
+        Generate using exact token inputs without re-tokenizing from text.
+        This is critical for an accurate token-length sweep microbenchmark.
+        """
+        inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
+        inputs = self._move_inputs_to_model_device(inputs)
+
+        out = self.model.generate(
+            **inputs,
+            max_new_tokens=self.max_new_tokens,
+            do_sample=self.do_sample,
+            temperature=self.temperature if self.do_sample else 0.0,
+            top_p=self.top_p if self.do_sample else 1.0,
+            top_k=self.top_k if self.do_sample else 0,
+            pad_token_id=self.tokenizer.eos_token_id,
+            eos_token_id=self.tokenizer.eos_token_id,
+        )
+
+        prompt_tokens = inputs["input_ids"].shape[-1]
+        total_tokens = out.shape[-1]
+        completion_tokens = total_tokens - prompt_tokens
+        gen_ids = out[0][prompt_tokens:]
+        text = self.tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
+        return text, int(prompt_tokens), int(completion_tokens), int(total_tokens)
+
+
 
 
 # =========================
