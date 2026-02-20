@@ -22,9 +22,13 @@ def _unwrap_index(index: faiss.Index) -> Tuple[faiss.Index, faiss.Index]:
 
 def _configure_search_params(inner: faiss.Index, cfg: IndexConfig) -> None:
     if isinstance(inner, faiss.IndexIVF):
+        print(f"Setting IVF nprobe={cfg.nprobe}")
         inner.nprobe = int(cfg.nprobe)
     if hasattr(inner, "hnsw"):
+        print(f"Setting HNSW efSearch={cfg.ef_search}")
         inner.hnsw.efSearch = int(cfg.ef_search)
+    else:
+        print("Index does not have HNSW layer, skipping efSearch config")
 
 
 def _resolve_local_path(path: str, artifact_dir: str) -> str:
