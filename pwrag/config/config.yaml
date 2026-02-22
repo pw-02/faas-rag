@@ -1,0 +1,32 @@
+defaults:
+  - retriever: wiki_faiss_dpr_ivf_100k
+  #, llama_13_8B_instruct, llama_70b_chat, gpt-3.5-turbo
+  - generator: qwen2_0_5b_instruct 
+  - dataset: nq
+  - override hydra/job_logging: disabled
+  - override hydra/hydra_logging: disabled
+  - _self_
+
+# ------------
+generator_device: cuda:0
+retriever_device: cuda:0
+
+metrics: ["em", "f1", "acc", "precision", "recall"]
+save_dir: results
+save_sample_metrics: true
+save_summary_metrics: true
+max_sample_num: 500  # number of samples to test (only work in dev/test split), if None, test all samples
+random_sample: False # whether to randomly sample the test samples
+is_reasoning: false
+
+
+seed: 2024
+
+hydra:
+  run:
+    dir: .
+  sweep:
+    dir: .
+  output_subdir: null
+
+

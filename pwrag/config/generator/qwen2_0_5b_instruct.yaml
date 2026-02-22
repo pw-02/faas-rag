@@ -1,0 +1,11 @@
+name: qwen2_0_5b_instruct
+generator_framework: hf
+generator_model: Qwen/Qwen2-0.5B-Instruct
+generator_max_input_length: 4096
+generator_batch_size: 1
+
+generation_params:
+  do_sample: false
+  temperature: 0.2
+  top_p: 0.9
+  max_tokens: 32
