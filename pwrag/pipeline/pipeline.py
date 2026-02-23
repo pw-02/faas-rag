@@ -53,7 +53,6 @@ class SequentialPipeline(BasicPipeline):
                  retriever=None, generator=None, cache=None):
         
         super().__init__(config, prompt_template)
-
         self.pipeline_name = "SequentialPipeline"
         
         if retriever is None:
