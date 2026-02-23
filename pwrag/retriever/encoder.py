@@ -6,7 +6,6 @@ import numpy as np
 from tqdm import tqdm
 
 from pwrag.retriever.utils import load_model, pooling, parse_query, parse_image
-from pwrag.utils.utils import get_device
 
 
 class Encoder:
@@ -23,6 +22,7 @@ class Encoder:
         model_path,
         pooling_method,
         max_length,
+        device,
         use_fp16=True,
         instruction=None,
         silent=False,
@@ -34,8 +34,9 @@ class Encoder:
         self.use_fp16 = use_fp16
         self.instruction = instruction
         self.silent = silent
+        self.device = device if "cuda" in device and torch.cuda.is_available() else "cpu"
         self.gpu_num = torch.cuda.device_count()
-        self.model, self.tokenizer = load_model(model_path=model_path, use_fp16=use_fp16)
+        self.model, self.tokenizer = load_model(model_path=model_path, use_fp16=use_fp16, device=self.device)
 
     @torch.inference_mode()
     def single_batch_encode(self, query_list: Union[List[str], str], is_query=True) -> np.ndarray:
@@ -48,7 +49,7 @@ class Encoder:
             truncation=True,
             return_tensors="pt",
         )
-        inputs = {k: v.to(get_device()) for k, v in inputs.items()}
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
         if "T5" in type(self.model).__name__ or (
             isinstance(self.model, torch.nn.DataParallel) and "T5" in type(self.model.module).__name__
@@ -287,7 +288,7 @@ class ClipEncoder:
         self.model_name = model_name
         self.model_path = model_path
         self.silent = silent
-        self.gpu_num = torch.cuda.device_count()
+        self.gpu_num = 1 #torch.cuda.device_count()
         self.load_clip_model()
 
     def load_clip_model(self):

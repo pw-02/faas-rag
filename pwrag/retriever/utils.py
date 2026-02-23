@@ -55,11 +55,12 @@ def convert_numpy(obj: Union[Dict, list, np.ndarray, np.generic]) -> Any:
     else:
         return obj  # Return the object as-is if it's neither a dict, list, nor numpy type
     
-def load_model(model_path: str, use_fp16: bool = False):
+def load_model(model_path: str, use_fp16: bool = False, device: str = "cuda:0"):
     model_config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
     model = AutoModel.from_pretrained(model_path, trust_remote_code=True)
     model.eval()
-    model.to(get_device())
+    model.to(device)
+
     if use_fp16:
         model = model.half()
     tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True, trust_remote_code=True)
@@ -185,8 +186,13 @@ def read_jsonl(file_path):
 
 
 def load_docs(corpus, doc_idxs: List[int]):
-    results = [corpus[int(idx)] for idx in doc_idxs]
-
+    results = []
+    for idx in doc_idxs:
+        if idx < 0 or idx >= len(corpus):
+            raise IndexError(f"Document index {idx} is out of bounds for corpus of size {len(corpus)}.")
+            warnings.warn(f"Document index {idx} is out of bounds for corpus of size {len(corpus)}. Skipping.")
+            continue
+        results.append(corpus[int(idx)])
     return results
 
 

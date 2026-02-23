@@ -3,20 +3,19 @@ import os
 import time
 import requests
 
-# os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import warnings
 from typing import List, Dict, Union
 import functools
 from tqdm import tqdm
 import faiss
-import copy
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pwrag.args.args import AppConfig
-from pwrag.utils.utils import get_reranker, get_device
+from pwrag.utils.utils import get_reranker
 from pwrag.retriever.utils import inspect_faiss_index, load_corpus, load_docs, convert_numpy, judge_image, judge_zh, unwrap_faiss_index
 from pwrag.retriever.encoder import Encoder, STEncoder, ClipEncoder
 import torch
+
 # if get_device() == "cpu":
 faiss.omp_set_num_threads(1)
 

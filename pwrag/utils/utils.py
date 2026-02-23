@@ -73,11 +73,3 @@ def get_judger(config):
 
 def get_cache(config):
     pass
-
-
-
-def get_device(config):
-    if config.device == "cuda" and torch.cuda.is_available():
-        return torch.device("cuda")
-    else:
-        return torch.device("cpu")

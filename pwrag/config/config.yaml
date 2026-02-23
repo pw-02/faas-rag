@@ -6,7 +6,7 @@ defaults:
   - retriever/pipeline: dense
   - retriever/corpus: wiki_100k
   - retriever/embedder: dpr
-  - retriever/index: wiki_dpr_hnsw_100k #wiki_dpr_hnsw_100k
+  - retriever/index: wiki_dpr_ivf_100k #wiki_dpr_hnsw_100k
   - retriever/search: topk
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled

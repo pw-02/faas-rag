@@ -6,8 +6,11 @@ from tqdm import tqdm
 from datasets import load_dataset
 import faiss  # pip install faiss-cpu (or faiss-gpu)
 
+
 def parse_args():
-    p = argparse.ArgumentParser(description="Build a FAISS index from facebook/wiki_dpr precomputed embeddings.")
+    p = argparse.ArgumentParser(
+        description="Build a FAISS index from facebook/wiki_dpr precomputed embeddings."
+    )
     p.add_argument("--dataset", default="facebook/wiki_dpr")
     p.add_argument("--split", default="train")
 
@@ -15,11 +18,25 @@ def parse_args():
     p.add_argument("--streaming", action="store_true", default=False)
     p.add_argument("--no-streaming", dest="streaming", action="store_false")
 
-    p.add_argument("--dataset_name", default="psgs_w100.nq.no_index",
-                   help="e.g. psgs_w100.nq.no_index or psgs_w100.multiset.no_index")
+    p.add_argument(
+        "--dataset_name",
+        default="psgs_w100.nq.no_index",
+        help="e.g. psgs_w100.nq.no_index or psgs_w100.multiset.no_index",
+    )
 
-    p.add_argument("--index_type", choices=["flat_ip", "ivf_ip", "hnsw_ip"], default="flat_ip")
+    p.add_argument(
+        "--index_type", choices=["flat_ip", "ivf_ip", "hnsw_ip"], default="flat_ip"
+    )
+
+    # If --all_vectors is set, --n_vectors is ignored for the main pass (and training is capped).
     p.add_argument("--n_vectors", type=int, default=100_000)
+    p.add_argument(
+        "--all_vectors",
+        action="store_true",
+        default=False,
+        help="If set, ignore --n_vectors and process the full split.",
+    )
+
     p.add_argument("--batch_size", type=int, default=8192)
 
     # IVF
@@ -33,31 +50,40 @@ def parse_args():
     p.add_argument("--ef_search", type=int, default=64)
 
     p.add_argument("--out_dir", default="faiss_wiki_dpr")
-    p.add_argument("--store_text", action="store_true", default=False)
+    p.add_argument("--store_text", action="store_true", default=True)
     p.add_argument("--snippet_chars", type=int, default=0)
 
     # NEW: meta-only mode (skip FAISS index creation/training/writing)
-    p.add_argument("--no_index", action="store_true", default=False,
-                   help="If set, do not build/write FAISS index; only write meta jsonl.")
+    p.add_argument(
+        "--no_index",
+        action="store_true",
+        default=False,
+        help="If set, do not build/write FAISS index; only write meta jsonl.",
+    )
 
     return p.parse_args()
+
 
 def get_first_row(ds, streaming: bool):
     if streaming:
         return next(iter(ds))
-    else:
-        return ds[0]
+    return ds[0]
+
 
 def main():
     args = parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
 
     safe_cfg = args.dataset_name.replace(".", "_")
-    index_path = os.path.join(args.out_dir, f"index_{safe_cfg}_{args.index_type}_{args.n_vectors}.faiss")
+    count_tag = "all" if args.all_vectors else str(args.n_vectors)
+
+    index_path = os.path.join(
+        args.out_dir, f"index_{safe_cfg}_{args.index_type}_{count_tag}.faiss"
+    )
     if args.store_text:
-        meta_path  = os.path.join(args.out_dir, f"meta_{safe_cfg}_{args.n_vectors}_text.jsonl")
+        meta_path = os.path.join(args.out_dir, f"meta_{safe_cfg}_{count_tag}_text.jsonl")
     else:
-        meta_path  = os.path.join(args.out_dir, f"meta_{safe_cfg}_{args.n_vectors}.jsonl")
+        meta_path = os.path.join(args.out_dir, f"meta_{safe_cfg}_{count_tag}.jsonl")
 
     print("=== Config ===")
     print("dataset      :", args.dataset)
@@ -66,6 +92,7 @@ def main():
     print("streaming    :", args.streaming)
     print("index_type   :", args.index_type)
     print("n_vectors    :", args.n_vectors)
+    print("all_vectors  :", args.all_vectors)
     print("batch_size   :", args.batch_size)
     print("out_dir      :", args.out_dir)
     print("store_text   :", args.store_text)
@@ -82,13 +109,20 @@ def main():
     print("==============\n")
 
     # Load dataset
-    ds = load_dataset(args.dataset, name=args.dataset_name, split=args.split, streaming=args.streaming)
+    ds = load_dataset(
+        args.dataset, name=args.dataset_name, split=args.split, streaming=args.streaming
+    )
+
+    # Determine limit for main pass
+    limit = None if args.all_vectors else args.n_vectors
 
     # Only touch embeddings if we're actually indexing
     if not args.no_index:
         first = get_first_row(ds, args.streaming)
         if "embeddings" not in first:
-            raise KeyError(f"Expected 'embeddings' field but got keys: {list(first.keys())}")
+            raise KeyError(
+                f"Expected 'embeddings' field but got keys: {list(first.keys())}"
+            )
         dim = len(first["embeddings"])
         print("Embedding dim:", dim)
     else:
@@ -103,7 +137,9 @@ def main():
 
         elif args.index_type == "ivf_ip":
             quantizer = faiss.IndexFlatIP(dim)
-            index = faiss.IndexIVFFlat(quantizer, dim, args.n_lists, faiss.METRIC_INNER_PRODUCT)
+            index = faiss.IndexIVFFlat(
+                quantizer, dim, args.n_lists, faiss.METRIC_INNER_PRODUCT
+            )
             index.nprobe = args.nprobe
 
         elif args.index_type == "hnsw_ip":
@@ -116,16 +152,19 @@ def main():
 
         # ---------- IVF training pass ----------
         if args.index_type == "ivf_ip" and not index.is_trained:
-            print(f"Collecting {args.train_size} vectors for IVF training...")
+            # If all_vectors, we still cap training to args.train_size (or smaller if n_vectors set small)
+            train_cap = args.train_size if args.all_vectors else min(args.train_size, args.n_vectors)
+
+            print(f"Collecting {train_cap} vectors for IVF training...")
             train_vecs = []
 
             if args.streaming:
                 it = iter(ds)
-                for _ in tqdm(range(min(args.train_size, args.n_vectors)), desc="Train vectors"):
+                for _ in tqdm(range(train_cap), desc="Train vectors"):
                     row = next(it)
                     train_vecs.append(np.asarray(row["embeddings"], dtype=np.float32))
             else:
-                for i in tqdm(range(min(args.train_size, args.n_vectors)), desc="Train vectors"):
+                for i in tqdm(range(train_cap), desc="Train vectors"):
                     row = ds[i]
                     train_vecs.append(np.asarray(row["embeddings"], dtype=np.float32))
 
@@ -135,15 +174,24 @@ def main():
 
             # Re-load dataset for the actual pass if streaming (because we consumed rows)
             if args.streaming:
-                ds = load_dataset(args.dataset, name=args.dataset_name, split=args.split, streaming=args.streaming)
+                ds = load_dataset(
+                    args.dataset,
+                    name=args.dataset_name,
+                    split=args.split,
+                    streaming=args.streaming,
+                )
 
     # ---------- Main pass ----------
     buf_vecs, buf_meta = [], []
     added = 0
 
     with open(meta_path, "w", encoding="utf-8") as mf:
-        for row in tqdm(ds, total=args.n_vectors, desc=f"{'Meta-only' if args.no_index else 'Indexing'} {args.dataset_name}"):
-            if added >= args.n_vectors:
+        for row in tqdm(
+            ds,
+            total=None if limit is None else limit,
+            desc=f"{'Meta-only' if args.no_index else 'Indexing'} {args.dataset_name}",
+        ):
+            if limit is not None and added >= limit:
                 break
 
             # Assign ID (even in meta-only mode)
@@ -171,6 +219,13 @@ def main():
 
             # Flush by batch size for consistent memory use
             if len(buf_meta) >= args.batch_size:
+                # If we have a limit, don’t overshoot it on the final flush
+                if limit is not None and added + len(buf_meta) > limit:
+                    keep = limit - added
+                    buf_meta = buf_meta[:keep]
+                    if not args.no_index:
+                        buf_vecs = buf_vecs[:keep]
+
                 if not args.no_index:
                     X = np.vstack(buf_vecs).astype(np.float32)
                     index.add(X)
@@ -182,8 +237,17 @@ def main():
                 buf_meta.clear()
                 buf_vecs.clear()
 
+                if limit is not None and added >= limit:
+                    break
+
         # Flush remainder
-        if buf_meta:
+        if buf_meta and (limit is None or added < limit):
+            if limit is not None and added + len(buf_meta) > limit:
+                keep = limit - added
+                buf_meta = buf_meta[:keep]
+                if not args.no_index:
+                    buf_vecs = buf_vecs[:keep]
+
             if not args.no_index and buf_vecs:
                 X = np.vstack(buf_vecs).astype(np.float32)
                 index.add(X)
@@ -203,6 +267,7 @@ def main():
     else:
         print("Index skipped (no_index=True)")
     print("Meta saved to  :", meta_path)
+
 
 if __name__ == "__main__":
     main()
