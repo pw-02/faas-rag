@@ -100,13 +100,14 @@ class STEncoder:
         uses SentenceTransformer.encode(normalize_embeddings=True by default)
     """
 
-    def __init__(self, model_name, model_path, max_length, use_fp16, instruction, silent=False):
+    def __init__(self, model_name, model_path, max_length, use_fp16, instruction, device, silent=True):
         self.model_name = model_name
         self.model_path = model_path
         self.max_length = max_length
         self.use_fp16 = use_fp16
         self.instruction = instruction
         self.silent = silent
+        self.device = device if "cuda" in device and torch.cuda.is_available() else "cpu"
 
         self._is_dpr = "dpr" in (model_name or "").lower() or "dpr" in (model_path or "").lower()
 
@@ -124,7 +125,7 @@ class STEncoder:
             )
 
     def _device(self) -> str:
-        return "cuda" if torch.cuda.is_available() else "cpu"
+        return self.device
 
     def _get_dpr_pair(self, is_query: bool):
         """

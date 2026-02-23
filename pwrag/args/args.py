@@ -26,7 +26,7 @@ class RetrieverEmbedderConfig:
     pooling_method: str = "cls"         # cls | mean
     normalize_embeddings: bool = True
     use_sentence_transformer: bool = True
-    device: str = "cpu"
+    device: str = "cpu:0"
     use_fp16: bool = True
 
 

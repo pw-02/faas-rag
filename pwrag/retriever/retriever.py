@@ -16,7 +16,7 @@ from pwrag.args.args import AppConfig
 from pwrag.utils.utils import get_reranker, get_device
 from pwrag.retriever.utils import inspect_faiss_index, load_corpus, load_docs, convert_numpy, judge_image, judge_zh, unwrap_faiss_index
 from pwrag.retriever.encoder import Encoder, STEncoder, ClipEncoder
-
+import torch
 # if get_device() == "cpu":
 faiss.omp_set_num_threads(1)
 
@@ -138,6 +138,7 @@ class BaseRetriever:
     def update_base_setting(self):
         self.retrieval_method = self._config.retriever.embedder.retrieval_method
         self.topk = self._config.retriever.search.retrieval_topk
+        self.device = self._config.retriever.embedder.device if "cuda" in self._config.retriever.embedder.device and torch.cuda.is_available() else "cpu"
 
         self.index_path = self._config.retriever.index.index_path
         self.corpus_path = self._config.retriever.corpus.corpus_path
@@ -160,7 +161,7 @@ class BaseRetriever:
             with open(self.cache_path, "r") as f:
                 self.cache = json.load(f)
         
-        self.silent = self._config["silent_retrieval"] if "silent_retrieval" in self._config else False
+        self.silent = self._config["silent_retrieval"] if "silent_retrieval" in self._config else True
 
     def update_additional_setting(self):
         pass
@@ -423,6 +424,7 @@ class DenseRetriever(BaseTextRetriever):
                 max_length=self.query_max_length,
                 use_fp16=self.use_fp16,
                 instruction=self.instruction,
+                device=self.device,
                 silent=self.silent,
             )
         else:
@@ -435,6 +437,7 @@ class DenseRetriever(BaseTextRetriever):
                 max_length=self.query_max_length,
                 use_fp16=self.use_fp16,
                 instruction=self.instruction,
+                device=self.device,
             )
 
     def _check_pooling_method(self, model_path, pooling_method):
