@@ -79,17 +79,12 @@ class SequentialPipeline(BasicPipeline):
     def run(self, question, return_dict=False, return_scores=False):
         """The inference process of a single sample."""
         # Step 1: Retrieval
-        retrieved_docs = self.retriever.search(question)
-
-        # Step 2: Generation
-        input_prompts = [self.prompt_template.get_string(question=question, retrieved_docs=retrieved_docs)]
+        retrieval_result, scores = self.retriever.search(question)
+        input_prompts = self.prompt_template.get_string(question=question, retrieval_result=retrieval_result)
+  
+        # Step 2: Generation        
         predictions = self.generator.generate(input_prompts, return_dict=return_dict, return_scores=return_scores)
         
         return predictions
-
-
-    def naive_run(self, sample, do_eval=True):
-        """The inference process of a single sample without RAG."""
-        pass
         
 

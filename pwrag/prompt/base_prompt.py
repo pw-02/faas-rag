@@ -216,11 +216,19 @@ class PromptTemplate:
         return final_prompt
 
     def format_reference(self, retrieval_result):
+        if  not isinstance(retrieval_result, list):
+            retrieval_result = [retrieval_result]
         format_reference = ""
         for idx, doc_item in enumerate(retrieval_result):
-            content = doc_item["contents"]
-            title = content.split("\n")[0]
-            text = "\n".join(content.split("\n")[1:])
+            if "faiss_id" in retrieval_result[0].keys():
+                # content = doc_item["contents"]
+                title = doc_item['title']
+                text = doc_item['text']
+            else:
+                content = doc_item["contents"]
+                title = content.split("\n")[0]
+                text = "\n".join(content.split("\n")[1:])
+            
             if self.reference_template is not None:
                 format_reference += self.reference_template.format(idx=idx, title=title, text=text)
             else:

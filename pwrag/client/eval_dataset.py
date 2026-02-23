@@ -7,13 +7,13 @@ from tqdm import tqdm
 from pwrag.args.args import AppConfig
 from pwrag.evaluator.evaluator import Evaluator
 from pwrag.dataset.dataset import Dataset
-from pwrag.pipeline.pipeline import LLMOnlyPipeline
+from pwrag.pipeline.pipeline import LLMOnlyPipeline, SequentialPipeline
 
 def run_eval(
     *,
     cfg: AppConfig,
     dataset : Dataset,
-    pipeline: Union[LLMOnlyPipeline],
+    pipeline: Union[LLMOnlyPipeline, SequentialPipeline],
     evaluator: Evaluator,
     output_name: str = "item_results.jsonl",
     report_every: int = 10,
@@ -33,7 +33,7 @@ def run_eval(
 
     pbar = tqdm(dataset.data, desc=desc, unit="item")
     for item in pbar:
-        pred = pipeline.run_single(item.question)
+        pred = pipeline.run(item.question)
         item.update_output("pred", pred)
         item_metrics = evaluator.evaluate_item(item)
         evaluator.log_item(item, item_metrics)
@@ -49,7 +49,8 @@ def main(cfg: AppConfig):
     print(OmegaConf.to_yaml(cfg, resolve=True))
     evaluator = Evaluator(cfg)
     dataset = Dataset(cfg)
-    pipeline = LLMOnlyPipeline(cfg)
+    # llm_only_pipeline = LLMOnlyPipeline(cfg)
+    pipeline = SequentialPipeline(cfg)
 
     run_eval(
         cfg=cfg,

@@ -26,7 +26,7 @@ def cache_manager(func):
     """
 
     @functools.wraps(func)
-    def wrapper(self, query=None, num=None, return_score=False):
+    def wrapper(self, query=None, num=None, return_score=True):
         if num is None:
             num = self.topk
         if self.use_cache:
@@ -549,7 +549,7 @@ class MultiModalRetriever(BaseRetriever):
             else:
                 return "text"
 
-    def _search(self, query, target_modal: str = "text", num: int = None, return_score=False):
+    def _search(self, query, target_modal: str = "text", num: int = None, return_score=True):
         if num is None:
             num = self.topk
         assert target_modal in ["image", "text"]

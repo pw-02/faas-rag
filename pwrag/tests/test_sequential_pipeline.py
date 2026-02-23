@@ -18,8 +18,9 @@ def main(cfg: AppConfig):
 
     pbar = tqdm(dataset.data, desc="Sequential Pipeline Test", unit="item")
     for item in pbar:
-        pred = pipeline.run(item.question)
+        retrieved_docs, pred = pipeline.run(item.question)
         item.update_output("pred", pred)
+        item.update_output("retrieved_docs", retrieved_docs)
         eval_result = evaluator.evaluate_item(item)
         print(f"Question: {item.question}")
         print(f"Golden Answer: {item.golden_answers}")
