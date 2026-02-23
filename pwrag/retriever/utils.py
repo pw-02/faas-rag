@@ -143,18 +143,18 @@ def inspect_faiss_index(index):
     while hasattr(base, "index"):
         base = base.index
 
-    info["type"] = type(base).__name__
-    info["dimension"] = index.d
-    info["total_vectors"] = index.ntotal
-    info["trained"] = index.is_trained
+    info["index_type"] = type(base).__name__
+    info["index_dimension"] = index.d
+    info["index_total_vectors"] = index.ntotal
+    info["index_trained"] = index.is_trained
 
     if isinstance(base, faiss.IndexIVF):
-        info["nlist"] = base.nlist
-        info["nprobe"] = base.nprobe
+        info["index_nlist"] = base.nlist
+        info["index_nprobe"] = base.nprobe
 
     if hasattr(base, "hnsw"):
         # info["hnsw_M"] = base.hnsw.M
-        info["hnsw_efSearch"] = base.hnsw.efSearch
+        info["index_hnsw_efSearch"] = base.hnsw.efSearch
 
     return info
 

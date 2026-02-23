@@ -1,3 +1,4 @@
+from asyncio import run
 from typing import Any, Callable, Optional, Union
 from tqdm import tqdm
 # main.py
@@ -8,58 +9,45 @@ from pwrag.args.args import AppConfig
 from pwrag.evaluator.evaluator import Evaluator
 from pwrag.dataset.dataset import Dataset
 from pwrag.pipeline.pipeline import LLMOnlyPipeline, SequentialPipeline
-
+from pwrag.client.run_logger import RunLogger
 def run_eval(
     *,
     cfg: AppConfig,
     dataset : Dataset,
     pipeline: Union[LLMOnlyPipeline, SequentialPipeline],
     evaluator: Evaluator,
-    output_name: str = "item_results.jsonl",
-    report_every: int = 10,
-    overwrite: bool = True,
+    run_logger: Optional[RunLogger] = None,
     desc: str = "Generating + Evaluating",
     get_pred: Optional[Callable[[Any, Any], Any]] = None,
 ):
-    """
-    Generic streaming evaluation loop.
-
-    - dataset: object with .data iterable of Items
-    - pipeline: any object
-    - get_pred: optional function (pipeline, item) -> pred
-               if None, tries pipeline.run_item(item) then pipeline.run_single(item.question)
-    """
-    evaluator.start_streaming(output_name=output_name,report_every=report_every,overwrite=overwrite,)
-
+    run_logger.save_config(cfg)
     pbar = tqdm(dataset.data, desc=desc, unit="item")
     for item in pbar:
-        pred = pipeline.run(item.question)
+        pred, cost_metrics = pipeline.run(question=item.question, return_metrics=True)
         item.update_output("pred", pred)
-        item_metrics = evaluator.evaluate_item(item)
-        evaluator.log_item(item, item_metrics)
-        evaluator.maybe_report(pbar)
-    
-    summary = evaluator.finalize_streaming(dataset=dataset)
-    return summary
-
+        acc_metrics = evaluator.evaluate_item(item)
+        item.update_metrics("acc_metrics", acc_metrics)
+        item.update_metrics("cost_metrics", cost_metrics)
+        run_logger.log_item(item.to_dict())
+        run_logger.maybe_report(pbar)
+    run_logger.finalize()
 
 
 @hydra.main(config_path="../config", config_name="config", version_base=None)
 def main(cfg: AppConfig):
     print(OmegaConf.to_yaml(cfg, resolve=True))
+    run_logger = RunLogger(cfg, overwrite=True, report_every=10)
     evaluator = Evaluator(cfg)
     dataset = Dataset(cfg)
-    # llm_only_pipeline = LLMOnlyPipeline(cfg)
-    pipeline = SequentialPipeline(cfg)
+    pipeline = LLMOnlyPipeline(cfg)
+    # pipeline = SequentialPipeline(cfg)
 
     run_eval(
         cfg=cfg,
         dataset=dataset,
         pipeline=pipeline,
         evaluator=evaluator,
-        output_name="item_results.jsonl",
-        report_every=10,
-        overwrite=True,
+        run_logger=run_logger,
         desc=f"Eval: {type(pipeline).__name__}",
     )
 

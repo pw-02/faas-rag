@@ -21,7 +21,7 @@ save_dir: results
 save_sample_metrics: true
 save_summary_metrics: true
 
-max_sample_num: 500  # number of samples to test (only work in dev/test split), if None, test all samples
+max_sample_num: 10  # number of samples to test (only work in dev/test split), if None, test all samples
 random_sample: False # whether to randomly sample the test samples
 is_reasoning: false
 

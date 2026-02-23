@@ -108,7 +108,8 @@ class PromptTemplate:
 
 
 
-    def get_string(self, question=None, retrieval_result=None, formatted_reference=None, previous_gen=None, messages=None, **params):
+    def get_string(self, question=None, retrieval_result=None, formatted_reference=None, 
+                   previous_gen=None, messages=None, **params):
         if messages is not None:
             if isinstance(messages, str):
                 return self.truncate_prompt(messages)

@@ -20,6 +20,7 @@ class Item:
         self.choices: List[str] = item_dict.get("choices", [])
         self.metadata: Dict[str, Any] = item_dict.get("metadata", {})
         self.output: Dict[str, Any] = item_dict.get("output", {})
+        self.metrics: Dict[str, Any] = item_dict.get("metrics", {})
         self.data: Dict[str, Any] = item_dict
 
     def update_output(self, key: str, value: Any) -> None:
@@ -28,6 +29,10 @@ class Item:
             raise AttributeError(f"{key} should not be changed")
         else:
             self.output[key] = value
+    
+    def update_metrics(self, key: str, value: Any) -> None:
+        """Update the metrics dict and keep a key in self.metrics can be used as an attribute."""
+        self.metrics[key] = value
 
     def update_evaluation_score(self, metric_name: str, metric_score: float) -> None:
         """Update the evaluation score of this sample for a metric."""
@@ -36,7 +41,7 @@ class Item:
         self.output["metric_score"][metric_name] = metric_score
 
     def __getattr__(self, attr_name: str) -> Any:
-        predefined_attrs = ["id", "question", "golden_answers", "metadata", "output", "choices"]
+        predefined_attrs = ["id", "question", "golden_answers", "metadata", "output", "choices", "metrics", "data"]
         if attr_name in predefined_attrs:
             return super().__getattribute__(attr_name)
         else:
@@ -50,11 +55,11 @@ class Item:
                     raise AttributeError(f"Attribute `{attr_name}` not found")
 
     def __setattr__(self, attr_name: str, value: Any) -> None:
-        predefined_attrs = ["id", "question", "golden_answers", "metadata", "output", "choices", 'data']
+        predefined_attrs = ["id", "question", "golden_answers", "metadata", "output", "choices", "metrics", 'data']
         if attr_name in predefined_attrs:
             super().__setattr__(attr_name, value)
         else:
-            self.update_output(attr_name, value)
+            self.update_metrics(attr_name, value)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert all information within the data sample into a dict. Information generated
@@ -67,6 +72,7 @@ class Item:
             "choices": self.choices,
             "metadata": self.metadata,
             "output": self.output,
+            "metrics": self.metrics,
         }
         return output
 
@@ -165,6 +171,10 @@ class Dataset:
     @property
     def output(self) -> List[Dict[str, Any]]:
         return [item.output for item in self.data]
+    
+    @property
+    def metrics(self) -> List[Dict[str, Any]]:
+        return [item.metrics for item in self.data]
 
     def get_batch_data(self, attr_name: str, batch_size: int) -> Generator[List[Any], None, None]:
         """Get an attribute of dataset items in batch."""

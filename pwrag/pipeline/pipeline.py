@@ -1,40 +1,29 @@
 
 from pwrag.evaluator.evaluator import Evaluator
 from pwrag.prompt.base_prompt import PromptTemplate
-from pwrag.utils.utils import get_retriever, get_generator, get_refiner, get_judger
-
+from pwrag.utils.utils import get_retriever, get_generator, get_refiner, get_judger, timed
 from typing import List, Dict, Any
-import os
-import pandas as pd
-from tqdm import tqdm
+import time
 
 class BasicPipeline:
     def __init__(self, config, prompt_template=None):
         self.config = config
         self.prompt_template = prompt_template
-        self.evaluator = Evaluator(config)
-        # self.save_retrieval_cache = config["save_retrieval_cache"]
+
         if prompt_template is None:
             prompt_template = PromptTemplate(config)
+        
         self.prompt_template = prompt_template
-    
-    def run_all(self, dataset):
-        """The overall inference process of a RAG framework."""
-        pass
 
     def run(self, question):
         """The inference process of a single sample."""
-        pass
-
-    def evaluate(self, data):
-        """Evaluate the generated results."""
         pass
 
 class LLMOnlyPipeline(BasicPipeline):
     """The pipeline runs the generation process without retrieval.
         inference stage: query -> generator
     """
-    def __init__(self, config, prompt_template=None, generator=None):
+    def __init__(self, config, prompt_template=None, generator=None, return_metrics=False):
         
         super().__init__(config, prompt_template)
         
@@ -42,23 +31,24 @@ class LLMOnlyPipeline(BasicPipeline):
             self.generator = get_generator(config)
         else:
             self.generator = generator
-    
-    def run(self, question, return_dict=False, return_scores=False):
-        input_prompts = [self.prompt_template.get_string(question=question)]
-        predictions = self.generator.generate(input_prompts, return_dict=return_dict, return_scores=return_scores)
+
+    def run(self, question, return_dict=False, return_scores=False, return_metrics=False):
+        metrics: dict[str, float] = {}
+        with timed(metrics, "create_prompt(s)"):
+            input_prompts = [self.prompt_template.get_string(question=question)]
+        
+        with timed(metrics, "generation_time(s)"):
+            predictions = self.generator.generate(input_prompts, return_dict=return_dict, return_scores=return_scores)
+        
+        if return_metrics:
+            return predictions, metrics
         return predictions
-    
-    def run_all(self, question_list: List[str]):
-        #use tqdm to show the progress
-        results = []
-        for question in tqdm(question_list):
-            predictions = self.run(question)
-            results.append(predictions)
-        return results
     
 class SequentialPipeline(BasicPipeline):
     """The pipeline runs the retrieval, generation and evaluation process sequentially."""
-    def __init__(self, config, prompt_template=None, retriever=None, generator=None, cache=None):
+    def __init__(self, config, prompt_template=None, 
+                 retriever=None, generator=None, cache=None):
+        
         super().__init__(config, prompt_template)
         
         if retriever is None:
@@ -76,15 +66,19 @@ class SequentialPipeline(BasicPipeline):
         else:
             self.cache = cache
     
-    def run(self, question, return_dict=False, return_scores=False):
+    def run(self, question, return_dict=False, return_scores=False, return_metrics=False):
         """The inference process of a single sample."""
         # Step 1: Retrieval
-        retrieval_result, scores = self.retriever.search(question)
-        input_prompts = self.prompt_template.get_string(question=question, retrieval_result=retrieval_result)
-  
-        # Step 2: Generation        
-        predictions = self.generator.generate(input_prompts, return_dict=return_dict, return_scores=return_scores)
-        
-        return predictions
-        
+        metrics: dict[str, float] = {}
 
+        retrieval_result = self.retriever.search(question, metrics=metrics)
+        
+        with timed(metrics, "create_prompt(s)"):
+            input_prompts = [self.prompt_template.get_string(question=question, retrieval_result=retrieval_result)]
+        # Step 2: Generation
+        with timed(metrics, "generation_time(s)"):
+            predictions = self.generator.generate(input_prompts, return_dict=return_dict, return_scores=return_scores)
+        
+        if return_metrics:
+            return predictions, metrics
+        return predictions

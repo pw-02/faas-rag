@@ -463,21 +463,34 @@ class DenseRetriever(BaseTextRetriever):
                 f"Pooling method in model config file is {detect_pooling_method}, but the input is {pooling_method}. Please check carefully."
             )
 
-    def _search(self, query: str, num: int = None, return_score=False):
-        if num is None:
-            num = self.topk
+    def _search(self, query: str, num: int = None, return_score=False, metrics: dict[str, float] = None) -> List[Dict[str, str]]:
+        
+        t0 = time.perf_counter()
+        k = self.topk if num is None else num
+        # Encode
         query_emb = self.encoder.encode(query)
-        scores, idxs = self.index.search(query_emb, k=num)
-        scores = scores.tolist()
+        if metrics is not None:
+            metrics["encode_time(s)"] = time.perf_counter() - t0
+        # Search
+        t1 = time.perf_counter()
+        scores, idxs = self.index.search(query_emb, k=k)
+        if metrics is not None:
+            metrics["search_time(s)"] = time.perf_counter() - t1
+            # metrics.update(self.faiss_index_params)
         idxs = idxs[0]
         scores = scores[0]
 
+        # Load docs
+        t2 = time.perf_counter()
         results = load_docs(self.corpus, idxs)
+        if metrics is not None:
+            metrics["load_doc_time(s)"] = time.perf_counter() - t2
+
         if return_score:
             return results, scores
         else:
             return results
-
+        
     def _batch_search(self, query: List[str], num: int = None, return_score=False):
 
         if isinstance(query, str):

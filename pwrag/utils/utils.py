@@ -2,6 +2,16 @@ from flask import config
 import torch
 from pwrag.args.args import AppConfig
 from transformers import AutoConfig
+from contextlib import contextmanager
+import time
+
+@contextmanager
+def timed(store: dict, key: str):
+    t0 = time.perf_counter()
+    yield
+    store[key] = time.perf_counter() - t0
+
+
 
 def get_generator(config: AppConfig):
     """Automatically select generator class based on config."""
