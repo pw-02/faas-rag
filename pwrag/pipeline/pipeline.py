@@ -82,7 +82,14 @@ class SequentialPipeline(BasicPipeline):
             input_prompts = [self.prompt_template.get_string(question=question, retrieval_result=retrieval_result)]
         # Step 2: Generation
         with timed(metrics, "generation_time(s)"):
-            predictions = self.generator.generate(input_prompts, return_dict=return_dict, return_scores=return_scores)
+            predictions,usage  = self.generator.generate(input_prompts, 
+                                                  return_dict=return_dict, 
+                                                  return_scores=return_scores,
+                                                  return_usage=True)
+            if usage:
+                metrics["prompt_tokens"] = usage["prompt_tokens_per_item"][0]
+                metrics["completion_tokens"] = usage["completion_tokens_per_item"][0]
+                metrics["total_tokens"] = metrics["prompt_tokens"] + metrics["completion_tokens"]
         
         if return_metrics:
             return predictions, metrics

@@ -59,7 +59,7 @@ class RunLogger:
             config.save_dir,
             config.dataset.dataset_name,
             config.generator.name,
-            # self.pipeline_name,
+            self.pipeline_name,
             # datetime.now().strftime("%Y%m%d_%H%M%S")
         )
         os.makedirs(self.save_dir, exist_ok=True)

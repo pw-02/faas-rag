@@ -142,6 +142,7 @@ class HFCausalLMGenerator(BaseGenerator):
         batch_size=None,
         return_scores=False,
         return_dict=False,
+        return_usage=False,
         **params,
     ):
         """Generate batches one by one. The generated content needs to exclude input."""
@@ -184,8 +185,13 @@ class HFCausalLMGenerator(BaseGenerator):
         scores = []
         generated_token_ids = []
         generated_token_logits = []
+        # ---- NEW: usage tracking ----
+        
+        prompt_tokens_per_item: List[int] = []
+        completion_tokens_per_item: List[int] = []
 
         import torch
+
         for idx in trange(0, len(input_list), batch_size, desc="Generation process: ", disable=True):
             with torch.inference_mode():
                 torch.cuda.empty_cache()
@@ -197,6 +203,7 @@ class HFCausalLMGenerator(BaseGenerator):
                     truncation=True,
                     max_length=self.max_input_len,
                 ).to(self.model.device)
+
                 outputs = self.model.generate(
                     **inputs,
                     output_scores=True,
@@ -204,95 +211,105 @@ class HFCausalLMGenerator(BaseGenerator):
                     **generation_params,
                 )
 
-                generated_ids = outputs.sequences
+                # prompt token counts (ignore padding)
+                if "attention_mask" in inputs:
+                    batch_prompt_counts = inputs["attention_mask"].sum(dim=1).to("cpu").tolist()
+                else:
+                    pad_id = self.tokenizer.pad_token_id
+                    batch_prompt_counts = (inputs["input_ids"] != pad_id).sum(dim=1).to("cpu").tolist()
+
+                # generated token ids: slice off padded prompt length
+                prompt_len_padded = inputs["input_ids"].shape[-1]
+                gen_ids = outputs.sequences[:, prompt_len_padded:]  # (B, <=max_new_tokens)
+
+                # completion token counts (ignore padding)
+                pad_id = self.tokenizer.pad_token_id
+                batch_comp_counts = (gen_ids != pad_id).sum(dim=1).to("cpu").tolist()
+
+                prompt_tokens_per_item.extend(int(x) for x in batch_prompt_counts)
+                completion_tokens_per_item.extend(int(x) for x in batch_comp_counts)
+
+                # ---- your scoring logic ----
                 logits = torch.stack(outputs.scores, dim=1).softmax(-1)
-                generated_ids = generated_ids[:, inputs["input_ids"].shape[-1] :]
-                gen_score = torch.gather(logits, 2, generated_ids[:, :, None]).squeeze(-1).cpu().tolist()
+                gen_score = torch.gather(logits, 2, gen_ids[:, :, None]).squeeze(-1).cpu().tolist()
                 scores.extend(gen_score)
 
-            # get additinoal info
+            # additional info
             if return_dict:
-                batch_generated_token_ids = generated_ids.detach().cpu()
+                batch_generated_token_ids = gen_ids.detach().cpu()
                 batch_generated_token_logits = (
-                    torch.cat(
-                        [token_scores.unsqueeze(1) for token_scores in outputs.scores],
-                        dim=1,
-                    )
+                    torch.cat([token_scores.unsqueeze(1) for token_scores in outputs.scores], dim=1)
                     .detach()
                     .cpu()
                 )
+
+                # pad to max_new_tokens for uniform shapes (your logic)
                 if batch_generated_token_ids.shape[1] < generation_params["max_new_tokens"]:
                     real_batch_size, num_generated_tokens = batch_generated_token_ids.shape
                     padding_length = generation_params["max_new_tokens"] - num_generated_tokens
-                    padding_token_ids = torch.zeros(
+                    padding_token_ids = torch.full(
                         (real_batch_size, padding_length),
+                        fill_value=self.tokenizer.pad_token_id,
                         dtype=batch_generated_token_ids.dtype,
-                    ).fill_(self.tokenizer.pad_token_id)
+                    )
                     padding_token_logits = torch.zeros(
-                        (
-                            real_batch_size,
-                            padding_length,
-                            batch_generated_token_logits.shape[-1],
-                        ),
+                        (real_batch_size, padding_length, batch_generated_token_logits.shape[-1]),
                         dtype=batch_generated_token_logits.dtype,
                     )
                     batch_generated_token_ids = torch.cat([batch_generated_token_ids, padding_token_ids], dim=1)
-                    batch_generated_token_logits = torch.cat(
-                        [batch_generated_token_logits, padding_token_logits],
-                        dim=1,
-                    )
+                    batch_generated_token_logits = torch.cat([batch_generated_token_logits, padding_token_logits], dim=1)
+
                 generated_token_ids.append(batch_generated_token_ids)
                 generated_token_logits.append(batch_generated_token_logits)
 
-            for i, generated_sequence in enumerate(outputs.sequences):
-                input_ids = inputs["input_ids"][i]
-                text = self.tokenizer.decode(
-                    generated_sequence,
+            # ---- IMPORTANT CHANGE: decode only generated part (correct) ----
+            for i in range(gen_ids.shape[0]):
+                gen_text = self.tokenizer.decode(
+                    gen_ids[i],
                     skip_special_tokens=True,
                     clean_up_tokenization_spaces=False,
                 )
-                if input_ids is None:
-                    prompt_length = 0
-                else:
-                    prompt_length = len(
-                        self.tokenizer.decode(
-                            input_ids,
-                            skip_special_tokens=True,
-                            clean_up_tokenization_spaces=False,
-                        )
-                    )
-                new_text = text[prompt_length:]
 
+                # apply stop words post-hoc to the generated text
                 if stop_sym is not None:
-                    strip_stopword = True
-                    # Find the first occurrence of any stop word
-                    lower_stop_index = len(new_text)  # Default to end of text
+                    lower_stop_index = len(gen_text)
                     for sym in stop_sym:
-                        stop_index = new_text.find(sym)
+                        stop_index = gen_text.find(sym)
                         if stop_index != -1:
-                            # Adjust stop index based on whether we're stripping the stop word
-                            stop_index += 0 if strip_stopword else len(sym)
                             lower_stop_index = min(stop_index, lower_stop_index)
+                    gen_text = gen_text[:lower_stop_index]
 
-                    # Cut the text at the first stop word found (if any)
-                    new_text = new_text[:lower_stop_index]
+                responses.append(gen_text.strip())
 
-                responses.append(new_text.strip())
+        usage = {
+            "prompt_tokens_per_item": prompt_tokens_per_item,
+            "completion_tokens_per_item": completion_tokens_per_item,
+            "prompt_tokens": sum(prompt_tokens_per_item),
+            "completion_tokens": sum(completion_tokens_per_item),
+            "total_tokens": sum(prompt_tokens_per_item) + sum(completion_tokens_per_item),
+        }
 
         if return_dict:
-            generated_token_ids = torch.cat(generated_token_ids, dim=0)
-            generated_token_logits = torch.cat(generated_token_logits, dim=0)
-            return {
+            generated_token_ids = torch.cat(generated_token_ids, dim=0) if generated_token_ids else None
+            generated_token_logits = torch.cat(generated_token_logits, dim=0) if generated_token_logits else None
+            out = {
                 "generated_token_ids": generated_token_ids,
                 "generated_token_logits": generated_token_logits,
                 "responses": responses,
                 "scores": scores,
             }
+            if return_usage:
+                out["usage"] = usage
+            return out
 
+        # return combinations
+        if return_scores and return_usage:
+            return responses, scores, usage
         if return_scores:
             return responses, scores
-        else:
-            return responses
+        if return_usage:
+            return responses, usage
+        return responses
 
 
     def cal_gen_probs(self, prev, next):
