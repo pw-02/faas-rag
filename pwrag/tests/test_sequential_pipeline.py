@@ -3,7 +3,7 @@ import hydra
 from tqdm import tqdm
 from pwrag.args.args import AppConfig
 from pwrag.dataset.dataset import Dataset
-from pwrag.pipeline.pipeline import LLMOnlyPipeline
+from pwrag.pipeline.pipeline import SequentialPipeline
 from pwrag.evaluator.evaluator import Evaluator
 
 
@@ -14,9 +14,9 @@ def main(cfg: AppConfig):
 
     dataset = Dataset(cfg)
     
-    pipeline = LLMOnlyPipeline(cfg)
+    pipeline = SequentialPipeline(cfg)
 
-    pbar = tqdm(dataset.data, desc="LLMOnly Pipeline Test", unit="item")
+    pbar = tqdm(dataset.data, desc="Sequential Pipeline Test", unit="item")
     for item in pbar:
         pred = pipeline.run(item.question)
         item.update_output("pred", pred)

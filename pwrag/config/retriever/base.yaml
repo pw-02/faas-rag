@@ -1,0 +1,15 @@
+# # config/retriever/base.yaml
+# name: dense
+# device: cuda:0
+# use_fp16: true
+
+# batch_size: 64
+# query_max_length: 64
+
+# # defaults that can be overridden by embedder/index if needed
+# normalize_embeddings: true
+# pooling_method: cls
+# use_sentence_transformer: true
+# use_faiss_gpu: false
+
+

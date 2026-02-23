@@ -5,10 +5,10 @@ corpus_path: s3://vectorindexes/wiki-dpr/wiki-passages/21m/meta_psgs_w100_nq_no_
 
 retrieval_model: sentence-transformers/facebook-dpr-question_encoder-single-nq-base
 
-top_k: 5
+retrieval_topk: 5
 
 nprobe: 64
 ef_search: null
 
 normalize_embeddings: false
-faiss_gpu: false
+use_faiss_gpu: false

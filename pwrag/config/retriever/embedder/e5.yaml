@@ -1,0 +1,11 @@
+# config/retriever/embedder/e5.yaml
+retrieval_method: e5
+retrieval_model: intfloat/e5-large-v2
+
+dim: 1024
+metric: ip
+pooling_method: mean
+normalize_embeddings: true
+use_sentence_transformer: true
+device: cuda:0
+use_fp16: true

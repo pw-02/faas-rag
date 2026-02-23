@@ -1,0 +1,14 @@
+# config/retriever/embedder/dpr.yaml
+
+#sentence-transformers/facebook-dpr-question_encoder-single-nq-base
+
+retrieval_method: dpr
+retrieval_model: facebook/dpr-question_encoder-single-nq-base
+
+dim: 768
+metric: ip                 # cosine | ip | l2
+pooling_method: cls        # cls | mean
+normalize_embeddings: false
+use_sentence_transformer: True
+device: cuda:0
+use_fp16: true

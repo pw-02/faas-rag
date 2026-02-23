@@ -5,4 +5,8 @@ generator_model: meta-llama/Meta-Llama-3.1-8B-Instruct #Meta-Llama-3-8B-Instruct
 generator_max_input_length: 4096
 generator_batch_size: 1
 
-
+generation_params:
+  do_sample: false
+  temperature: 0.2
+  top_p: 0.9
+  max_tokens: 32

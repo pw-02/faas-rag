@@ -1,10 +1,12 @@
 import os
 from typing import Any, Dict, Optional
 from pwrag.args.args import AppConfig
+from pwrag.dataset import dataset
 from pwrag.evaluator.metrics import BaseMetric
 from pwrag.dataset.dataset import Item
 import os
 import json
+import csv
 
 class Evaluator:
     """Evaluator is used to summarize the results of all metrics."""
@@ -96,8 +98,6 @@ class Evaluator:
 
         data.save(save_path)
 
-    # pwrag/evaluator/evaluator.py
-
     def start_streaming(
         self,
         output_name: str = "item_results.jsonl",
@@ -105,13 +105,6 @@ class Evaluator:
         report_every: int = 10,
         overwrite: bool = False,
     ) -> None:
-        """
-        Initialize streaming evaluation bookkeeping + output targets.
-
-        Output format is inferred from extension:
-          - *.jsonl -> JSON Lines (one JSON per line)
-          - anything else (e.g. *.csv) -> CSV
-        """
         os.makedirs(self.save_dir, exist_ok=True)
 
         self._stream_report_every = report_every
@@ -123,23 +116,12 @@ class Evaluator:
 
         ext = os.path.splitext(self._stream_output_path)[1].lower()
         self._stream_format = "jsonl" if ext == ".jsonl" else "csv"
-        self._csv_header_written = False  # tracked per run (in-memory)
 
         if overwrite and os.path.exists(self._stream_output_path):
             os.remove(self._stream_output_path)
 
-    def _append_jsonl(self, path: str, obj: Dict[str, Any]) -> None:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(obj, ensure_ascii=False) + "\n")
-
     def _flatten_for_csv(self, record: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        CSV can't store nested dicts cleanly, so we flatten:
-          metrics: {"em": 1, "f1": 0.2} -> metrics.em=1, metrics.f1=0.2
-
-        Also stringify lists/dicts for safety (golden_answers/choices may be lists).
-        """
-        flat: Dict[str, Any] = {}
+        flat = {}
         for k, v in record.items():
             if isinstance(v, dict):
                 for kk, vv in v.items():
@@ -150,38 +132,28 @@ class Evaluator:
                 flat[k] = v
         return flat
 
-    def _append_csv(self, path: str, record: Dict[str, Any]) -> None:
-        flat = self._flatten_for_csv(record)
-
-        file_exists = os.path.exists(path)
-        # If file exists but we're in a fresh run, we can still write header if file is empty.
-        file_empty = (os.path.getsize(path) == 0) if file_exists else True
-        write_header = (not file_exists) or file_empty
-
-        with open(path, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=list(flat.keys()))
-            if write_header:
-                writer.writeheader()
-            writer.writerow(flat)
-
     def _append_record(self, record: Dict[str, Any]) -> None:
         if self._stream_format == "jsonl":
-            self._append_jsonl(self._stream_output_path, record)
+            with open(self._stream_output_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
         else:
-            self._append_csv(self._stream_output_path, record)
+            flat = self._flatten_for_csv(record)
+            write_header = not os.path.exists(self._stream_output_path)
+            with open(self._stream_output_path, "a", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=list(flat.keys()))
+                if write_header:
+                    writer.writeheader()
+                writer.writerow(flat)
 
     def log_item(self, item, item_metrics: Dict[str, Any]) -> None:
-        """Update running stats and write per-item record to JSONL or CSV."""
         self._stream_n += 1
 
-        # update running sums
         for k, v in item_metrics.items():
             try:
                 self._stream_sum[k] = self._stream_sum.get(k, 0.0) + float(v)
             except Exception:
                 continue
 
-        # record (works for both jsonl/csv; csv gets flattened)
         record = {
             "id": getattr(item, "id", None),
             "question": getattr(item, "question", None),
@@ -193,28 +165,32 @@ class Evaluator:
 
         self._append_record(record)
 
-    def maybe_report(self) -> Optional[Dict[str, float]]:
-        """Print running averages every N items. Returns averages when printed."""
-        n = getattr(self, "_stream_n", 0)
+    def maybe_report(self, pbar=None) -> Optional[Dict[str, float]]:
+        n = self._stream_n
         if n == 0:
             return None
+
         if self._stream_report_every and (n % self._stream_report_every == 0):
             avg = {k: self._stream_sum[k] / n for k in self._stream_sum}
-            print(f"\nAfter {n} items, running averages: {avg}\n")
+
+            # show inside tqdm bar instead of printing
+            if pbar is not None:
+                # keep it compact
+                postfix = {k: f"{v:.3f}" for k, v in avg.items()}
+                pbar.set_postfix(postfix)
+
             return avg
+
         return None
 
-    def finalize_streaming(self) -> Dict[str, float]:
-        """Finalize streaming and optionally save summary metrics."""
-        n = getattr(self, "_stream_n", 0)
+    def finalize_streaming(self, dataset) -> Dict[str, float]:
+        n = self._stream_n
         summary = {k: (self._stream_sum[k] / n) for k in self._stream_sum} if n else {}
-
-        print("\n==== FINAL SUMMARY ====")
-        print(summary)
-        print("=======================\n")
 
         if self.save_summary_metrics:
             self.save_metric_score(summary, file_name=self._stream_summary_name)
+        
+        # if self.save_sample_metrics: 
+        #     self.save_data(dataset, file_name="intermediate_data_streaming.json")
 
         return summary
-    

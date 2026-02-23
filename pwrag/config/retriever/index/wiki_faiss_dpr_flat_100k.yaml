@@ -1,0 +1,14 @@
+name: wiki_dpr_flat_100k
+
+index_path: s3://vectorindexes/wiki-dpr/faiss_wiki_dpr/flat_100k/index_psgs_w100_nq_no_index_flat_ip_100000.faiss
+corpus_path: s3://vectorindexes/wiki-dpr/wiki-passages/100k/meta_psgs_w100_nq_no_index_100000_text.jsonl
+
+retrieval_model: sentence-transformers/facebook-dpr-question_encoder-single-nq-base
+
+retrieval_topk: 5
+
+nprobe: null
+ef_search: null
+
+normalize_embeddings: false
+use_faiss_gpu: false

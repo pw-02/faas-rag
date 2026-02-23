@@ -17,3 +17,8 @@ maturin
 # hf auth login
 openai
 vllm
+Stemmer
+bm25s
+PyStemmer
+# seismic
+langid

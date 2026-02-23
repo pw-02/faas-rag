@@ -1,0 +1,3 @@
+# config/retriever/corpus/wiki_21m.yaml
+name: wiki_21m
+corpus_path: /data/wiki/wiki_21m.jsonl

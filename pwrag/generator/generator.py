@@ -186,7 +186,7 @@ class HFCausalLMGenerator(BaseGenerator):
         generated_token_logits = []
 
         import torch
-        for idx in trange(0, len(input_list), batch_size, desc="Generation process: "):
+        for idx in trange(0, len(input_list), batch_size, desc="Generation process: ", disable=True):
             with torch.inference_mode():
                 torch.cuda.empty_cache()
                 batched_prompts = input_list[idx : idx + batch_size]

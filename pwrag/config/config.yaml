@@ -1,8 +1,13 @@
 defaults:
-  - retriever: wiki_faiss_dpr_ivf_100k
-  #, llama_13_8B_instruct, llama_70b_chat, gpt-3.5-turbo
+  # - retriever: wiki_faiss_dpr_ivf_100k #, llama_13_8B_instruct, llama_70b_chat, gpt-3.5-turbo
   - generator: qwen2_0_5b_instruct 
   - dataset: nq
+  # - retriever: base
+  - retriever/pipeline: dense
+  - retriever/corpus: wiki_100k
+  - retriever/embedder: dpr
+  - retriever/index: wiki_dpr_hnsw_100k
+  - retriever/search: topk
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled
   - _self_
@@ -15,10 +20,10 @@ metrics: ["em", "f1", "acc", "precision", "recall"]
 save_dir: results
 save_sample_metrics: true
 save_summary_metrics: true
+
 max_sample_num: 500  # number of samples to test (only work in dev/test split), if None, test all samples
 random_sample: False # whether to randomly sample the test samples
 is_reasoning: false
-
 
 seed: 2024
 

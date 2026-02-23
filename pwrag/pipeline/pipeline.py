@@ -22,7 +22,7 @@ class BasicPipeline:
         """The overall inference process of a RAG framework."""
         pass
 
-    def run_single(self, sample):
+    def run(self, question):
         """The inference process of a single sample."""
         pass
 
@@ -43,7 +43,7 @@ class LLMOnlyPipeline(BasicPipeline):
         else:
             self.generator = generator
     
-    def run_single(self, question, return_dict=False, return_scores=False):
+    def run(self, question, return_dict=False, return_scores=False):
         input_prompts = [self.prompt_template.get_string(question=question)]
         predictions = self.generator.generate(input_prompts, return_dict=return_dict, return_scores=return_scores)
         return predictions
@@ -56,27 +56,40 @@ class LLMOnlyPipeline(BasicPipeline):
             results.append(predictions)
         return results
     
-# class SequentialPipeline(BasicPipeline):
-#     """The pipeline runs the retrieval, generation and evaluation process sequentially."""
-#     def __init__(self, config, prompt_template=None, retriever=None, generator=None, cache=None):
-#         super().__init__(config, prompt_template)
-#         if generator is None:
-#             self.generator = get_generator(config)
-#         else:
-#             self.generator = generator
+class SequentialPipeline(BasicPipeline):
+    """The pipeline runs the retrieval, generation and evaluation process sequentially."""
+    def __init__(self, config, prompt_template=None, retriever=None, generator=None, cache=None):
+        super().__init__(config, prompt_template)
         
-#         if retriever is None:
-#             self.retriever = get_retriever(config)
-#         else:
-#             self.retriever = retriever
+        if retriever is None:
+            self.retriever = get_retriever(config)
+        else:
+            self.retriever = retriever
         
-#         if cache is None:
-#             self.cache = None
-#         else:
-#             self.cache = cache
+        if generator is None:
+            self.generator = get_generator(config)
+        else:
+            self.generator = generator
 
-#     def naive_run(self, sample, do_eval=True):
-#         """The inference process of a single sample without RAG."""
-#         pass
+        if cache is None:
+            self.cache = None
+        else:
+            self.cache = cache
+    
+    def run(self, question, return_dict=False, return_scores=False):
+        """The inference process of a single sample."""
+        # Step 1: Retrieval
+        retrieved_docs = self.retriever.search(question)
+
+        # Step 2: Generation
+        input_prompts = [self.prompt_template.get_string(question=question, retrieved_docs=retrieved_docs)]
+        predictions = self.generator.generate(input_prompts, return_dict=return_dict, return_scores=return_scores)
+        
+        return predictions
+
+
+    def naive_run(self, sample, do_eval=True):
+        """The inference process of a single sample without RAG."""
+        pass
         
 
