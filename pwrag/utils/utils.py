@@ -75,11 +75,26 @@ def get_reranker(config):
     #     return getattr(importlib.import_module("flashrag.retriever"), "BiReranker")(config)
     raise NotImplementedError("Reranker is not supported yet.")
 
+
+def get_cache(config: AppConfig):    # if config.retriever.pipeline.use_cache:
+    #     return getattr(importlib.import_module("flashrag.retriever"), "CacheManager")(config)
+    if config.retriever.cache.type == "proximity":
+        from pwrag.retriever.caches import ProximityCache
+        return ProximityCache(
+            policy=config.retriever.cache.proximity.policy,
+            tolerance=config.retriever.cache.proximity.tolerance,
+            capacity=config.retriever.cache.proximity.capacity,
+            lsh_bucket_capacity=config.retriever.cache.proximity.lsh_bucket_capacity,
+            lsh_num_hashes=config.retriever.cache.proximity.lsh_num_hashes,
+            dim=config.retriever.embedder.dim,
+            seed=config.seed
+        )
+
+    raise NotImplementedError("Cache is not supported yet.")
+
 def get_refiner(config):
     pass
 
 def get_judger(config):
     pass
 
-def get_cache(config):
-    pass

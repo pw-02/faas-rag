@@ -1,0 +1,7 @@
+type: proximity
+proximity:
+  policy: fifo # options: fifo, lru, lsh_fifo, lsh_lru
+  tolerance: 0.8
+  capacity: 10
+  lsh_bucket_capacity: 5
+  lsh_num_hashes: 128

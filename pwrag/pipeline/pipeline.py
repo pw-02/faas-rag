@@ -54,7 +54,7 @@ class SequentialPipeline(BasicPipeline):
         
         super().__init__(config, prompt_template)
         self.pipeline_name = "SequentialPipeline"
-        
+
         if retriever is None:
             self.retriever = get_retriever(config)
         else:
@@ -74,9 +74,11 @@ class SequentialPipeline(BasicPipeline):
         """The inference process of a single sample."""
         # Step 1: Retrieval
         metrics: dict[str, float] = {}
+        
         retrieval_result = self.retriever.search(question, metrics=metrics, return_score=False)
         with timed(metrics, "create_prompt(s)"):
             input_prompts = [self.prompt_template.get_string(question=question, retrieval_result=retrieval_result)]
+        
         # Step 2: Generation
         with timed(metrics, "generation_time(s)"):
             predictions,usage  = self.generator.generate(input_prompts, 

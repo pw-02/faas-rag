@@ -11,87 +11,14 @@ import faiss
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pwrag.args.args import AppConfig
-from pwrag.utils.utils import get_reranker
+from pwrag.utils.utils import get_reranker, get_cache
 from pwrag.retriever.utils import inspect_faiss_index, load_corpus, load_docs, convert_numpy, judge_image, judge_zh, unwrap_faiss_index
 from pwrag.retriever.encoder import Encoder, STEncoder, ClipEncoder
+from pwrag.retriever.caches import ProximityCache
 import torch
 
 # if get_device() == "cpu":
-faiss.omp_set_num_threads(1)
-
-def cache_manager(func):
-    """
-    Decorator used for retrieving document cache.
-    With the decorator, The retriever can store each retrieved document as a file and reuse it.
-    """
-
-    @functools.wraps(func)
-    def wrapper(self, query=None, metrics=None, num=None, return_score=True):
-        if num is None:
-            num = self.topk
-        if self.use_cache:
-            if isinstance(query, str):
-                new_query_list = [query]
-            else:
-                new_query_list = query
-
-            no_cache_query = []
-            cache_results = []
-            for new_query in new_query_list:
-                if new_query in self.cache:
-                    cache_res = self.cache[new_query]
-                    if len(cache_res) < num:
-                        warnings.warn(f"The number of cached retrieval results is less than topk ({num})")
-                    cache_res = cache_res[:num]
-                    # separate the doc score
-                    doc_scores = [item["score"] for item in cache_res]
-                    cache_results.append((cache_res, doc_scores))
-                else:
-                    cache_results.append(None)
-                    no_cache_query.append(new_query)
-
-            if no_cache_query != []:
-                # use batch search without decorator
-                no_cache_results, no_cache_scores = self._batch_search_with_rerank(no_cache_query, num, True)
-                no_cache_idx = 0
-                for idx, res in enumerate(cache_results):
-                    if res is None:
-                        assert new_query_list[idx] == no_cache_query[no_cache_idx]
-                        cache_results[idx] = (
-                            no_cache_results[no_cache_idx],
-                            no_cache_scores[no_cache_idx],
-                        )
-                        no_cache_idx += 1
-
-            results, scores = (
-                [t[0] for t in cache_results],
-                [t[1] for t in cache_results],
-            )
-
-        else:
-            results, scores = func(self, query=query, metrics=metrics, num=num, return_score=True)
-
-        if self.save_cache:
-            # merge result and score
-            save_results = results.copy()
-            save_scores = scores.copy()
-            if isinstance(query, str):
-                query = [query]
-                if "batch" not in func.__name__:
-                    save_results = [save_results]
-                    save_scores = [save_scores]
-            for new_query, doc_items, doc_scores in zip(query, save_results, save_scores):
-                for item, score in zip(doc_items, doc_scores):
-                    item["score"] = score
-                self.cache[new_query] = doc_items
-
-        if return_score:
-            return results, scores
-        else:
-            return results
-
-    return wrapper
-
+# faiss.omp_set_num_threads(1)
 
 def rerank_manager(func):
     """
@@ -135,33 +62,28 @@ class BaseRetriever:
         self.update_additional_setting()
 
     def update_base_setting(self):
-        self.retrieval_method = self._config.retriever.embedder.retrieval_method
-        self.topk = self._config.retriever.search.retrieval_topk
-        self.device = self._config.retriever.embedder.device if "cuda" in self._config.retriever.embedder.device and torch.cuda.is_available() else "cpu"
+        self.retrieval_method = self.config.retriever.embedder.retrieval_method
+        self.topk = self.config.retriever.search.retrieval_topk
+        self.device = self.config.retriever.embedder.device if "cuda" in self.config.retriever.embedder.device and torch.cuda.is_available() else "cpu"
 
-        self.index_path = self._config.retriever.index.index_path
-        self.corpus_path = self._config.retriever.corpus.corpus_path
+        self.index_path = self.config.retriever.index.index_path
+        self.corpus_path = self.config.retriever.corpus.corpus_path
 
-        self.save_cache = None
-        self.use_cache = False
-        self.cache_path = None
-        self.use_reranker = self._config.retriever.pipeline.use_reranker
+        self.use_cache = self.config.retriever.pipeline.use_cache
+
+        if self.use_cache:
+            self.cache = get_cache(self.config)
+        else:
+            self.cache = None
+
+        self.use_reranker = self.config.retriever.pipeline.use_reranker
         if self.use_reranker:
-            self.reranker = get_reranker(self._config)
+            self.reranker = get_reranker(self.config)
         else:
             self.reranker = None
 
-        if self.save_cache:
-            self.cache_save_path = os.path.join(self._config["save_dir"], "retrieval_cache.json")
-            self.cache = {}
-
-        if self.use_cache:
-            assert self.cache_path is not None
-            with open(self.cache_path, "r") as f:
-                self.cache = json.load(f)
-        
         self.silent = self._config["silent_retrieval"] if "silent_retrieval" in self._config else True
-
+        
     def update_additional_setting(self):
         pass
 
@@ -205,12 +127,10 @@ class BaseTextRetriever(BaseRetriever):
     def __init__(self, config):
         super().__init__(config)
 
-    @cache_manager
     @rerank_manager
     def search(self, *args, **kwargs):
         return self._search(*args, **kwargs)
 
-    @cache_manager
     @rerank_manager
     def batch_search(self, *args, **kwargs):
         return self._batch_search(*args, **kwargs)
@@ -473,6 +393,16 @@ class DenseRetriever(BaseTextRetriever):
             metrics["encode_query_time(s)"] = time.perf_counter() - t0
         # Search
         t1 = time.perf_counter()
+
+        #check cache
+        if self.use_cache and self.cache is not None:
+            cache_results = self.cache.get(query_emb)
+            if cache_results is not None:
+                if return_score:
+                    return cache_results, [None] * len(cache_results)
+                else:
+                    return cache_results
+
         scores, idxs = self.index.search(query_emb, k=k)
         if metrics is not None:
             metrics["search_time(s)"] = time.perf_counter() - t1

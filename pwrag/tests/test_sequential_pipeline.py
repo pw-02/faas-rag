@@ -11,16 +11,13 @@ from pwrag.evaluator.evaluator import Evaluator
 def main(cfg: AppConfig):
 
     evaluator = Evaluator(cfg)
-
     dataset = Dataset(cfg)
-    
     pipeline = SequentialPipeline(cfg)
 
     pbar = tqdm(dataset.data, desc="Sequential Pipeline Test", unit="item")
     for item in pbar:
-        retrieved_docs, pred = pipeline.run(item.question)
+        pred = pipeline.run(item.question)
         item.update_output("pred", pred)
-        item.update_output("retrieved_docs", retrieved_docs)
         eval_result = evaluator.evaluate_item(item)
         print(f"Question: {item.question}")
         print(f"Golden Answer: {item.golden_answers}")

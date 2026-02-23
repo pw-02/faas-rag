@@ -11,6 +11,23 @@ class GeneratorConfig:
     generator_batch_size: int = 2
     generation_params: Optional[Dict[str, Any]] = None
 
+
+# ---- cache ----
+@dataclass
+class ProximityCacheConfig:
+    type: str = "proximity"  # options: proximity, exact, none
+    policy: str = "fifo" # options: fifo, lru, lsh_fifo, lsh_lru
+    tolerance: float = 0.8
+    capacity: int = 10
+    lsh_bucket_capacity: int = 5
+    lsh_num_hashes: int = 128
+
+@dataclass
+class RetrieverCacheConfig:
+    type: str = "proximity"  # options: proximity, exact, none
+    proximity: ProximityCacheConfig = field(default_factory=ProximityCacheConfig)
+
+
 # ---- Retriever sub-configs ----
 @dataclass
 class RetrieverCorpusConfig:
@@ -49,6 +66,7 @@ class RetrieverSearchConfig:
 @dataclass
 class RetrieverPipelineConfig:
     type: str = "dense"
+    use_cache: bool = False
     use_reranker: bool = False
     reranker_model: Optional[str] = None
     reranker_topk: int = 50
@@ -63,6 +81,7 @@ class RetrieverConfig:
     embedder: RetrieverEmbedderConfig = field(default_factory=RetrieverEmbedderConfig)
     index: RetrieverIndexConfig = field(default_factory=RetrieverIndexConfig)
     search: RetrieverSearchConfig = field(default_factory=RetrieverSearchConfig)
+    cache: RetrieverCacheConfig = field(default_factory=RetrieverCacheConfig)
 
 # ---- Dataset ----
 @dataclass
