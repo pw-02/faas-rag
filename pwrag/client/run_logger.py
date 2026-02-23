@@ -48,6 +48,7 @@ class RunLogger:
         fsync: bool = False,
     ):
        # run name
+        self.run_config:AppConfig = config
         self.log_items = bool(log_items)
         self.flush_every = int(flush_every)
         self.fsync = bool(fsync)
@@ -163,9 +164,11 @@ class RunLogger:
 
         summary = {
             "run_name": self.run_name,
-            "n": self.n,
-            "em_accuracy": (self.em_correct / self.n) if self.n else 0.0,
-            "log_items": self.log_items,
+            "dataset": self.run_config.dataset.dataset_path,
+            "num_samples": self.n,
+            # "retrieval_topk": self.run_config.retriever.search.retrieval_topk,
+            # "em_accuracy": (self.em_correct / self.n) if self.n else 0.0,
+            # "log_items": self.log_items,
             "jsonl_path": self.jsonl_path if self.log_items else "",
         }
 
