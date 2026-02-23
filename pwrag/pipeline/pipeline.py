@@ -26,6 +26,8 @@ class LLMOnlyPipeline(BasicPipeline):
     def __init__(self, config, prompt_template=None, generator=None, return_metrics=False):
         
         super().__init__(config, prompt_template)
+
+        self.pipeline_name = "LLMOnlyPipeline"
         
         if generator is None:
             self.generator = get_generator(config)
@@ -45,11 +47,14 @@ class LLMOnlyPipeline(BasicPipeline):
         return predictions
     
 class SequentialPipeline(BasicPipeline):
+
     """The pipeline runs the retrieval, generation and evaluation process sequentially."""
     def __init__(self, config, prompt_template=None, 
                  retriever=None, generator=None, cache=None):
         
         super().__init__(config, prompt_template)
+
+        self.pipeline_name = "SequentialPipeline"
         
         if retriever is None:
             self.retriever = get_retriever(config)
@@ -71,7 +76,7 @@ class SequentialPipeline(BasicPipeline):
         # Step 1: Retrieval
         metrics: dict[str, float] = {}
 
-        retrieval_result = self.retriever.search(question, metrics=metrics)
+        retrieval_result = self.retriever.search(question, metrics=metrics, return_score=False)
         
         with timed(metrics, "create_prompt(s)"):
             input_prompts = [self.prompt_template.get_string(question=question, retrieval_result=retrieval_result)]

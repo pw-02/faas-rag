@@ -26,7 +26,7 @@ def cache_manager(func):
     """
 
     @functools.wraps(func)
-    def wrapper(self, query=None, num=None, return_score=True):
+    def wrapper(self, query=None, metrics=None, num=None, return_score=True):
         if num is None:
             num = self.topk
         if self.use_cache:
@@ -69,7 +69,7 @@ def cache_manager(func):
             )
 
         else:
-            results, scores = func(self, query=query, num=num, return_score=True)
+            results, scores = func(self, query=query, metrics=metrics, num=num, return_score=True)
 
         if self.save_cache:
             # merge result and score
@@ -99,8 +99,8 @@ def rerank_manager(func):
     """
 
     @functools.wraps(func)
-    def wrapper(self, query, num=None, return_score=False):
-        results, scores = func(self, query=query, num=num, return_score=True)
+    def wrapper(self, query, metrics=None, num=None, return_score=False):
+        results, scores = func(self, query=query, metrics=metrics, num=num, return_score=True)
         if self.use_reranker:
             results, scores = self.reranker.rerank(query, results)
             if "batch" not in func.__name__:
@@ -276,7 +276,7 @@ class BM25Retriever(BaseTextRetriever):
         r"""Check if the index contains document content"""
         return self.searcher.doc(0).raw() is not None
 
-    def _search(self, query: str, num: int = None, return_score=False) -> List[Dict[str, str]]:
+    def _search(self, query: str, metrics: dict = None, num: int = None, return_score=False) -> List[Dict[str, str]]:
         if num is None:
             num = self.topk
         if self.backend == "pyserini":
@@ -470,7 +470,7 @@ class DenseRetriever(BaseTextRetriever):
         # Encode
         query_emb = self.encoder.encode(query)
         if metrics is not None:
-            metrics["encode_time(s)"] = time.perf_counter() - t0
+            metrics["encode_query_time(s)"] = time.perf_counter() - t0
         # Search
         t1 = time.perf_counter()
         scores, idxs = self.index.search(query_emb, k=k)

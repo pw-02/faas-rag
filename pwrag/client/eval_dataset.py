@@ -36,11 +36,13 @@ def run_eval(
 @hydra.main(config_path="../config", config_name="config", version_base=None)
 def main(cfg: AppConfig):
     print(OmegaConf.to_yaml(cfg, resolve=True))
-    run_logger = RunLogger(cfg, overwrite=True, report_every=10)
     evaluator = Evaluator(cfg)
     dataset = Dataset(cfg)
-    pipeline = LLMOnlyPipeline(cfg)
-    # pipeline = SequentialPipeline(cfg)
+    # pipeline = LLMOnlyPipeline(cfg)
+    pipeline = SequentialPipeline(cfg)
+
+    run_logger = RunLogger(cfg, pipeline_name=pipeline.pipeline_name, overwrite=True, report_every=10)
+
 
     run_eval(
         cfg=cfg,

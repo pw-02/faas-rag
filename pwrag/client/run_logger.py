@@ -40,6 +40,7 @@ class RunLogger:
     def __init__(
         self,
         config: AppConfig,
+        pipeline_name: Optional[str] = "",
         overwrite: bool = True,
         report_every: int = 10,
         log_items: bool = True,
@@ -49,6 +50,7 @@ class RunLogger:
     ):
        # run name
         self.run_config:AppConfig = config
+        self.pipeline_name = pipeline_name
         self.log_items = bool(log_items)
         self.flush_every = int(flush_every)
         self.fsync = bool(fsync)
@@ -57,6 +59,7 @@ class RunLogger:
             config.save_dir,
             config.dataset.dataset_name,
             config.generator.name,
+            # self.pipeline_name,
             # datetime.now().strftime("%Y%m%d_%H%M%S")
         )
         os.makedirs(self.save_dir, exist_ok=True)
@@ -166,6 +169,7 @@ class RunLogger:
             "run_name": self.run_name,
             "dataset": self.run_config.dataset.dataset_path,
             "num_samples": self.n,
+            "pipeline": self.pipeline_name,
             # "retrieval_topk": self.run_config.retriever.search.retrieval_topk,
             # "em_accuracy": (self.em_correct / self.n) if self.n else 0.0,
             # "log_items": self.log_items,
