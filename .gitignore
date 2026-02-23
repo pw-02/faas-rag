@@ -15,6 +15,7 @@ data/indexes/wiki-dpr/hnsw_100k
 data/indexes/wiki-dpr/wiki-passages
 backups/lambda/
 artifacts/
+corpus/
 *.log*
 data/datasets/mmlu
 data/datasets/long_form

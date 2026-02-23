@@ -1,6 +1,6 @@
 name: wiki_dpr_hnsw_100k
 index_type: hnsw
-index_path: artifacts/wiki-dpr/faiss_wiki_dpr/hnsw_100k/index_psgs_w100_nq_no_index_hnsw_ip_100000.faiss
+index_path: corpus/faiss_wiki_dpr/hnsw_100k/index_psgs_w100_nq_no_index_hnsw_ip_100000.faiss
 metric: ip
 ef_search: 64
 nprobe: null # not applicable for hnsw

@@ -7,10 +7,18 @@ http://134.197.95.82:8000/v1/chat/completions
 CUDA_VISIBLE_DEVICES=0 vllm serve --config faasrag/conf/vllm_server.yaml
 
 export PYTHONPATH=".:$PYTHONPATH"
+python data/indexes/wiki-dpr/build_many.py
 python data/datasets/download.py
 python faasrag/experiments/sweep_runner.py
 
 faasrag/client/evaluate_dataset.py
 
 
-python  adarag/run_baselines.py --faiss_indexes faiss_wiki_dpr/ivf_100k faiss_wiki_dpr/ivf_500k faiss_wiki_dpr/ivf_1m faiss_wiki_dpr/ivf_2_5m faiss_wiki_dpr/ivf_5m
+
+scp -r pwatters@ret.cse.unr.edu:/home/pwatters/project/faas-rag/artifacts/wiki-dpr/faiss_wiki_dpr/hnsw_100k C:\Users\pw\projects\faas-rag\corpus\faiss_wiki_dpr\hnsw_100k
+
+scp -r pwatters@ret.cse.unr.edu:/home/pwatters/project/faas-rag/artifacts/wiki-dpr/faiss_wiki_dpr/flat_100k C:\Users\pw\projects\faas-rag\corpus\faiss_wiki_dpr\flat_100k
+
+scp -r pwatters@ret.cse.unr.edu:/home/pwatters/project/faas-rag/artifacts/wiki-dpr/faiss_wiki_dpr/ivf_100k C:\Users\pw\projects\faas-rag\corpus\faiss_wiki_dpr\ivf_100k
+
+
