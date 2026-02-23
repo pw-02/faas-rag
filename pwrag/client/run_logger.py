@@ -170,9 +170,7 @@ class RunLogger:
             "dataset": self.run_config.dataset.dataset_path,
             "num_samples": self.n,
             "pipeline": self.pipeline_name,
-            # "retrieval_topk": self.run_config.retriever.search.retrieval_topk,
-            # "em_accuracy": (self.em_correct / self.n) if self.n else 0.0,
-            # "log_items": self.log_items,
+            "retrieval_topk": self.run_config.retriever.search.retrieval_topk,
             "jsonl_path": self.jsonl_path if self.log_items else "",
         }
 
