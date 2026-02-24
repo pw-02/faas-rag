@@ -12,13 +12,13 @@ defaults:
   - override hydra/hydra_logging: disabled
   - _self_
 
+save_dir: results
 run_name: null
 # ------------
 generator_device: cuda:0
 retriever_embedder_device: cuda:0
 
 metrics: ["em", "f1", "acc", "precision", "recall"]
-save_dir: results
 save_sample_metrics: false
 save_summary_metrics: false
 

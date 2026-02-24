@@ -1,0 +1,16 @@
+python pwrag/client/eval_dataset.py save_dir=results/nq/wiki_faiss_dpr_ivf_21m/nocache retriever/cache=none retriever/index=wiki_faiss_dpr_ivf_21m
+python pwrag/client/eval_dataset.py save_dir=results/nq/wiki_faiss_dpr_ivf_21m/proximity retriever/cache=proximity retriever/index=wiki_faiss_dpr_ivf_21m
+
+python pwrag/client/eval_dataset.py save_dir=results/nq/wiki_faiss_dpr_hnsw_21m/nocache retriever/cache=none retriever/index=wiki_faiss_dpr_hnsw_21m
+python pwrag/client/eval_dataset.py save_dir=results/nq/wiki_faiss_dpr_hnsw_21m/proximity retriever/cache=proximity retriever/index=wiki_faiss_dpr_hnsw_21m
+
+python pwrag/client/eval_dataset.py save_dir=results/nq/wiki_faiss_e5_flat_21m_inner/nocache retriever/cache=none retriever/index=wiki_faiss_e5_flat_21m_inner
+python pwrag/client/eval_dataset.py save_dir=results/nq/wiki_faiss_e5_flat_21m_inner/proximity retriever/cache=proximity retriever/index=wiki_faiss_e5_flat_21m_inner
+
+
+python pwrag/client/eval_dataset.py -m \
+  dataset=nq \
+  retriever/index=wiki_dpr_ivf_21m,wiki_dpr_hnsw_21m,wiki_dpr_flat_21m \
+  retriever/cache=none,proximity \
+  hydra.sweep.dir=results/nq \
+  hydra.sweep.subdir='${retriever.index}/${retriever.cache}'
