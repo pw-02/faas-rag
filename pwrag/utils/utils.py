@@ -1,5 +1,3 @@
-from flask import config
-import torch
 from pwrag.args.args import AppConfig
 from transformers import AutoConfig
 from contextlib import contextmanager
