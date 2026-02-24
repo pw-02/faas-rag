@@ -27,7 +27,7 @@ def run_eval(
         item.update_output("pred", pred)
         acc_metrics = evaluator.evaluate_item(item)
         item.update_metrics("acc_metrics", acc_metrics)
-        item.update_metrics("cost_metrics", cost_metrics)
+        item.update_metrics("metrics", cost_metrics)
         run_logger.log_item(item.to_dict())
         run_logger.maybe_report(pbar)
     run_logger.finalize()

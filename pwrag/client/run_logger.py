@@ -160,6 +160,7 @@ class RunLogger:
             "encode_query_time(s)": "encode_q(s)",
             "search_time(s)": "search(s)",
             "generation_time(s)": "gen(s)",
+            "cache_hit": "cache_hits",
         }
         
         for key in ["encode_query_time(s)", "search_time(s)", "generation_time(s)"]:
