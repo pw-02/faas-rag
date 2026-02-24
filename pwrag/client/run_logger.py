@@ -130,7 +130,7 @@ class RunLogger:
 
         metrics = record.get("metrics", {}) or {}
         acc = metrics.get("acc_metrics", {}) or {}
-        cost = metrics.get("cost_metrics", {}) or {}
+        cost = metrics.get("metrics", {}) or {}
 
         if isinstance(acc, dict):
             for k, v in acc.items():
