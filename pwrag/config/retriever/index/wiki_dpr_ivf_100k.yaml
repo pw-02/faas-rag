@@ -1,7 +1,8 @@
 name: wiki_dpr_ivf_100k
 index_type: ivf
-index_path: artifacts/wiki-dpr/faiss_wiki_dpr/ivf_100k/index_psgs_w100_nq_no_index_ivf_ip_100000.faiss
+index_path: corpus/wiki-dpr/faiss_wiki_dpr/ivf_100k/index_psgs_w100_nq_no_index_ivf_ip_100000.faiss
 metric: ip
 ef_search: null # not applicable for ivf
 nprobe: 16 # not applicable for hnsw
 use_faiss_gpu: false
+
