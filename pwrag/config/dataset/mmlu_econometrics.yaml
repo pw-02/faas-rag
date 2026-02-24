@@ -1,0 +1,3 @@
+dataset_name: "mmlu_econometrics"
+dataset_path: "data/datasets/mmlu/econometrics/dev.jsonl"
+# split: "validation"

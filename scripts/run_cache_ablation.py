@@ -8,29 +8,37 @@ INDEXES = [
     "wiki_dpr_flat_21m",
 ]
 
-for idx in INDEXES:
-    print(f"\n=== Running index: {idx} (no cache) ===")
+DATSETS = [
+    # "mmlu_econometrics",
+    # "nq",
+    "repeated_question",
+]
 
-    subprocess.run(
-        [
-            "python",
-            "pwrag/client/eval_dataset.py",
-            f"retriever/index={idx}",
-            "retriever/cache=none",
-            f"save_dir=results/nq/{idx}/none",
-        ],
-        check=True,
-    )
+for dataset in DATSETS:
+    print(f"\n=== Running dataset: {dataset} ===")
+    for idx in INDEXES:
+        print(f"\n=== Running index: {idx} (no cache) ===")
 
-    print(f"\n=== Running index: {idx} (proximity cache) ===")
+        subprocess.run(
+            [
+                "python",
+                "pwrag/client/eval_dataset.py",
+                f"retriever/index={idx}",
+                "retriever/cache=none",
+                f"save_dir=results/{dataset}/{idx}/none",
+            ],
+            check=True,
+        )
 
-    subprocess.run(
-        [
-            "python",
-            "pwrag/client/eval_dataset.py",
-            f"retriever/index={idx}",
-            "retriever/cache=proximity",
-            f"save_dir=results/nq/{idx}/proximity",
-        ],
-        check=True,
-    )
+        print(f"\n=== Running index: {idx} (proximity cache) ===")
+
+        subprocess.run(
+            [
+                "python",
+                "pwrag/client/eval_dataset.py",
+                f"retriever/index={idx}",
+                "retriever/cache=proximity",
+                f"save_dir=results/{dataset}/{idx}/proximity",
+            ],
+            check=True,
+        )
