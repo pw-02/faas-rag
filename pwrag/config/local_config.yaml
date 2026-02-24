@@ -1,7 +1,7 @@
 defaults:
   # - retriever: wiki_faiss_dpr_ivf_100k #, llama_13_8B_instruct, llama_70b_chat, gpt-3.5-turbo
   - generator:  qwen2_0_5b_instruct #qwen2_0_5b_instruct 
-  - dataset: nq #nq, repeated_question
+  - dataset: repeated_question #nq, repeated_question, mmlu_econometrics
   - retriever/pipeline: dense
   - retriever/corpus: wiki_100k #wiki_100k
   - retriever/embedder: dpr

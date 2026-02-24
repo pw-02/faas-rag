@@ -21,6 +21,10 @@ class Item:
         self.metadata: Dict[str, Any] = item_dict.get("metadata", {})
         self.output: Dict[str, Any] = item_dict.get("output", {})
         self.metrics: Dict[str, Any] = item_dict.get("metrics", {})
+
+        # if len(self.golden_answers) == 0 and "answer" in item_dict and len(self.choices)>0:
+        #     self.golden_answers = [int(item_dict["answer"])]
+
         self.data: Dict[str, Any] = item_dict
 
     def update_output(self, key: str, value: Any) -> None:

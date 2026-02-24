@@ -32,31 +32,34 @@ class BaseMetric:
         """Calculate metric score for a single data sample."""
         return {}, 0.0
     
-    def get_dataset_answer(self, data):
-        if not data.choices:
-            return [data.golden_answers]
-
-        all_choices_list = data.choices
-        golden_choice_idx_list = data.golden_answers
-
-        return [
-            [choices[idx] for idx in idx_list]
-            for choices, idx_list in zip(all_choices_list, golden_choice_idx_list)
-        ]
-    
     # def get_dataset_answer(self, data):
-    #     if any(choice == [] for choice in data.choices):
-    #         golden_answers_list = data.golden_answers
-    #     else:
-    #         # multi-choice dataset
-    #         all_choices_list = data.choices
-    #         golden_choice_idx_list = data.golden_answers
-    #         golden_answers_list = [
-    #             [choices[idx] for idx in idx_list]
-    #             for choices, idx_list in zip(all_choices_list, golden_choice_idx_list)
-    #         ]
+    #     if not data.choices:
+    #         return [data.golden_answers]
 
-    #     return golden_answers_list
+    #     all_choices_list = data.choices
+    #     golden_choice_idx_list = data.golden_answers
+
+    #     resposne = [
+    #         [choices[idx] for idx in idx_list]
+    #         for choices, idx_list in zip(all_choices_list, golden_choice_idx_list)
+    #     ]
+    #     return resposne
+    
+    def get_dataset_answer(self, data):
+        # golden_answers_list = data.golden_answers
+        # return golden_answers_list
+        if any(choice == [] for choice in data.choices):
+            golden_answers_list = data.golden_answers
+        else:
+            # multi-choice dataset
+            all_choices_list = data.choices
+            golden_choice_idx_list = data.golden_answers
+            golden_answers_list = [
+                [choices[idx] for idx in idx_list]
+                for choices, idx_list in zip(all_choices_list, golden_choice_idx_list)
+            ]
+
+        return golden_answers_list
     
     
 class F1_Score(BaseMetric):
@@ -97,7 +100,7 @@ class F1_Score(BaseMetric):
     
     def calculate_metric_for_item(self, item):
         pred = item.pred[0]
-        golden_answers = self.get_dataset_answer(item)[0]
+        golden_answers = self.get_dataset_answer(item)
         metric_result = self.token_level_scores(pred, golden_answers)
         return metric_result, metric_result["f1"]
 

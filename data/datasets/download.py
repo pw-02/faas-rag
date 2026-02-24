@@ -7,13 +7,15 @@ multi_hop_datasets = ["hotpotqa","musique","2wikimultihopqa"]
 long_form_datasets = ["eli5","asqa"]
 multiple_choice_datasets = ["arc","hellaswag","openbookqa"]
 fact_verification_datasets = ["fever"]
+mmlu = ["mmlu"]
 
 category_datasets = {
     "qa": qa_datasets,
     "multi_hop": multi_hop_datasets,
     "long_form": long_form_datasets,
     "multiple_choice": multiple_choice_datasets,
-    "fact_verification": fact_verification_datasets
+    "fact_verification": fact_verification_datasets,
+    "mmlu": mmlu
 }
 
 for category, datasets in category_datasets.items():
