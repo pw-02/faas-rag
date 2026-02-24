@@ -423,7 +423,7 @@ def main() -> None:
         summaries.append(summary)
 
         print(
-            f"{dataset_path}: hit_rate={summary.hit_rate:.3f}, "
+            f"{dataset_path}: n={summary.num_queries}, hit_rate={summary.hit_rate:.3f}, "
             f"avg_overlap={summary.avg_overlap:.3f}, "
             f"qps(measured)={summary.qps_measured:.2f}, "
             f"qps(no_gt)={summary.qps_effective_no_gt:.2f}"
