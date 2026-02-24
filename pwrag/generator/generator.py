@@ -46,7 +46,7 @@ class BaseGenerator:
 
         self.max_input_len = self.config.generator.generator_max_input_length
         self.batch_size = self.config.generator.generator_batch_size
-        self.device = self.config.generator_device
+        self.device = self.config.generator_device if "cuda" in self.config.generator_device and torch.cuda.is_available() else "cpu"
         self.gpu_num = "0" if self.device == "cpu" else self.device.split(":")[1]
 
         # set generation params as a dict not dict config
@@ -86,7 +86,7 @@ class HFCausalLMGenerator(BaseGenerator):
             model = AutoModelForCausalLM.from_pretrained(
                 self.model_path,
                 torch_dtype="auto",
-                device_map="auto",
+                device_map=self.device,
                 trust_remote_code=True,
             )
         else:

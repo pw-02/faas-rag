@@ -64,12 +64,12 @@ class BaseRetriever:
     def update_base_setting(self):
         self.retrieval_method = self.config.retriever.embedder.retrieval_method
         self.topk = self.config.retriever.search.retrieval_topk
-        self.device = self.config.retriever.embedder.device if "cuda" in self.config.retriever.embedder.device and torch.cuda.is_available() else "cpu"
+        self.device = self.config.retriever_embedder_device if "cuda" in self.config.retriever_embedder_device and torch.cuda.is_available() else "cpu"
 
         self.index_path = self.config.retriever.index.index_path
         self.corpus_path = self.config.retriever.corpus.corpus_path
 
-        self.use_cache = self.config.retriever.pipeline.use_cache
+        self.use_cache = self.config.retriever.pipeline.use_cache and self.config.retriever.cache.type != "none"
 
         if self.use_cache:
             self.cache = get_cache(self.config)

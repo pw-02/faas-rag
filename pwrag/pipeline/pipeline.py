@@ -65,10 +65,6 @@ class SequentialPipeline(BasicPipeline):
         else:
             self.generator = generator
 
-        if cache is None:
-            self.cache = None
-        else:
-            self.cache = cache
     
     def run(self, question, return_dict=False, return_scores=False, return_metrics=False):
         """The inference process of a single sample."""

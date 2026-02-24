@@ -23,9 +23,14 @@ class ProximityCacheConfig:
     lsh_num_hashes: int = 128
 
 @dataclass
+class NoneCacheConfig:
+    type: str = "none"
+
+@dataclass
 class RetrieverCacheConfig:
     type: str = "proximity"  # options: proximity, exact, none
     proximity: ProximityCacheConfig = field(default_factory=ProximityCacheConfig)
+    none: NoneCacheConfig = field(default_factory=NoneCacheConfig)
 
 
 # ---- Retriever sub-configs ----
@@ -43,7 +48,7 @@ class RetrieverEmbedderConfig:
     pooling_method: str = "cls"         # cls | mean
     normalize_embeddings: bool = True
     use_sentence_transformer: bool = True
-    device: str = "cpu:0"
+    # device: str = "cpu:0"
     use_fp16: bool = True
 
 
@@ -100,6 +105,7 @@ class AppConfig:
     max_sample_num: Optional[int] = None
     random_sample: bool = False
     generator_device: str = "cuda:0"
+    retriever_embedder_device: str = "cuda:0"
     
     metrics: List[str] = field(default_factory=lambda: ["em", "f1", "acc", "precision", "recall", "input_tokens"])
     save_sample_metrics: bool = False

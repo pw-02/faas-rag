@@ -10,5 +10,4 @@ metric: ip                 # cosine | ip | l2
 pooling_method: cls        # cls | mean
 normalize_embeddings: false
 use_sentence_transformer: True
-device: cuda:0
 use_fp16: true

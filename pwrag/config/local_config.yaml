@@ -1,13 +1,13 @@
 defaults:
   # - retriever: wiki_faiss_dpr_ivf_100k #, llama_13_8B_instruct, llama_70b_chat, gpt-3.5-turbo
-  - generator:  llama_31_8B_instruct #qwen2_0_5b_instruct 
+  - generator:  qwen2_0_5b_instruct #qwen2_0_5b_instruct 
   - dataset: nq #nq, repeated_question
   - retriever/pipeline: dense
-  - retriever/corpus: wiki_21m #wiki_100k
+  - retriever/corpus: wiki_100k #wiki_100k
   - retriever/embedder: dpr
-  - retriever/index: wiki_faiss_dpr_ivf_21m #wiki_dpr_hnsw_100k
+  - retriever/index: wiki_dpr_hnsw_100k #wiki_dpr_hnsw_100k
   - retriever/search: topk
-  - retriever/cache: none # options: null, proximity
+  - retriever/cache: none # options: null, proximity, none
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled
   - _self_
