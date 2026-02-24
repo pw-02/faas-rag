@@ -32,18 +32,18 @@ class BaseMetric:
         """Calculate metric score for a single data sample."""
         return {}, 0.0
     
-    # def get_dataset_answer(self, data):
-    #     if not data.choices:
-    #         return [data.golden_answers]
+    def get_item_answer(self, item):
+        if not item.choices:
+            return item.golden_answers
 
-    #     all_choices_list = data.choices
-    #     golden_choice_idx_list = data.golden_answers
+        all_choices_list = item.choices
+        golden_choice_idx_list = item.golden_answers
 
-    #     resposne = [
-    #         [choices[idx] for idx in idx_list]
-    #         for choices, idx_list in zip(all_choices_list, golden_choice_idx_list)
-    #     ]
-    #     return resposne
+        resposne = [
+            [choices[idx] for idx in idx_list]
+            for choices, idx_list in zip(all_choices_list, golden_choice_idx_list)
+        ]
+        return resposne
     
     def get_dataset_answer(self, data):
         # golden_answers_list = data.golden_answers
@@ -100,7 +100,7 @@ class F1_Score(BaseMetric):
     
     def calculate_metric_for_item(self, item):
         pred = item.pred[0]
-        golden_answers = self.get_dataset_answer(item)
+        golden_answers = self.get_item_answer(item)
         metric_result = self.token_level_scores(pred, golden_answers)
         return metric_result, metric_result["f1"]
 
@@ -193,7 +193,7 @@ class ExactMatch(BaseMetric):
     
     def calculate_metric_for_item(self, item):
         pred = item.pred[0]
-        golden_answers = self.get_dataset_answer(item)[0]
+        golden_answers = self.get_item_answer(item)
         metric_result = {"em": self.calculate_em(pred, golden_answers)}
         return metric_result, metric_result["em"]
 
@@ -239,7 +239,7 @@ class Sub_ExactMatch(BaseMetric):
     
     def calculate_metric_for_item(self, item):
         pred = item.pred[0]
-        golden_answers = self.get_dataset_answer(item)[0]
+        golden_answers = self.get_item_answer(item)
         metric_result = {"acc": self.calculate_sub_em(pred, golden_answers)}
         return metric_result, metric_result["acc"]
 

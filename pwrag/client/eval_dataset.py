@@ -33,7 +33,7 @@ def run_eval(
     run_logger.finalize()
 
 
-@hydra.main(config_path="../config", config_name="local_config", version_base=None) #local_config.yaml, config.yaml
+@hydra.main(config_path="../config", config_name="config", version_base=None) #local_config.yaml, config.yaml
 def main(cfg: AppConfig):
     # print(OmegaConf.to_yaml(cfg, resolve=True))
     evaluator = Evaluator(cfg)
@@ -45,7 +45,9 @@ def main(cfg: AppConfig):
                            pipeline_name=pipeline.pipeline_name, 
                            run_name=cfg.run_name,
                            overwrite=True, 
-                           report_every=10)
+                           report_every=10,
+                           log_items=True,
+                           flush_every=1)
 
     run_eval(
         cfg=cfg,
