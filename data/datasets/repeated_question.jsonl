@@ -1,11 +1,502 @@
-{"id": "train_0", "question": "what star wars movie came out before the last jedi", "golden_answers": ["The Empire Strikes Back"]}
-{"id": "train_1", "question": "what star wars movie came out before the last jedi", "golden_answers": ["The Empire Strikes Back"]}
-{"id": "train_2", "question": "what star wars movie came out before the last jedi", "golden_answers": ["The Empire Strikes Back"]}
-{"id": "train_3", "question": "what star wars movie came out before the last jedi", "golden_answers": ["The Empire Strikes Back"]}
-{"id": "train_4", "question": "what star wars movie came out before the last jedi", "golden_answers": ["The Empire Strikes Back"]}
-{"id": "train_5", "question": "what star wars movie came out before the last jedi", "golden_answers": ["The Empire Strikes Back"]}
-{"id": "train_6", "question": "what star wars movie came out before the last jedi", "golden_answers": ["The Empire Strikes Back"]}
-{"id": "train_7", "question": "what star wars movie came out before the last jedi", "golden_answers": ["The Empire Strikes Back"]}
-{"id": "train_8", "question": "what star wars movie came out before the last jedi", "golden_answers": ["The Empire Strikes Back"]}
-{"id": "train_9", "question": "what star wars movie came out before the last jedi", "golden_answers": ["The Empire Strikes Back"]}
-{"id": "train_10", "question": "what star wars movie came out before the last jedi", "golden_answers": ["The Empire Strikes Back"]}
+{"id":"train_0","question":"total number of death row inmates in the us","golden_answers":["2,718"]}
+{"id":"train_1","question":"big little lies season 2 how many episodes","golden_answers":["seven"]}
+{"id":"train_2","question":"who sang waiting for a girl like you","golden_answers":["Foreigner"]}
+{"id":"train_3","question":"where do you cross the arctic circle in norway","golden_answers":["Saltfjellet"]}
+{"id":"train_4","question":"who is the main character in green eggs and ham","golden_answers":["Sam-I-am"]}
+{"id":"train_5","question":"do veins carry blood to the heart or away","golden_answers":["to"]}
+{"id":"train_6","question":"who played charlie bucket in the original charlie and the chocolate factory","golden_answers":["Peter Gardner[4] Ostrum"]}
+{"id":"train_7","question":"what is 1 radian in terms of pi","golden_answers":["1\/2\u03c0"]}
+{"id":"train_8","question":"when does season 5 of bates motel come out","golden_answers":["February 20, 2017"]}
+{"id":"train_9","question":"how many episodes are in series 7 game of thrones","golden_answers":["seven"]}
+{"id":"train_10","question":"who is next in line to be the monarch of england","golden_answers":["Charles, Prince of Wales"]}
+{"id":"train_11","question":"who is in charge of enforcing the pendleton act of 1883","golden_answers":["United States Civil Service Commission"]}
+{"id":"train_12","question":"what is the name of latest version of android","golden_answers":["Oreo"]}
+{"id":"train_13","question":"why was there so much interest in cuba both before and after the civil war","golden_answers":["sugar markets"]}
+{"id":"train_14","question":"when did veterans day start being called veterans day","golden_answers":["June 1, 1954"]}
+{"id":"train_15","question":"when did big air snowboarding become an olympic sport","golden_answers":["2018"]}
+{"id":"train_16","question":"who played in the most world series games","golden_answers":["the New York Yankees"]}
+{"id":"train_17","question":"who sings i can't stop this feeling anymore","golden_answers":["American rock band REO Speedwagon"]}
+{"id":"train_18","question":"who is the month of may named after","golden_answers":["the Greek Goddess Maia"]}
+{"id":"train_19","question":"who has the most petroleum in the world","golden_answers":["Venezuela"]}
+{"id":"train_20","question":"who is the sister of for king and country","golden_answers":["Rebecca St. James"]}
+{"id":"train_21","question":"who developed the first periodic table with 8 columns","golden_answers":["Dmitri Mendeleev"]}
+{"id":"train_22","question":"who plays skyler on lab rats elite force","golden_answers":["Paris Berelc"]}
+{"id":"train_23","question":"when is season seven of game of thrones coming out","golden_answers":["July 16, 2017"]}
+{"id":"train_24","question":"who went home on rupaul's drag race season 10 episode 4","golden_answers":["Dusty Ray Bottoms"]}
+{"id":"train_25","question":"when did nigeria become a federation of 19 states","golden_answers":["1976"]}
+{"id":"train_26","question":"when did roller derby first appear in the press","golden_answers":["1922"]}
+{"id":"train_27","question":"what nba team has the highest winning percentage","golden_answers":["San Antonio Spurs"]}
+{"id":"train_28","question":"if there is a random change in the genetics of a small population it is termed","golden_answers":["genetic drift"]}
+{"id":"train_29","question":"who played vincent in nanny mcphee and the big bang","golden_answers":["Oscar Steer"]}
+{"id":"train_30","question":"who played the eldest daughter in the sound of music","golden_answers":["Charmian Carr"]}
+{"id":"train_31","question":"who plays andy's teacher in parks and rec","golden_answers":["Danielle Bisutti"]}
+{"id":"train_32","question":"in which channel fifa world cup will be broadcasted","golden_answers":["NBC","Telemundo"]}
+{"id":"train_33","question":"what is a large body of water that flows through land","golden_answers":["River"]}
+{"id":"train_34","question":"who played all the carly's on general hospital","golden_answers":["Jennifer Bransford","Tamara Braun","Sarah Joy Brown","Laura Wright"]}
+{"id":"train_35","question":"an object that has mass and occupies space is known as","golden_answers":["matter"]}
+{"id":"train_36","question":"who sang the original blinded by the light","golden_answers":["Bruce Springsteen"]}
+{"id":"train_37","question":"who is the yellow rose of texas named after","golden_answers":["Emily D. West"]}
+{"id":"train_38","question":"who sings the song i can see clearly now the rain is gone","golden_answers":["Johnny Nash"]}
+{"id":"train_39","question":"who was the rfc editor until 1998 just provide the family name","golden_answers":["Postel"]}
+{"id":"train_40","question":"what is the number 1 sport in the usa","golden_answers":["American football"]}
+{"id":"train_41","question":"when was the flight of the bumblebee written","golden_answers":["in 1899\u20131900"]}
+{"id":"train_42","question":"who plays cullen bohannon in hell on wheels","golden_answers":["Anson Adams Mount IV"]}
+{"id":"train_43","question":"when does the new pokemon movie come out","golden_answers":["July\u00a015,\u00a02017"]}
+{"id":"train_44","question":"how many oar athletes are in the olympics","golden_answers":["168"]}
+{"id":"train_45","question":"where is the honda classic played this year","golden_answers":["Palm Beach Gardens, Florida"]}
+{"id":"train_46","question":"who won the nrl grand final in 2015","golden_answers":["North Queensland Cowboys"]}
+{"id":"train_47","question":"where was charlie and the choclate factory filmed","golden_answers":["Pinewood Studios in England"]}
+{"id":"train_48","question":"who owns the rights to the song happy birthday","golden_answers":["Warner\/Chappell Music"]}
+{"id":"train_49","question":"who sang the song every breath you take","golden_answers":["The Police"]}
+{"id":"train_50","question":"when did the british hand-over sovereignty of hong kong back to china","golden_answers":["1 July 1997"]}
+{"id":"train_51","question":"the first life forms to appear on earth were","golden_answers":["putative fossilized microorganisms"]}
+{"id":"train_52","question":"who played the robot on lost in space 2018","golden_answers":["Brian Steele"]}
+{"id":"train_53","question":"who came up with britain's got talent","golden_answers":["Simon Cowell"]}
+{"id":"train_54","question":"what year did my pet monster come out","golden_answers":["1986"]}
+{"id":"train_55","question":"who made the beavis and butthead theme song","golden_answers":["Mike Judge"]}
+{"id":"train_56","question":"who has won the 2017 womens singles wimbledon tennis tournament","golden_answers":["Garbi\u00f1e Muguruza"]}
+{"id":"train_57","question":"when was the wheel first used in egypt","golden_answers":["4th Dynasty"]}
+{"id":"train_58","question":"which type of organism produces food in an ecosystem","golden_answers":["autotrophs"]}
+{"id":"train_59","question":"who wrote the song for once in my life","golden_answers":["Orlando Murden","Ron Miller"]}
+{"id":"train_60","question":"who sang i could not ask for more first","golden_answers":["Edwin McCain"]}
+{"id":"train_61","question":"who is the singer of waiting for love","golden_answers":["Simon Aldred"]}
+{"id":"train_62","question":"who recorded it's a man's world","golden_answers":["James Brown"]}
+{"id":"train_63","question":"when does season 14 of grey's anatomy come out","golden_answers":["September 28, 2017"]}
+{"id":"train_64","question":"when was the last time the detroit lions won a championship","golden_answers":["1993"]}
+{"id":"train_65","question":"who played general chang in star trek 6","golden_answers":["Christopher Plummer"]}
+{"id":"train_66","question":"which part of earth is covered with water","golden_answers":["71%"]}
+{"id":"train_67","question":"who's playing han solo in the han solo movie","golden_answers":["Alden Ehrenreich"]}
+{"id":"train_68","question":"where did the rule of 72 come from","golden_answers":["of Luca Pacioli","Summa de arithmetica"]}
+{"id":"train_69","question":"when was the masque of the red death written","golden_answers":["1842"]}
+{"id":"train_70","question":"who sings the original version of feeling good","golden_answers":["Cy Grant"]}
+{"id":"train_71","question":"how many fleet of war ships brought by achilles in the shore near troy","golden_answers":["50"]}
+{"id":"train_72","question":"who does black panther marry in the comics","golden_answers":["Ororo Munroe"]}
+{"id":"train_73","question":"what is the record for home runs in a season","golden_answers":["Barry Bonds"]}
+{"id":"train_74","question":"how do you say horse meat in french","golden_answers":["viande chevaline"]}
+{"id":"train_75","question":"who is the chief law officer of the government of india","golden_answers":["The Attorney General for India"]}
+{"id":"train_76","question":"when did the original flatliners movie come out","golden_answers":["1990"]}
+{"id":"train_77","question":"who is bright eyes in the loved ones","golden_answers":["Anne Scott-Pendlebury"]}
+{"id":"train_78","question":"what was the geeks name in 16 candles","golden_answers":["Anthony Michael Hall"]}
+{"id":"train_79","question":"who has scored the most own goals in premier league history","golden_answers":["Alan Shearer"]}
+{"id":"train_80","question":"what day of the year is mothers day always celebrated","golden_answers":["the second Sunday in May"]}
+{"id":"train_81","question":"when was the first episode of only fools and horses made","golden_answers":["8 September 1981"]}
+{"id":"train_82","question":"what was the first bring it on movie","golden_answers":["Bring It On"]}
+{"id":"train_83","question":"when did the words in god we trust appear on money","golden_answers":["1864"]}
+{"id":"train_84","question":"who plays smithys sister in gavin and stacey","golden_answers":["Sheridan Smith"]}
+{"id":"train_85","question":"who is the nets all time leading scorer","golden_answers":["Brook Lopez"]}
+{"id":"train_86","question":"who sang you won't get me i'm part of the union","golden_answers":["Strawbs"]}
+{"id":"train_87","question":"where was the first pan african conference held","golden_answers":["in London"]}
+{"id":"train_88","question":"who played adam schiff on law & order","golden_answers":["Steven Hill"]}
+{"id":"train_89","question":"who was president when the white house was built","golden_answers":["John Adams"]}
+{"id":"train_90","question":"where is the big statue of jesus located","golden_answers":["Rio de Janeiro, Brazil"]}
+{"id":"train_91","question":"who sang the song you are the reason","golden_answers":["Calum Scott"]}
+{"id":"train_92","question":"what is the predominant religion in the ukraine","golden_answers":["Orthodoxy"]}
+{"id":"train_93","question":"when did the who perform at the super bowl","golden_answers":["Feb 7, 2010"]}
+{"id":"train_94","question":"where was practical magic supposed to be set","golden_answers":["Maria's Island in Massachusetts"]}
+{"id":"train_95","question":"when was abbott and costello who's on first","golden_answers":["February 1938"]}
+{"id":"train_96","question":"india's medal ranking in asian games 2018","golden_answers":["8"]}
+{"id":"train_97","question":"how far is murrysville pa from pittsburgh pa","golden_answers":["roughly 20 miles"]}
+{"id":"train_98","question":"what is the pattern on a leopard's coat called","golden_answers":["A leopard pattern"]}
+{"id":"train_99","question":"where is eden west resort from couples retreat","golden_answers":["Bora Bora"]}
+{"id":"train_100","question":"which indian captain has won the maximum matches against sri lanka","golden_answers":["Virat Kohli"]}
+{"id":"train_101","question":"what is tide liquid called in the uk","golden_answers":["Daz Go-Pods"]}
+{"id":"train_102","question":"what's the dog's name on garfield","golden_answers":["Odie"]}
+{"id":"train_103","question":"five australian prime ministers who governed during world war 2","golden_answers":["Ben Chifley","Frank Forde","John Curtin","Arthur Fadden","Robert Menzies"]}
+{"id":"train_104","question":"what is the meaning of the last name salazar","golden_answers":["old hall"]}
+{"id":"train_105","question":"who was a in pretty little liars episode","golden_answers":["CeCe Drake","Mona Vanderwaal","Alex Drake","Sara Harvey"]}
+{"id":"train_106","question":"qualification of the members of the supreme court in the philippines","golden_answers":["natural-born citizenship","at least 40 years old"]}
+{"id":"train_107","question":"who plays finn on my mad fat diary","golden_answers":["Nico Cristian Mirallegro"]}
+{"id":"train_108","question":"which type of technology encapsulates fibre channel communications over tcp\/ip","golden_answers":["iSCSI"]}
+{"id":"train_109","question":"who was president during attack on pearl harbor","golden_answers":["President Franklin D. Roosevelt"]}
+{"id":"train_110","question":"where does the umbilical vein enter the circulation of the fetus","golden_answers":["the portal vein"]}
+{"id":"train_111","question":"when did def leppard's drummer lose his arm","golden_answers":["1985"]}
+{"id":"train_112","question":"whose portrait appears on the choir call to the right of the apse of san vitale ravenna","golden_answers":["East Roman Emperor Justinian I"]}
+{"id":"train_113","question":"who plays stephanie's mom on the fosters","golden_answers":["Annie Potts"]}
+{"id":"train_114","question":"the unit of area in mks system is","golden_answers":["metre"]}
+{"id":"train_115","question":"what is the name of the college in animal house","golden_answers":["Faber College"]}
+{"id":"train_116","question":"what movie is the song magic carpet ride in","golden_answers":["Reservoir Dogs","Coneheads"]}
+{"id":"train_117","question":"who owned the louisiana territory when the constitution was signed","golden_answers":["Spain"]}
+{"id":"train_118","question":"when is the last time the pirates won the world series","golden_answers":["1979"]}
+{"id":"train_119","question":"what's the name of the little turtle in finding nemo","golden_answers":["Squirt"]}
+{"id":"train_120","question":"who plays the voice of belle in beauty and the beast","golden_answers":["Paige O'Hara"]}
+{"id":"train_121","question":"when was the hero with a thousand faces published","golden_answers":["1949"]}
+{"id":"train_122","question":"when did the united states begin its revolution","golden_answers":["April 1775"]}
+{"id":"train_123","question":"who played cosette in les miserables 25th anniversary","golden_answers":["Katie Hall"]}
+{"id":"train_124","question":"when was the last time the falcons were in the super bowl","golden_answers":["2016"]}
+{"id":"train_125","question":"what is the default administrative distance assigned to all ospf routes","golden_answers":["110"]}
+{"id":"train_126","question":"who heads the u.s. intelligence community science forum","golden_answers":["Richard N. Haass"]}
+{"id":"train_127","question":"who is the most decorated veteran in us history","golden_answers":["Audie Leon Murphy"]}
+{"id":"train_128","question":"who has more la liga titles real madrid or barcelona","golden_answers":["Real Madrid"]}
+{"id":"train_129","question":"who is ryan michelle bathe on this is us","golden_answers":["Yvette"]}
+{"id":"train_130","question":"who burned down the billboards in three billboards","golden_answers":["Charlie"]}
+{"id":"train_131","question":"when does the supreme court begin a new term","golden_answers":["first Monday of each October"]}
+{"id":"train_132","question":"when does dragon ball z super episode 105 come out","golden_answers":["August 27, 2017"]}
+{"id":"train_133","question":"who played dean on wizards of waverly place","golden_answers":["Samonas"]}
+{"id":"train_134","question":"who sings i just died in your arms","golden_answers":["Cutting Crew"]}
+{"id":"train_135","question":"what is the frequency of ac current in north america","golden_answers":["60\u00a0Hz"]}
+{"id":"train_136","question":"in which episode does goku arrive on namek","golden_answers":["65"]}
+{"id":"train_137","question":"when did zebra mussels come to north america","golden_answers":["1988"]}
+{"id":"train_138","question":"who plays the voice of tiana in princess and the frog","golden_answers":["Anika Noni Rose"]}
+{"id":"train_139","question":"who developed a method of acting to reproduce real human behavior on the stage","golden_answers":["Stanislavski"]}
+{"id":"train_140","question":"when did they come out with color photos","golden_answers":["1861"]}
+{"id":"train_141","question":"who made call of duty world at war","golden_answers":["Treyarch"]}
+{"id":"train_142","question":"where in london is call the midwife set","golden_answers":["the East End"]}
+{"id":"train_143","question":"the organization of the formal elements in an art work","golden_answers":["composition"]}
+{"id":"train_144","question":"who wrote i wanna grow old with you","golden_answers":["Robbie"]}
+{"id":"train_145","question":"when did 10 rupees coin launched in india","golden_answers":["2005"]}
+{"id":"train_146","question":"when does the third maze runner come out","golden_answers":["January 26, 2018"]}
+{"id":"train_147","question":"who dies in season 6 once upon a time","golden_answers":["Hyde"]}
+{"id":"train_148","question":"where did the idea of retirement come from","golden_answers":["the 18th century"]}
+{"id":"train_149","question":"who's played the most years in the nba","golden_answers":["Robert Parish","Kevin Garnett","Kevin Willis"]}
+{"id":"train_150","question":"how many prime ministers in the queen's reign","golden_answers":["160"]}
+{"id":"train_151","question":"who starred in the secret life of bees","golden_answers":["Paul Bettany","Hilarie Burton","Dakota Fanning","Sophie Okonedo","Queen Latifah","Alicia Keys","Jennifer Hudson"]}
+{"id":"train_152","question":"when did the first macbook pro retina come out","golden_answers":["October 23, 2012"]}
+{"id":"train_153","question":"who won the women's wimbledon title in 2018","golden_answers":["Angelique Kerber"]}
+{"id":"train_154","question":"where do you hit to test your reflexes","golden_answers":["the tendon in question"]}
+{"id":"train_155","question":"who was the king of england in the second world war","golden_answers":["George VI"]}
+{"id":"train_156","question":"three types of native mammals that live in florida","golden_answers":["Carnivora","Rodentia","Cetacea"]}
+{"id":"train_157","question":"who was named time person of the year","golden_answers":["The Silence Breakers"]}
+{"id":"train_158","question":"where was the aztec civilization located on a map","golden_answers":["central Mexico"]}
+{"id":"train_159","question":"when was the seat belt law introduced in australia","golden_answers":["1971","1970","By 1973"]}
+{"id":"train_160","question":"when does the mlb regular season start in 2018","golden_answers":["March 29, 2018"]}
+{"id":"train_161","question":"what is the name of the russian fur hat","golden_answers":["An ushanka"]}
+{"id":"train_162","question":"types of rnas carries information for making a single type of protein","golden_answers":["messenger RNA (mRNA)"]}
+{"id":"train_163","question":"when was ain't put into the dictionary","golden_answers":["1961"]}
+{"id":"train_164","question":"who coined the term protoplasm for the fluid substance of the cell","golden_answers":["J. E. Purkinje"]}
+{"id":"train_165","question":"how has the most mvp in nba history","golden_answers":["Kareem Abdul-Jabbar"]}
+{"id":"train_166","question":"when is the show this is us on tv","golden_answers":["9:00 pm","Tuesday"]}
+{"id":"train_167","question":"where was the first petro-chemical industry established in nigeria","golden_answers":["1907"]}
+{"id":"train_168","question":"who does sarah chalke voice in rick and morty","golden_answers":["Beth Smith"]}
+{"id":"train_169","question":"who is responsible for managing medicaid insurance benefits","golden_answers":["government","the United States"]}
+{"id":"train_170","question":"who plays jt in the young and the restless","golden_answers":["Thaddeus Rowe Luckinbill"]}
+{"id":"train_171","question":"who played buffalo hump in dead man's walk","golden_answers":["Eric Schweig"]}
+{"id":"train_172","question":"when was the last episode of everyone loves raymond","golden_answers":["May 16, 2005"]}
+{"id":"train_173","question":"where does glycosis take place in the cell","golden_answers":["cytosol"]}
+{"id":"train_174","question":"who wrote the hymn i need thee every hour","golden_answers":["Annie Sherwood Hawks"]}
+{"id":"train_175","question":"who plays belle in beauty and the beast movie","golden_answers":["Emma Watson"]}
+{"id":"train_176","question":"who plays poussey on orange is the new black","golden_answers":["Samira Wiley"]}
+{"id":"train_177","question":"in javanese gamelan music typical elaborating instruments are","golden_answers":["percussive"]}
+{"id":"train_178","question":"who is the main character in memoirs of a geisha","golden_answers":["Chiyo Sakamoto","\"Sayuri\""]}
+{"id":"train_179","question":"halloween the curse of michael myers paul rudd","golden_answers":["Tommy Doyle"]}
+{"id":"train_180","question":"who played jonathan in arsenic and old lace","golden_answers":["Raymond Massey","Boris Karloff"]}
+{"id":"train_181","question":"who ran the fastest 40 yard dash in history","golden_answers":["Jakeem Grant"]}
+{"id":"train_182","question":"when did budapest became the capital of hungary","golden_answers":["1361"]}
+{"id":"train_183","question":"where is the first place to bring in the new year","golden_answers":["Tonga","Samoa"]}
+{"id":"train_184","question":"who played ariel in the little mermaid on broadway","golden_answers":["Sierra Boggess"]}
+{"id":"train_185","question":"what part of war and peace is the great comet","golden_answers":["Volume 2, Part 5"]}
+{"id":"train_186","question":"what was the first attack in world war 2","golden_answers":["Invasion of Poland"]}
+{"id":"train_187","question":"when did mardi gras start in new orleans","golden_answers":["March 2, 1699"]}
+{"id":"train_188","question":"who won best actor academy award in 1969","golden_answers":["Cliff Robertson"]}
+{"id":"train_189","question":"who plays the doctor in sons of anarchy","golden_answers":["Siff"]}
+{"id":"train_190","question":"who wrote oh what a tangled web we weave when first we practice to deceive","golden_answers":["Canto VI, XVII"]}
+{"id":"train_191","question":"when did disney world start using magic bands","golden_answers":["2013"]}
+{"id":"train_192","question":"who played the brothers in seven brides for seven brothers","golden_answers":["Jeff Richards","Tommy Rall","Matt Mattox","Marc Platt","Jacques d'Amboise","Howard Keel","Russ Tamblyn"]}
+{"id":"train_193","question":"who sings the theme song to dog bounty hunter","golden_answers":["Ozzy Osbourne"]}
+{"id":"train_194","question":"when is the last time the minnesota vikings have been in the playoffs","golden_answers":["2017"]}
+{"id":"train_195","question":"when was the qutub minar granted the world heritage site status","golden_answers":["1993"]}
+{"id":"train_196","question":"who was the first civilian governor of lagos state","golden_answers":["Alhaji Lateef Jakande"]}
+{"id":"train_197","question":"who is first on record as proposing a geocentric universe","golden_answers":["Anaximander"]}
+{"id":"train_198","question":"what do they call high school in australia","golden_answers":["(high schools"]}
+{"id":"train_199","question":"who does young catherine marry in wuthering heights","golden_answers":["Hareton Earnshaw"]}
+{"id":"train_200","question":"when did spider man first appear in comics","golden_answers":["August 1962"]}
+{"id":"train_201","question":"where did they go in the inbetweeners movie","golden_answers":["Malia"]}
+{"id":"train_202","question":"who sings if you want to destroy my sweater","golden_answers":["Weezer"]}
+{"id":"train_203","question":"who plays bernadette in the big bang theory","golden_answers":["Melissa Ivy Rauch"]}
+{"id":"train_204","question":"what is the name of mirabell's servant","golden_answers":["Waitwell"]}
+{"id":"train_205","question":"when was the last time france hosted the olympics","golden_answers":["1992 Winter Olympics"]}
+{"id":"train_206","question":"who sang too shy shy hush hush eye to eye","golden_answers":["Kajagoogoo"]}
+{"id":"train_207","question":"when was the first session of indian national congress held","golden_answers":["28\u201331 December 1885"]}
+{"id":"train_208","question":"for a molecule to be polar it must have","golden_answers":["polar bonds"]}
+{"id":"train_209","question":"who sings l.o.v.e in the movie the parent trap","golden_answers":["Nat King Cole"]}
+{"id":"train_210","question":"when did rationing start in britain during world war 2","golden_answers":["1940"]}
+{"id":"train_211","question":"who sings system from queen of the damned","golden_answers":["Chester Bennington of Linkin Park"]}
+{"id":"train_212","question":"when did ontario get rid of grade 13","golden_answers":["1988"]}
+{"id":"train_213","question":"when was the first friday the 13th movie released","golden_answers":["1980"]}
+{"id":"train_214","question":"who played kirk's mother in star trek","golden_answers":["Jennifer Marie Morrison"]}
+{"id":"train_215","question":"when was how the grinch stole christmas written","golden_answers":["beginning of 1957"]}
+{"id":"train_216","question":"why do they call easter island easter island","golden_answers":["encountered it on Easter Sunday"]}
+{"id":"train_217","question":"who constitutes the finance commission after every five years","golden_answers":["The President"]}
+{"id":"train_218","question":"who wrote she's a bad mamma jamma","golden_answers":["Leon Haywood"]}
+{"id":"train_219","question":"who votes for winners of los premios juventud","golden_answers":["online vote"]}
+{"id":"train_220","question":"what happened to many manuscripts of anglo-saxon literature","golden_answers":["the Dissolution of the Monasteries"]}
+{"id":"train_221","question":"where are most nutrients absorbed in the small intestine","golden_answers":["in the jejunum"]}
+{"id":"train_222","question":"who was awarded with the first param veer chakra vijeta","golden_answers":["Major Somnath Sharma"]}
+{"id":"train_223","question":"when did tom lehrer write the elements song","golden_answers":["1959"]}
+{"id":"train_224","question":"who is doing the halftime show for the super bowl","golden_answers":["Justin Timberlake"]}
+{"id":"train_225","question":"when's the last time the dodgers were in the world series","golden_answers":["2017"]}
+{"id":"train_226","question":"who sang some enchanted evening in the film south pacific","golden_answers":["Ezio Pinza"]}
+{"id":"train_227","question":"when did diary of a wimpy kid the long haul come out","golden_answers":["May 19, 2017"]}
+{"id":"train_228","question":"what scientists is credited with proposing the principle of uniformitarianism","golden_answers":["James Hutton"]}
+{"id":"train_229","question":"who sings vocals on go your own way","golden_answers":["Christine McVie","Lindsey Buckingham","Stevie Nicks"]}
+{"id":"train_230","question":"what channel is paramount tv on direct tv","golden_answers":["241 SD\/HD","1241 VOD"]}
+{"id":"train_231","question":"when does captain america the first avenger take place","golden_answers":["1942"]}
+{"id":"train_232","question":"how many seasons are in dragon ball super","golden_answers":["5"]}
+{"id":"train_233","question":"who played the little girl on mrs doubtfire","golden_answers":["Mara Elizabeth Wilson"]}
+{"id":"train_234","question":"based on the residues in the active site what family of proteases does pepsin belong to","golden_answers":["Acid proteases"]}
+{"id":"train_235","question":"who sings the song mama told me not to come","golden_answers":["Eric Burdon"]}
+{"id":"train_236","question":"what two types of information are encrypted by the https protocol (choose two.)","golden_answers":["request\/response load","headers"]}
+{"id":"train_237","question":"who controlled the economy of the incan empire","golden_answers":["Inca rulers"]}
+{"id":"train_238","question":"who sings the song ooh child things are going to get easier","golden_answers":["Five Stairsteps"]}
+{"id":"train_239","question":"when did texting become available on cell phones","golden_answers":["1994"]}
+{"id":"train_240","question":"when did the three point shot start in high school","golden_answers":["1987"]}
+{"id":"train_241","question":"who commanded british forces at the battle of waterloo","golden_answers":["the Duke of Wellington"]}
+{"id":"train_242","question":"who hosted the daily show before trevor noah","golden_answers":["Jon Stewart","Craig Kilborn"]}
+{"id":"train_243","question":"the elf in rudolph the red nosed reindeer","golden_answers":["Hermey"]}
+{"id":"train_244","question":"where does the water in rockhampton come from","golden_answers":["The Fitzroy River Barrage"]}
+{"id":"train_245","question":"when did rudolph's shiny new year come out","golden_answers":["1976"]}
+{"id":"train_246","question":"what is considered middle age in the united states","golden_answers":["45 to 65"]}
+{"id":"train_247","question":"what is the liquid in a magic 8 ball","golden_answers":["alcohol"]}
+{"id":"train_248","question":"who sings we don't have to take our clothes off original","golden_answers":["Jermaine Stewart"]}
+{"id":"train_249","question":"who gave britain the right to rule palestine","golden_answers":["the League of Nations"]}
+{"id":"train_250","question":"who sings the theme song for republic of doyle","golden_answers":["Great Big Sea"]}
+{"id":"train_0","question":"total number of death row inmates in the us","golden_answers":["2,718"]}
+{"id":"train_1","question":"big little lies season 2 how many episodes","golden_answers":["seven"]}
+{"id":"train_2","question":"who sang waiting for a girl like you","golden_answers":["Foreigner"]}
+{"id":"train_3","question":"where do you cross the arctic circle in norway","golden_answers":["Saltfjellet"]}
+{"id":"train_4","question":"who is the main character in green eggs and ham","golden_answers":["Sam-I-am"]}
+{"id":"train_5","question":"do veins carry blood to the heart or away","golden_answers":["to"]}
+{"id":"train_6","question":"who played charlie bucket in the original charlie and the chocolate factory","golden_answers":["Peter Gardner[4] Ostrum"]}
+{"id":"train_7","question":"what is 1 radian in terms of pi","golden_answers":["1\/2\u03c0"]}
+{"id":"train_8","question":"when does season 5 of bates motel come out","golden_answers":["February 20, 2017"]}
+{"id":"train_9","question":"how many episodes are in series 7 game of thrones","golden_answers":["seven"]}
+{"id":"train_10","question":"who is next in line to be the monarch of england","golden_answers":["Charles, Prince of Wales"]}
+{"id":"train_11","question":"who is in charge of enforcing the pendleton act of 1883","golden_answers":["United States Civil Service Commission"]}
+{"id":"train_12","question":"what is the name of latest version of android","golden_answers":["Oreo"]}
+{"id":"train_13","question":"why was there so much interest in cuba both before and after the civil war","golden_answers":["sugar markets"]}
+{"id":"train_14","question":"when did veterans day start being called veterans day","golden_answers":["June 1, 1954"]}
+{"id":"train_15","question":"when did big air snowboarding become an olympic sport","golden_answers":["2018"]}
+{"id":"train_16","question":"who played in the most world series games","golden_answers":["the New York Yankees"]}
+{"id":"train_17","question":"who sings i can't stop this feeling anymore","golden_answers":["American rock band REO Speedwagon"]}
+{"id":"train_18","question":"who is the month of may named after","golden_answers":["the Greek Goddess Maia"]}
+{"id":"train_19","question":"who has the most petroleum in the world","golden_answers":["Venezuela"]}
+{"id":"train_20","question":"who is the sister of for king and country","golden_answers":["Rebecca St. James"]}
+{"id":"train_21","question":"who developed the first periodic table with 8 columns","golden_answers":["Dmitri Mendeleev"]}
+{"id":"train_22","question":"who plays skyler on lab rats elite force","golden_answers":["Paris Berelc"]}
+{"id":"train_23","question":"when is season seven of game of thrones coming out","golden_answers":["July 16, 2017"]}
+{"id":"train_24","question":"who went home on rupaul's drag race season 10 episode 4","golden_answers":["Dusty Ray Bottoms"]}
+{"id":"train_25","question":"when did nigeria become a federation of 19 states","golden_answers":["1976"]}
+{"id":"train_26","question":"when did roller derby first appear in the press","golden_answers":["1922"]}
+{"id":"train_27","question":"what nba team has the highest winning percentage","golden_answers":["San Antonio Spurs"]}
+{"id":"train_28","question":"if there is a random change in the genetics of a small population it is termed","golden_answers":["genetic drift"]}
+{"id":"train_29","question":"who played vincent in nanny mcphee and the big bang","golden_answers":["Oscar Steer"]}
+{"id":"train_30","question":"who played the eldest daughter in the sound of music","golden_answers":["Charmian Carr"]}
+{"id":"train_31","question":"who plays andy's teacher in parks and rec","golden_answers":["Danielle Bisutti"]}
+{"id":"train_32","question":"in which channel fifa world cup will be broadcasted","golden_answers":["NBC","Telemundo"]}
+{"id":"train_33","question":"what is a large body of water that flows through land","golden_answers":["River"]}
+{"id":"train_34","question":"who played all the carly's on general hospital","golden_answers":["Jennifer Bransford","Tamara Braun","Sarah Joy Brown","Laura Wright"]}
+{"id":"train_35","question":"an object that has mass and occupies space is known as","golden_answers":["matter"]}
+{"id":"train_36","question":"who sang the original blinded by the light","golden_answers":["Bruce Springsteen"]}
+{"id":"train_37","question":"who is the yellow rose of texas named after","golden_answers":["Emily D. West"]}
+{"id":"train_38","question":"who sings the song i can see clearly now the rain is gone","golden_answers":["Johnny Nash"]}
+{"id":"train_39","question":"who was the rfc editor until 1998 just provide the family name","golden_answers":["Postel"]}
+{"id":"train_40","question":"what is the number 1 sport in the usa","golden_answers":["American football"]}
+{"id":"train_41","question":"when was the flight of the bumblebee written","golden_answers":["in 1899\u20131900"]}
+{"id":"train_42","question":"who plays cullen bohannon in hell on wheels","golden_answers":["Anson Adams Mount IV"]}
+{"id":"train_43","question":"when does the new pokemon movie come out","golden_answers":["July\u00a015,\u00a02017"]}
+{"id":"train_44","question":"how many oar athletes are in the olympics","golden_answers":["168"]}
+{"id":"train_45","question":"where is the honda classic played this year","golden_answers":["Palm Beach Gardens, Florida"]}
+{"id":"train_46","question":"who won the nrl grand final in 2015","golden_answers":["North Queensland Cowboys"]}
+{"id":"train_47","question":"where was charlie and the choclate factory filmed","golden_answers":["Pinewood Studios in England"]}
+{"id":"train_48","question":"who owns the rights to the song happy birthday","golden_answers":["Warner\/Chappell Music"]}
+{"id":"train_49","question":"who sang the song every breath you take","golden_answers":["The Police"]}
+{"id":"train_50","question":"when did the british hand-over sovereignty of hong kong back to china","golden_answers":["1 July 1997"]}
+{"id":"train_51","question":"the first life forms to appear on earth were","golden_answers":["putative fossilized microorganisms"]}
+{"id":"train_52","question":"who played the robot on lost in space 2018","golden_answers":["Brian Steele"]}
+{"id":"train_53","question":"who came up with britain's got talent","golden_answers":["Simon Cowell"]}
+{"id":"train_54","question":"what year did my pet monster come out","golden_answers":["1986"]}
+{"id":"train_55","question":"who made the beavis and butthead theme song","golden_answers":["Mike Judge"]}
+{"id":"train_56","question":"who has won the 2017 womens singles wimbledon tennis tournament","golden_answers":["Garbi\u00f1e Muguruza"]}
+{"id":"train_57","question":"when was the wheel first used in egypt","golden_answers":["4th Dynasty"]}
+{"id":"train_58","question":"which type of organism produces food in an ecosystem","golden_answers":["autotrophs"]}
+{"id":"train_59","question":"who wrote the song for once in my life","golden_answers":["Orlando Murden","Ron Miller"]}
+{"id":"train_60","question":"who sang i could not ask for more first","golden_answers":["Edwin McCain"]}
+{"id":"train_61","question":"who is the singer of waiting for love","golden_answers":["Simon Aldred"]}
+{"id":"train_62","question":"who recorded it's a man's world","golden_answers":["James Brown"]}
+{"id":"train_63","question":"when does season 14 of grey's anatomy come out","golden_answers":["September 28, 2017"]}
+{"id":"train_64","question":"when was the last time the detroit lions won a championship","golden_answers":["1993"]}
+{"id":"train_65","question":"who played general chang in star trek 6","golden_answers":["Christopher Plummer"]}
+{"id":"train_66","question":"which part of earth is covered with water","golden_answers":["71%"]}
+{"id":"train_67","question":"who's playing han solo in the han solo movie","golden_answers":["Alden Ehrenreich"]}
+{"id":"train_68","question":"where did the rule of 72 come from","golden_answers":["of Luca Pacioli","Summa de arithmetica"]}
+{"id":"train_69","question":"when was the masque of the red death written","golden_answers":["1842"]}
+{"id":"train_70","question":"who sings the original version of feeling good","golden_answers":["Cy Grant"]}
+{"id":"train_71","question":"how many fleet of war ships brought by achilles in the shore near troy","golden_answers":["50"]}
+{"id":"train_72","question":"who does black panther marry in the comics","golden_answers":["Ororo Munroe"]}
+{"id":"train_73","question":"what is the record for home runs in a season","golden_answers":["Barry Bonds"]}
+{"id":"train_74","question":"how do you say horse meat in french","golden_answers":["viande chevaline"]}
+{"id":"train_75","question":"who is the chief law officer of the government of india","golden_answers":["The Attorney General for India"]}
+{"id":"train_76","question":"when did the original flatliners movie come out","golden_answers":["1990"]}
+{"id":"train_77","question":"who is bright eyes in the loved ones","golden_answers":["Anne Scott-Pendlebury"]}
+{"id":"train_78","question":"what was the geeks name in 16 candles","golden_answers":["Anthony Michael Hall"]}
+{"id":"train_79","question":"who has scored the most own goals in premier league history","golden_answers":["Alan Shearer"]}
+{"id":"train_80","question":"what day of the year is mothers day always celebrated","golden_answers":["the second Sunday in May"]}
+{"id":"train_81","question":"when was the first episode of only fools and horses made","golden_answers":["8 September 1981"]}
+{"id":"train_82","question":"what was the first bring it on movie","golden_answers":["Bring It On"]}
+{"id":"train_83","question":"when did the words in god we trust appear on money","golden_answers":["1864"]}
+{"id":"train_84","question":"who plays smithys sister in gavin and stacey","golden_answers":["Sheridan Smith"]}
+{"id":"train_85","question":"who is the nets all time leading scorer","golden_answers":["Brook Lopez"]}
+{"id":"train_86","question":"who sang you won't get me i'm part of the union","golden_answers":["Strawbs"]}
+{"id":"train_87","question":"where was the first pan african conference held","golden_answers":["in London"]}
+{"id":"train_88","question":"who played adam schiff on law & order","golden_answers":["Steven Hill"]}
+{"id":"train_89","question":"who was president when the white house was built","golden_answers":["John Adams"]}
+{"id":"train_90","question":"where is the big statue of jesus located","golden_answers":["Rio de Janeiro, Brazil"]}
+{"id":"train_91","question":"who sang the song you are the reason","golden_answers":["Calum Scott"]}
+{"id":"train_92","question":"what is the predominant religion in the ukraine","golden_answers":["Orthodoxy"]}
+{"id":"train_93","question":"when did the who perform at the super bowl","golden_answers":["Feb 7, 2010"]}
+{"id":"train_94","question":"where was practical magic supposed to be set","golden_answers":["Maria's Island in Massachusetts"]}
+{"id":"train_95","question":"when was abbott and costello who's on first","golden_answers":["February 1938"]}
+{"id":"train_96","question":"india's medal ranking in asian games 2018","golden_answers":["8"]}
+{"id":"train_97","question":"how far is murrysville pa from pittsburgh pa","golden_answers":["roughly 20 miles"]}
+{"id":"train_98","question":"what is the pattern on a leopard's coat called","golden_answers":["A leopard pattern"]}
+{"id":"train_99","question":"where is eden west resort from couples retreat","golden_answers":["Bora Bora"]}
+{"id":"train_100","question":"which indian captain has won the maximum matches against sri lanka","golden_answers":["Virat Kohli"]}
+{"id":"train_101","question":"what is tide liquid called in the uk","golden_answers":["Daz Go-Pods"]}
+{"id":"train_102","question":"what's the dog's name on garfield","golden_answers":["Odie"]}
+{"id":"train_103","question":"five australian prime ministers who governed during world war 2","golden_answers":["Ben Chifley","Frank Forde","John Curtin","Arthur Fadden","Robert Menzies"]}
+{"id":"train_104","question":"what is the meaning of the last name salazar","golden_answers":["old hall"]}
+{"id":"train_105","question":"who was a in pretty little liars episode","golden_answers":["CeCe Drake","Mona Vanderwaal","Alex Drake","Sara Harvey"]}
+{"id":"train_106","question":"qualification of the members of the supreme court in the philippines","golden_answers":["natural-born citizenship","at least 40 years old"]}
+{"id":"train_107","question":"who plays finn on my mad fat diary","golden_answers":["Nico Cristian Mirallegro"]}
+{"id":"train_108","question":"which type of technology encapsulates fibre channel communications over tcp\/ip","golden_answers":["iSCSI"]}
+{"id":"train_109","question":"who was president during attack on pearl harbor","golden_answers":["President Franklin D. Roosevelt"]}
+{"id":"train_110","question":"where does the umbilical vein enter the circulation of the fetus","golden_answers":["the portal vein"]}
+{"id":"train_111","question":"when did def leppard's drummer lose his arm","golden_answers":["1985"]}
+{"id":"train_112","question":"whose portrait appears on the choir call to the right of the apse of san vitale ravenna","golden_answers":["East Roman Emperor Justinian I"]}
+{"id":"train_113","question":"who plays stephanie's mom on the fosters","golden_answers":["Annie Potts"]}
+{"id":"train_114","question":"the unit of area in mks system is","golden_answers":["metre"]}
+{"id":"train_115","question":"what is the name of the college in animal house","golden_answers":["Faber College"]}
+{"id":"train_116","question":"what movie is the song magic carpet ride in","golden_answers":["Reservoir Dogs","Coneheads"]}
+{"id":"train_117","question":"who owned the louisiana territory when the constitution was signed","golden_answers":["Spain"]}
+{"id":"train_118","question":"when is the last time the pirates won the world series","golden_answers":["1979"]}
+{"id":"train_119","question":"what's the name of the little turtle in finding nemo","golden_answers":["Squirt"]}
+{"id":"train_120","question":"who plays the voice of belle in beauty and the beast","golden_answers":["Paige O'Hara"]}
+{"id":"train_121","question":"when was the hero with a thousand faces published","golden_answers":["1949"]}
+{"id":"train_122","question":"when did the united states begin its revolution","golden_answers":["April 1775"]}
+{"id":"train_123","question":"who played cosette in les miserables 25th anniversary","golden_answers":["Katie Hall"]}
+{"id":"train_124","question":"when was the last time the falcons were in the super bowl","golden_answers":["2016"]}
+{"id":"train_125","question":"what is the default administrative distance assigned to all ospf routes","golden_answers":["110"]}
+{"id":"train_126","question":"who heads the u.s. intelligence community science forum","golden_answers":["Richard N. Haass"]}
+{"id":"train_127","question":"who is the most decorated veteran in us history","golden_answers":["Audie Leon Murphy"]}
+{"id":"train_128","question":"who has more la liga titles real madrid or barcelona","golden_answers":["Real Madrid"]}
+{"id":"train_129","question":"who is ryan michelle bathe on this is us","golden_answers":["Yvette"]}
+{"id":"train_130","question":"who burned down the billboards in three billboards","golden_answers":["Charlie"]}
+{"id":"train_131","question":"when does the supreme court begin a new term","golden_answers":["first Monday of each October"]}
+{"id":"train_132","question":"when does dragon ball z super episode 105 come out","golden_answers":["August 27, 2017"]}
+{"id":"train_133","question":"who played dean on wizards of waverly place","golden_answers":["Samonas"]}
+{"id":"train_134","question":"who sings i just died in your arms","golden_answers":["Cutting Crew"]}
+{"id":"train_135","question":"what is the frequency of ac current in north america","golden_answers":["60\u00a0Hz"]}
+{"id":"train_136","question":"in which episode does goku arrive on namek","golden_answers":["65"]}
+{"id":"train_137","question":"when did zebra mussels come to north america","golden_answers":["1988"]}
+{"id":"train_138","question":"who plays the voice of tiana in princess and the frog","golden_answers":["Anika Noni Rose"]}
+{"id":"train_139","question":"who developed a method of acting to reproduce real human behavior on the stage","golden_answers":["Stanislavski"]}
+{"id":"train_140","question":"when did they come out with color photos","golden_answers":["1861"]}
+{"id":"train_141","question":"who made call of duty world at war","golden_answers":["Treyarch"]}
+{"id":"train_142","question":"where in london is call the midwife set","golden_answers":["the East End"]}
+{"id":"train_143","question":"the organization of the formal elements in an art work","golden_answers":["composition"]}
+{"id":"train_144","question":"who wrote i wanna grow old with you","golden_answers":["Robbie"]}
+{"id":"train_145","question":"when did 10 rupees coin launched in india","golden_answers":["2005"]}
+{"id":"train_146","question":"when does the third maze runner come out","golden_answers":["January 26, 2018"]}
+{"id":"train_147","question":"who dies in season 6 once upon a time","golden_answers":["Hyde"]}
+{"id":"train_148","question":"where did the idea of retirement come from","golden_answers":["the 18th century"]}
+{"id":"train_149","question":"who's played the most years in the nba","golden_answers":["Robert Parish","Kevin Garnett","Kevin Willis"]}
+{"id":"train_150","question":"how many prime ministers in the queen's reign","golden_answers":["160"]}
+{"id":"train_151","question":"who starred in the secret life of bees","golden_answers":["Paul Bettany","Hilarie Burton","Dakota Fanning","Sophie Okonedo","Queen Latifah","Alicia Keys","Jennifer Hudson"]}
+{"id":"train_152","question":"when did the first macbook pro retina come out","golden_answers":["October 23, 2012"]}
+{"id":"train_153","question":"who won the women's wimbledon title in 2018","golden_answers":["Angelique Kerber"]}
+{"id":"train_154","question":"where do you hit to test your reflexes","golden_answers":["the tendon in question"]}
+{"id":"train_155","question":"who was the king of england in the second world war","golden_answers":["George VI"]}
+{"id":"train_156","question":"three types of native mammals that live in florida","golden_answers":["Carnivora","Rodentia","Cetacea"]}
+{"id":"train_157","question":"who was named time person of the year","golden_answers":["The Silence Breakers"]}
+{"id":"train_158","question":"where was the aztec civilization located on a map","golden_answers":["central Mexico"]}
+{"id":"train_159","question":"when was the seat belt law introduced in australia","golden_answers":["1971","1970","By 1973"]}
+{"id":"train_160","question":"when does the mlb regular season start in 2018","golden_answers":["March 29, 2018"]}
+{"id":"train_161","question":"what is the name of the russian fur hat","golden_answers":["An ushanka"]}
+{"id":"train_162","question":"types of rnas carries information for making a single type of protein","golden_answers":["messenger RNA (mRNA)"]}
+{"id":"train_163","question":"when was ain't put into the dictionary","golden_answers":["1961"]}
+{"id":"train_164","question":"who coined the term protoplasm for the fluid substance of the cell","golden_answers":["J. E. Purkinje"]}
+{"id":"train_165","question":"how has the most mvp in nba history","golden_answers":["Kareem Abdul-Jabbar"]}
+{"id":"train_166","question":"when is the show this is us on tv","golden_answers":["9:00 pm","Tuesday"]}
+{"id":"train_167","question":"where was the first petro-chemical industry established in nigeria","golden_answers":["1907"]}
+{"id":"train_168","question":"who does sarah chalke voice in rick and morty","golden_answers":["Beth Smith"]}
+{"id":"train_169","question":"who is responsible for managing medicaid insurance benefits","golden_answers":["government","the United States"]}
+{"id":"train_170","question":"who plays jt in the young and the restless","golden_answers":["Thaddeus Rowe Luckinbill"]}
+{"id":"train_171","question":"who played buffalo hump in dead man's walk","golden_answers":["Eric Schweig"]}
+{"id":"train_172","question":"when was the last episode of everyone loves raymond","golden_answers":["May 16, 2005"]}
+{"id":"train_173","question":"where does glycosis take place in the cell","golden_answers":["cytosol"]}
+{"id":"train_174","question":"who wrote the hymn i need thee every hour","golden_answers":["Annie Sherwood Hawks"]}
+{"id":"train_175","question":"who plays belle in beauty and the beast movie","golden_answers":["Emma Watson"]}
+{"id":"train_176","question":"who plays poussey on orange is the new black","golden_answers":["Samira Wiley"]}
+{"id":"train_177","question":"in javanese gamelan music typical elaborating instruments are","golden_answers":["percussive"]}
+{"id":"train_178","question":"who is the main character in memoirs of a geisha","golden_answers":["Chiyo Sakamoto","\"Sayuri\""]}
+{"id":"train_179","question":"halloween the curse of michael myers paul rudd","golden_answers":["Tommy Doyle"]}
+{"id":"train_180","question":"who played jonathan in arsenic and old lace","golden_answers":["Raymond Massey","Boris Karloff"]}
+{"id":"train_181","question":"who ran the fastest 40 yard dash in history","golden_answers":["Jakeem Grant"]}
+{"id":"train_182","question":"when did budapest became the capital of hungary","golden_answers":["1361"]}
+{"id":"train_183","question":"where is the first place to bring in the new year","golden_answers":["Tonga","Samoa"]}
+{"id":"train_184","question":"who played ariel in the little mermaid on broadway","golden_answers":["Sierra Boggess"]}
+{"id":"train_185","question":"what part of war and peace is the great comet","golden_answers":["Volume 2, Part 5"]}
+{"id":"train_186","question":"what was the first attack in world war 2","golden_answers":["Invasion of Poland"]}
+{"id":"train_187","question":"when did mardi gras start in new orleans","golden_answers":["March 2, 1699"]}
+{"id":"train_188","question":"who won best actor academy award in 1969","golden_answers":["Cliff Robertson"]}
+{"id":"train_189","question":"who plays the doctor in sons of anarchy","golden_answers":["Siff"]}
+{"id":"train_190","question":"who wrote oh what a tangled web we weave when first we practice to deceive","golden_answers":["Canto VI, XVII"]}
+{"id":"train_191","question":"when did disney world start using magic bands","golden_answers":["2013"]}
+{"id":"train_192","question":"who played the brothers in seven brides for seven brothers","golden_answers":["Jeff Richards","Tommy Rall","Matt Mattox","Marc Platt","Jacques d'Amboise","Howard Keel","Russ Tamblyn"]}
+{"id":"train_193","question":"who sings the theme song to dog bounty hunter","golden_answers":["Ozzy Osbourne"]}
+{"id":"train_194","question":"when is the last time the minnesota vikings have been in the playoffs","golden_answers":["2017"]}
+{"id":"train_195","question":"when was the qutub minar granted the world heritage site status","golden_answers":["1993"]}
+{"id":"train_196","question":"who was the first civilian governor of lagos state","golden_answers":["Alhaji Lateef Jakande"]}
+{"id":"train_197","question":"who is first on record as proposing a geocentric universe","golden_answers":["Anaximander"]}
+{"id":"train_198","question":"what do they call high school in australia","golden_answers":["(high schools"]}
+{"id":"train_199","question":"who does young catherine marry in wuthering heights","golden_answers":["Hareton Earnshaw"]}
+{"id":"train_200","question":"when did spider man first appear in comics","golden_answers":["August 1962"]}
+{"id":"train_201","question":"where did they go in the inbetweeners movie","golden_answers":["Malia"]}
+{"id":"train_202","question":"who sings if you want to destroy my sweater","golden_answers":["Weezer"]}
+{"id":"train_203","question":"who plays bernadette in the big bang theory","golden_answers":["Melissa Ivy Rauch"]}
+{"id":"train_204","question":"what is the name of mirabell's servant","golden_answers":["Waitwell"]}
+{"id":"train_205","question":"when was the last time france hosted the olympics","golden_answers":["1992 Winter Olympics"]}
+{"id":"train_206","question":"who sang too shy shy hush hush eye to eye","golden_answers":["Kajagoogoo"]}
+{"id":"train_207","question":"when was the first session of indian national congress held","golden_answers":["28\u201331 December 1885"]}
+{"id":"train_208","question":"for a molecule to be polar it must have","golden_answers":["polar bonds"]}
+{"id":"train_209","question":"who sings l.o.v.e in the movie the parent trap","golden_answers":["Nat King Cole"]}
+{"id":"train_210","question":"when did rationing start in britain during world war 2","golden_answers":["1940"]}
+{"id":"train_211","question":"who sings system from queen of the damned","golden_answers":["Chester Bennington of Linkin Park"]}
+{"id":"train_212","question":"when did ontario get rid of grade 13","golden_answers":["1988"]}
+{"id":"train_213","question":"when was the first friday the 13th movie released","golden_answers":["1980"]}
+{"id":"train_214","question":"who played kirk's mother in star trek","golden_answers":["Jennifer Marie Morrison"]}
+{"id":"train_215","question":"when was how the grinch stole christmas written","golden_answers":["beginning of 1957"]}
+{"id":"train_216","question":"why do they call easter island easter island","golden_answers":["encountered it on Easter Sunday"]}
+{"id":"train_217","question":"who constitutes the finance commission after every five years","golden_answers":["The President"]}
+{"id":"train_218","question":"who wrote she's a bad mamma jamma","golden_answers":["Leon Haywood"]}
+{"id":"train_219","question":"who votes for winners of los premios juventud","golden_answers":["online vote"]}
+{"id":"train_220","question":"what happened to many manuscripts of anglo-saxon literature","golden_answers":["the Dissolution of the Monasteries"]}
+{"id":"train_221","question":"where are most nutrients absorbed in the small intestine","golden_answers":["in the jejunum"]}
+{"id":"train_222","question":"who was awarded with the first param veer chakra vijeta","golden_answers":["Major Somnath Sharma"]}
+{"id":"train_223","question":"when did tom lehrer write the elements song","golden_answers":["1959"]}
+{"id":"train_224","question":"who is doing the halftime show for the super bowl","golden_answers":["Justin Timberlake"]}
+{"id":"train_225","question":"when's the last time the dodgers were in the world series","golden_answers":["2017"]}
+{"id":"train_226","question":"who sang some enchanted evening in the film south pacific","golden_answers":["Ezio Pinza"]}
+{"id":"train_227","question":"when did diary of a wimpy kid the long haul come out","golden_answers":["May 19, 2017"]}
+{"id":"train_228","question":"what scientists is credited with proposing the principle of uniformitarianism","golden_answers":["James Hutton"]}
+{"id":"train_229","question":"who sings vocals on go your own way","golden_answers":["Christine McVie","Lindsey Buckingham","Stevie Nicks"]}
+{"id":"train_230","question":"what channel is paramount tv on direct tv","golden_answers":["241 SD\/HD","1241 VOD"]}
+{"id":"train_231","question":"when does captain america the first avenger take place","golden_answers":["1942"]}
+{"id":"train_232","question":"how many seasons are in dragon ball super","golden_answers":["5"]}
+{"id":"train_233","question":"who played the little girl on mrs doubtfire","golden_answers":["Mara Elizabeth Wilson"]}
+{"id":"train_234","question":"based on the residues in the active site what family of proteases does pepsin belong to","golden_answers":["Acid proteases"]}
+{"id":"train_235","question":"who sings the song mama told me not to come","golden_answers":["Eric Burdon"]}
+{"id":"train_236","question":"what two types of information are encrypted by the https protocol (choose two.)","golden_answers":["request\/response load","headers"]}
+{"id":"train_237","question":"who controlled the economy of the incan empire","golden_answers":["Inca rulers"]}
+{"id":"train_238","question":"who sings the song ooh child things are going to get easier","golden_answers":["Five Stairsteps"]}
+{"id":"train_239","question":"when did texting become available on cell phones","golden_answers":["1994"]}
+{"id":"train_240","question":"when did the three point shot start in high school","golden_answers":["1987"]}
+{"id":"train_241","question":"who commanded british forces at the battle of waterloo","golden_answers":["the Duke of Wellington"]}
+{"id":"train_242","question":"who hosted the daily show before trevor noah","golden_answers":["Jon Stewart","Craig Kilborn"]}
+{"id":"train_243","question":"the elf in rudolph the red nosed reindeer","golden_answers":["Hermey"]}
+{"id":"train_244","question":"where does the water in rockhampton come from","golden_answers":["The Fitzroy River Barrage"]}
+{"id":"train_245","question":"when did rudolph's shiny new year come out","golden_answers":["1976"]}
+{"id":"train_246","question":"what is considered middle age in the united states","golden_answers":["45 to 65"]}
+{"id":"train_247","question":"what is the liquid in a magic 8 ball","golden_answers":["alcohol"]}
+{"id":"train_248","question":"who sings we don't have to take our clothes off original","golden_answers":["Jermaine Stewart"]}
+{"id":"train_249","question":"who gave britain the right to rule palestine","golden_answers":["the League of Nations"]}
+{"id":"train_250","question":"who sings the theme song for republic of doyle","golden_answers":["Great Big Sea"]}
