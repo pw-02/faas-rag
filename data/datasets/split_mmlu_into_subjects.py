@@ -14,7 +14,7 @@ def slug(s: str) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input", default="data/datasets/mmlu/mmlu/mmlu_dev.jsonl", help="Path to input JSONL file (one JSON object per line).")
+    ap.add_argument("--input", default="data/datasets/mmlu/mmlu/mmlu_test.jsonl", help="Path to input JSONL file (one JSON object per line).")
     ap.add_argument("--out_dir", default="data/datasets/mmlu/subjects/", help="Output root directory.")
     args = ap.parse_args()
 
