@@ -33,9 +33,9 @@ def run_eval(
     run_logger.finalize()
 
 
-@hydra.main(config_path="../config", config_name="local_config", version_base=None) #local_config.yaml, config.yaml
+@hydra.main(config_path="../config", config_name="config", version_base=None) #local_config.yaml, config.yaml
 def main(cfg: AppConfig):
-    print(OmegaConf.to_yaml(cfg, resolve=True))
+    # print(OmegaConf.to_yaml(cfg, resolve=True))
     evaluator = Evaluator(cfg)
     dataset = Dataset(cfg)
     # pipeline = LLMOnlyPipeline(cfg)
