@@ -1,6 +1,7 @@
 name: wiki_dpr_flat_100k
 index_type: flat
-index_path: corpus/wiki-dpr/faiss_wiki_dpr/flat_100k/index_psgs_w100_nq_no_index_flat_ip_100000.faiss
+
+index_path: corpus/faiss_wiki_dpr/flat_100k/index_psgs_w100_nq_no_index_flat_ip_100000.faiss
 metric: ip
 ef_search: null # not applicable for ivf
 nprobe: null # not applicable for flat
