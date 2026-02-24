@@ -187,12 +187,12 @@ class RunLogger:
         }
 
         for k, m in self.acc_meters.items():
-            summary[f"acc_avg.{k}"] = m.avg
+            summary[f"avg.{k}"] = m.avg
             # summary[f"acc_sum.{k}"] = m.sum
 
         for k, m in self.cost_meters.items():
-            summary[f"cost_avg.{k}"] = m.avg
-            summary[f"cost_sum.{k}"] = m.sum
+            summary[f"avg.{k}"] = m.avg
+            summary[f"sum.{k}"] = m.sum
 
         with open(self.summary_csv, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=list(summary.keys()))
