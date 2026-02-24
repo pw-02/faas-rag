@@ -5,7 +5,7 @@ defaults:
   - retriever/pipeline: dense
   - retriever/corpus: wiki_21m #wiki_100k
   - retriever/embedder: dpr
-  - retriever/index: wiki_faiss_dpr_ivf_21m #wiki_dpr_hnsw_100k
+  - retriever/index: wiki_dpr_ivf_21m #wiki_dpr_hnsw_100k
   - retriever/search: topk
   - retriever/cache: none # options: null, proximity
   - override hydra/job_logging: disabled
