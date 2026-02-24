@@ -1,7 +1,7 @@
 
 name: wiki_dpr_ivf_21m
 index_type: ivf
-index_path: corpus/wiki-dpr/faiss_wiki_dpr/ivf_all/index_psgs_w100_nq_no_index_ivf_ip_all.faiss
+index_path: corpus/faiss_wiki_dpr/ivf_all/index_psgs_w100_nq_no_index_ivf_ip_all.faiss
 metric: ip
 ef_search: null # not applicable for ivf
 nprobe: 256

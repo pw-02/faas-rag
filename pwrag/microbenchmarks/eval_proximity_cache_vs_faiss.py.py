@@ -337,7 +337,8 @@ def write_summary_csv(path: Path, summaries: List[Summary]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--index", default="corpus/faiss_wiki_dpr/flat_100k/index_psgs_w100_nq_no_index_flat_ip_100000.faiss")
+    #corpus/faiss_wiki_dpr/flat_100k/index_psgs_w100_nq_no_index_flat_ip_100000.faiss
+    ap.add_argument("--index", default="corpus/faiss_wiki_dpr/flat_all/index_psgs_w100_nq_no_index_flat_ip_all.faiss")
     ap.add_argument("--id_map", default=None)
     ap.add_argument("--datasets", nargs="+", default=
                      [ 
