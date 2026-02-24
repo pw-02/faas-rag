@@ -350,7 +350,7 @@ def main() -> None:
     ap.add_argument("--encode_batch", type=int, default=1)
 
     ap.add_argument("--out_dir", default="results/cache_eval")
-    ap.add_argument("--details", action="store_true", default=False)
+    ap.add_argument("--details", action="store_true", default=True)
 
     # cache params
     ap.add_argument("--policy", default="fifo")
@@ -412,7 +412,7 @@ def main() -> None:
         summaries.append(summary)
 
         print(
-            f"{dataset_path.name}: hit_rate={summary.hit_rate:.3f}, "
+            f"{dataset_path}: hit_rate={summary.hit_rate:.3f}, "
             f"avg_overlap={summary.avg_overlap:.3f}, "
             f"qps(measured)={summary.qps_measured:.2f}, "
             f"qps(no_gt)={summary.qps_effective_no_gt:.2f}"
