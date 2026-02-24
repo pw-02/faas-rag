@@ -3,4 +3,5 @@ python pwrag/client/eval_dataset.py -m \
   retriever/index=wiki_dpr_ivf_21m,wiki_dpr_hnsw_21m,wiki_dpr_flat_21m \
   retriever/cache=none,proximity \
   hydra.sweep.dir=results/nq \
-  hydra.sweep.subdir='${retriever.index}/${retriever.cache}'
+  hydra.sweep.subdir='${hydra.runtime.choices.retriever/index}/${hydra.runtime.choices.retriever/cache}' \
+  save_dir='${hydra.runtime.output_dir}'
