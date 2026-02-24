@@ -368,6 +368,9 @@ def main() -> None:
     ap.add_argument("--fp16", action="store_true")
 
     args = ap.parse_args()
+    #load all jsonl files in the datasets directory
+    dataset_dir = Path("data/datasets")
+    args.datasets = [str(p) for p in dataset_dir.glob("**/*.jsonl")]
 
     db = load_faiss(Path(args.index), Path(args.id_map) if args.id_map else None)
     cache = make_cache(
@@ -379,6 +382,8 @@ def main() -> None:
         lsh_dim=args.lsh_dim,
         lsh_seed=args.lsh_seed,
     )
+
+
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     encoder = STEncoder(
