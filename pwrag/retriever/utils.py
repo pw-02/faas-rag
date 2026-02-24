@@ -166,12 +166,20 @@ def load_corpus(corpus_path: str):
         corpus = corpus.cast_column('image', datasets.Image())
     else:
         raise NotImplementedError("Corpus format not supported!")
-    if 'contents' not in corpus.features:
-        try:
-            print("No `contents` field found in corpus, using `text` instead.")
-            corpus = corpus.map(lambda x: {"contents": x["text"]})
-        except:
-            warnings.warn("No `contents` & `text` field found in corpus.")
+    if "contents" not in corpus.features:
+        if "text" in corpus.features:
+            print("Renaming `text` -> `contents`")
+            corpus = corpus.rename_column("text", "contents")
+        else:
+            warnings.warn("No `contents` or `text` field found in corpus.")
+    
+    
+    # if 'contents' not in corpus.features:
+    #     try:
+    #         print("No `contents` field found in corpus, using `text` instead.")
+    #         corpus = corpus.map(lambda x: {"contents": x["text"]})
+    #     except:
+    #         warnings.warn("No `contents` & `text` field found in corpus.")
     return corpus
 
 def read_jsonl(file_path):

@@ -224,7 +224,7 @@ class PromptTemplate:
             if "faiss_id" in retrieval_result[0].keys():
                 # content = doc_item["contents"]
                 title = doc_item['title']
-                text = doc_item['text']
+                text = doc_item['contents']
             else:
                 content = doc_item["contents"]
                 title = content.split("\n")[0]
