@@ -351,7 +351,7 @@ def main() -> None:
     ap.add_argument("--encode_batch", type=int, default=1)
 
     ap.add_argument("--out_dir", default="results/cache_eval")
-    ap.add_argument("--details", action="store_true", default=True)
+    ap.add_argument("--details", action="store_true", default=False)
 
     # cache params
     ap.add_argument("--policy", default="fifo")
@@ -402,6 +402,11 @@ def main() -> None:
 
     summaries: List[Summary] = []
     for dataset in args.datasets:
+        #count rows in the dataset
+        with open(dataset, "r", encoding="utf-8") as f:
+            num_rows = sum(1 for line in f if line.strip())
+        print(f"Evaluating dataset: {dataset} ({num_rows} rows)")
+
         dataset_path = Path(dataset)
         details_csv = (out_dir / f"{dataset_path.stem}.details.csv") if args.details else None
 
