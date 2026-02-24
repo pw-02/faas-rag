@@ -80,22 +80,27 @@ class ProximityCache:
         return self.lsh_dim if self.strict_dim else None
 
     def _to_key_list(self, key: Any, *, dim: Optional[int]) -> List[float]:
-        """
-        Convert user key into list[float] expected by proximipy.
-        Accepts:
-          - list/tuple
-          - 1D numpy array
-          - other iterables
-        """
         if isinstance(key, np.ndarray):
+            # Accept (dim,) OR (1, dim)
+            if key.ndim == 2 and key.shape[0] == 1:
+                key = key[0]
             if key.ndim != 1:
-                raise ValueError(f"Key ndarray must be 1D, got shape={key.shape}")
+                raise ValueError(f"Key ndarray must be 1D or (1, D), got shape={key.shape}")
+
             out = key.astype(np.float32, copy=False).tolist()
+
         elif isinstance(key, (list, tuple)):
+            # Also accept [[...]] (1, dim) style lists
+            if len(key) == 1 and isinstance(key[0], (list, tuple, np.ndarray)):
+                key = key[0]
             out = list(key)
+
         else:
             try:
-                out = list(key)  # type: ignore[arg-type]
+                out = list(key)  # might be a torch tensor or iterable
+                # If it's a "batched" iterable like [[...]] flatten once
+                if len(out) == 1 and isinstance(out[0], (list, tuple, np.ndarray)):
+                    out = list(out[0])
             except TypeError as e:
                 raise TypeError(
                     f"Key type {type(key)!r} is not supported. "

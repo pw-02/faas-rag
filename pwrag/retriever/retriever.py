@@ -385,36 +385,57 @@ class DenseRetriever(BaseTextRetriever):
 
     def _search(self, query: str, num: int = None, return_score=False, metrics: dict[str, float] = None) -> List[Dict[str, str]]:
         
-        t0 = time.perf_counter()
+        if metrics is None:
+            metrics = {}
         k = self.topk if num is None else num
-        # Encode
+        
+        # -----------------
+        # Encode (normalize)
+        # -----------------
+        t0 = time.perf_counter()
         query_emb = self.encoder.encode(query)
-        if metrics is not None:
-            metrics["encode_query_time(s)"] = time.perf_counter() - t0
+        metrics["encode_query_time(s)"] = time.perf_counter() - t0
+        
         # Search
         t1 = time.perf_counter()
+        idxs = None
+        scores = None
 
         #check cache
         if self.use_cache and self.cache is not None:
-            cache_results = self.cache.get(query_emb)
+            t_cache = time.perf_counter()
+            cache_results = self.cache.find(query_emb)
+            metrics["cache_check_time(s)"] = time.perf_counter() - t_cache
+            
             if cache_results is not None:
-                if return_score:
-                    return cache_results, [None] * len(cache_results)
-                else:
-                    return cache_results
+                metrics["cache_hit"] = 1
+                idxs = cache_results
+                # idxs_1d = idxs_1d[:k]  # if cache stored more than requested
+                scores = [0] * len(cache_results)  # no scores available from cache
+                metrics["vec_db_check_time(s)"] = 0.0
+        
+        # cache miss -> ANN search    
+        if idxs is None:
+            metrics["cache_hit"] = 0
+            t_db = time.perf_counter()
+           
+            scores, idxs = self.index.search(query_emb, k=k)
+            metrics["vec_db_check_time(s)"] = time.perf_counter() - t_db
 
-        scores, idxs = self.index.search(query_emb, k=k)
-        if metrics is not None:
-            metrics["search_time(s)"] = time.perf_counter() - t1
-            # metrics.update(self.faiss_index_params)
-        idxs = idxs[0]
-        scores = scores[0]
+            # Normalize shapes
+            idxs = np.asarray(idxs).reshape(-1).astype(np.int64) #int type for indexing corpus
+            scores = np.asarray(scores).reshape(-1) if scores is not None else None
+            
+            # store ONLY doc ids in cache
+            if self.use_cache and self.cache is not None:
+                self.cache.insert(query_emb, idxs.tolist()) 
+                
+        metrics["search_time(s)"] = time.perf_counter() - t1    
 
         # Load docs
         t2 = time.perf_counter()
         results = load_docs(self.corpus, idxs)
-        if metrics is not None:
-            metrics["load_doc_time(s)"] = time.perf_counter() - t2
+        metrics["load_doc_time(s)"] = time.perf_counter() - t2
 
         if return_score:
             return results, scores

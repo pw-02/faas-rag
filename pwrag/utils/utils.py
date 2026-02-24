@@ -86,10 +86,10 @@ def get_cache(config: AppConfig):    # if config.retriever.pipeline.use_cache:
             capacity=config.retriever.cache.proximity.capacity,
             lsh_bucket_capacity=config.retriever.cache.proximity.lsh_bucket_capacity,
             lsh_num_hashes=config.retriever.cache.proximity.lsh_num_hashes,
-            dim=config.retriever.embedder.dim,
-            seed=config.seed
+            lsh_dim=config.retriever.embedder.dim,
+            lsh_seed=config.seed
         )
-
+    
     raise NotImplementedError("Cache is not supported yet.")
 
 def get_refiner(config):
