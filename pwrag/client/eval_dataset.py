@@ -41,8 +41,11 @@ def main(cfg: AppConfig):
     # pipeline = LLMOnlyPipeline(cfg)
     pipeline = SequentialPipeline(cfg)
 
-    run_logger = RunLogger(cfg, pipeline_name=pipeline.pipeline_name, overwrite=True, report_every=10)
-
+    run_logger = RunLogger(cfg, 
+                           pipeline_name=pipeline.pipeline_name, 
+                           run_name=cfg.run_name,
+                           overwrite=True, 
+                           report_every=10)
 
     run_eval(
         cfg=cfg,

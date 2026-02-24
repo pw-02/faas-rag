@@ -55,13 +55,14 @@ class RunLogger:
         self.flush_every = int(flush_every)
         self.fsync = bool(fsync)
 
-        self.save_dir = os.path.join(
-            config.save_dir,
-            config.dataset.dataset_name,
-            config.generator.name,
-            self.pipeline_name,
-            # datetime.now().strftime("%Y%m%d_%H%M%S")
-        )
+        # self.save_dir = os.path.join(
+        #     config.save_dir,
+        #     config.dataset.dataset_name,
+        #     config.generator.name,
+        #     self.pipeline_name,
+        #     # datetime.now().strftime("%Y%m%d_%H%M%S")
+        # )
+        self.save_dir =  config.save_dir
         os.makedirs(self.save_dir, exist_ok=True)
 
         # self.run_name = run_name or f"run_{config.dataset.dataset_name}_{config.generator.name}"

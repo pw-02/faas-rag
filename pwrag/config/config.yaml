@@ -1,6 +1,6 @@
 defaults:
   # - retriever: wiki_faiss_dpr_ivf_100k #, llama_13_8B_instruct, llama_70b_chat, gpt-3.5-turbo
-  - generator: qwen2_0_5b_instruct 
+  - generator:  #qwen2_0_5b_instruct 
   - dataset: repeated_question #nq
   # - retriever: base
   - retriever/pipeline: dense
@@ -13,6 +13,7 @@ defaults:
   - override hydra/hydra_logging: disabled
   - _self_
 
+run_name: null
 # ------------
 generator_device: cuda:0
 retriever_device: cuda:0

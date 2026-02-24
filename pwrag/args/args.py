@@ -104,3 +104,4 @@ class AppConfig:
     save_sample_metrics: bool = True
     save_summary_metrics: bool = True
     is_reasoning: bool = False
+    run_name: Optional[str] = None
