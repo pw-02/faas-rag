@@ -22,7 +22,7 @@ metrics: ["em", "f1", "acc", "precision", "recall"]
 save_sample_metrics: false
 save_summary_metrics: false
 
-max_sample_num: null   # number of samples to test (only work in dev/test split), if None, test all samples
+max_sample_num: 1000   # number of samples to test (only work in dev/test split), if None, test all samples
 random_sample: False # whether to randomly sample the test samples
 is_reasoning: false
 
