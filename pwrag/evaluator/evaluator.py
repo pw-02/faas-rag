@@ -49,7 +49,8 @@ class Evaluator:
                 metric_result, metric_score = self.metric_class[metric].calculate_metric_for_item(item)
                 result_dict.update(metric_result)
             except Exception as e:
-                # don't crash the whole run
+                #crash the whole run
+                raise e
                 result_dict[metric] = None
                 result_dict[f"{metric}_error"] = str(e)
         return result_dict

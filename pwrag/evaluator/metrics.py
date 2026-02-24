@@ -28,6 +28,7 @@ class BaseMetric:
 
         """
         return {}, []
+    
     def calculate_metric_for_item(self, item):
         """Calculate metric score for a single data sample."""
         return {}, 0.0
@@ -35,14 +36,7 @@ class BaseMetric:
     def get_item_answer(self, item):
         if not item.choices:
             return item.golden_answers
-
-        all_choices_list = item.choices
-        golden_choice_idx_list = item.golden_answers
-
-        resposne = [
-            [choices[idx] for idx in idx_list]
-            for choices, idx_list in zip(all_choices_list, golden_choice_idx_list)
-        ]
+        resposne = [item.choices[idx] for idx in item.golden_answers]
         return resposne
     
     def get_dataset_answer(self, data):

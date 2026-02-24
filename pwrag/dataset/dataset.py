@@ -22,6 +22,9 @@ class Item:
         self.output: Dict[str, Any] = item_dict.get("output", {})
         self.metrics: Dict[str, Any] = item_dict.get("metrics", {})
 
+        # if self.choices:
+        #     self.golden_answers = [self.choices[idx] for idx in self.golden_answers]
+       
         # if len(self.golden_answers) == 0 and "answer" in item_dict and len(self.choices)>0:
         #     self.golden_answers = [int(item_dict["answer"])]
 
