@@ -276,6 +276,8 @@ def eval_one_dataset(
                 details_writer.writerow(
                     {
                         "id": qid,
+                        "cache_policy": cache.policy,
+                        "cache_tolerance": cache.tolerance,
                         "cache_hit": int(cache_hit),
                         "overlap": overlap,
                         "overlap_pct": f"{overlap_pct:.6f}",
@@ -373,12 +375,14 @@ def main() -> None:
     ap.add_argument("--topk_ret", type=int, default=5)
     ap.add_argument("--encode_batch", type=int, default=1)
 
-    ap.add_argument("--out_dir", default="results/cache_eval/hnsw_21m")
+    ap.add_argument("--out_dir", default="results/cache_eval")
     ap.add_argument("--details", action="store_true", default=False)
 
     # cache params
     ap.add_argument("--policy", default="fifo")
     ap.add_argument("--tolerance", type=float, default=0.8)
+    ap.add_argument("--tolerance_sweep", nargs="+", type=float, default=[0,0.5,1,2,4,6,8,10,12,20])
+
     ap.add_argument("--capacity", type=int, default=1000)
     ap.add_argument("--lsh_bucket_capacity", type=int, default=5)
     ap.add_argument("--lsh_num_hashes", type=int, default=64)
@@ -395,9 +399,16 @@ def main() -> None:
 
     # You currently override --datasets and evaluate *everything* under data/datasets.
     # Keeping your behavior as-is:
-    
-    # dataset_dir = Path("data/datasets")
-    # args.datasets = [str(p) for p in dataset_dir.glob("**/*.jsonl")]
+
+    dataset_dir = Path("data/datasets")
+    args.datasets = [str(p) for p in dataset_dir.glob("**/*.jsonl")]
+
+    if args.tolerance_sweep is not None:
+        tolerences = args.tolerance_sweep
+    else:
+        tolerences = [args.tolerance]
+
+    print("Evaluating with tolerances:", tolerences)
 
     print("Total datasets to evaluate:", len(args.datasets))
     print("Loading FAISS index...")
@@ -423,45 +434,47 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summaries: List[Summary] = []
-    for dataset in args.datasets:
-        with open(dataset, "r", encoding="utf-8") as f:
-            num_rows = sum(1 for line in f if line.strip())
-        print(f"Evaluating dataset: {dataset} ({num_rows} rows)")
+    
+    for tol in tolerences:
+        for dataset in args.datasets:
+            with open(dataset, "r", encoding="utf-8") as f:
+                num_rows = sum(1 for line in f if line.strip())
+            print(f"Evaluating dataset: {dataset} ({num_rows} rows)")
 
-        #new cache for each datasset
-        cache = make_cache(
-            policy=args.policy,
-            tolerance=args.tolerance,
-            capacity=num_rows if num_rows > 0 else args.capacity,
-            lsh_bucket_capacity=args.lsh_bucket_capacity,
-            lsh_num_hashes=args.lsh_num_hashes,
-            lsh_dim=args.lsh_dim,
-            lsh_seed=args.lsh_seed,
-        )
+            #new cache for each datasset
+            cache = make_cache(
+                policy=args.policy,
+                tolerance=tol,
+                capacity=num_rows if num_rows > 0 else args.capacity,
+                lsh_bucket_capacity=args.lsh_bucket_capacity,
+                lsh_num_hashes=args.lsh_num_hashes,
+                lsh_dim=args.lsh_dim,
+                lsh_seed=args.lsh_seed,
+            )
 
-        dataset_path = Path(dataset)
-        details_csv = (out_dir / f"{dataset_path.stem}.details.csv") if args.details else None
+            dataset_path = Path(dataset)
+            details_csv = (out_dir / f"{dataset_path.stem}.details.csv") if args.details else None
 
-        summary = eval_one_dataset(
-            db=db,
-            cache=cache,
-            encoder=encoder,
-            dataset_path=dataset_path,
-            topk_gt=args.topk_gt,
-            topk_ret=args.topk_ret,
-            encode_batch=args.encode_batch,
-            details_csv=details_csv,
-        )
-        summaries.append(summary)
+            summary = eval_one_dataset(
+                db=db,
+                cache=cache,
+                encoder=encoder,
+                dataset_path=dataset_path,
+                topk_gt=args.topk_gt,
+                topk_ret=args.topk_ret,
+                encode_batch=args.encode_batch,
+                details_csv=details_csv,
+            )
+            summaries.append(summary)
 
-        print(
-            f"{dataset_path}: n={summary.num_queries}, hit_rate={summary.hit_rate:.3f}, "
-            f"avg_overlap={summary.avg_overlap:.3f}, "
-            f"avg_overlap_pct={summary.avg_overlap_pct*100:.1f}%, "
-            f"avg_overlap_pct_on_hits={summary.avg_overlap_pct_on_hits*100:.1f}%, "
-            f"qps(measured)={summary.qps_measured:.2f}, "
-            f"qps(no_gt)={summary.qps_effective_no_gt:.2f}"
-        )
+            print(
+                f"{dataset_path}: n={summary.num_queries}, hit_rate={summary.hit_rate:.3f}, "
+                f"avg_overlap={summary.avg_overlap:.3f}, "
+                f"avg_overlap_pct={summary.avg_overlap_pct*100:.1f}%, "
+                f"avg_overlap_pct_on_hits={summary.avg_overlap_pct_on_hits*100:.1f}%, "
+                f"qps(measured)={summary.qps_measured:.2f}, "
+                f"qps(no_gt)={summary.qps_effective_no_gt:.2f}"
+            )
 
     write_summary_csv(out_dir / "summary.csv", summaries)
     print(f"Wrote: {out_dir / 'summary.csv'}")
