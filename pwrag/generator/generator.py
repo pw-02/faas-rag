@@ -331,118 +331,118 @@ class HFCausalLMGenerator(BaseGenerator):
         return logits, target_probs
     
     
-# class VLLMGenerator(BaseGenerator):
-#     """Class for decoder-only generator, based on vllm."""
+class VLLMGenerator(BaseGenerator):
+    """Class for decoder-only generator, based on vllm."""
 
-#     def __init__(self, config):
-#         super().__init__(config)
+    def __init__(self, config):
+        super().__init__(config)
         
-#         from vllm import LLM
-#         if self.use_lora:
-#             self.model = LLM(
-#                 self.model_path,
-#                 tensor_parallel_size = self.tensor_parallel_size,
-#                 gpu_memory_utilization = self.gpu_memory_utilization,
-#                 enable_lora = True,
-#                 max_lora_rank = 64,
-#                 max_logprobs = 32016,
-#                 max_model_len = self.max_model_len
-#             )
-#         else:
-#             self.model = LLM(
-#                 self.model_path,
-#                 tensor_parallel_size = self.tensor_parallel_size,
-#                 gpu_memory_utilization = self.gpu_memory_utilization,
-#                 max_logprobs = 32016,
-#                 max_model_len = self.max_model_len
-#             )
-#         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
+        from vllm import LLM
+        if self.use_lora:
+            self.model = LLM(
+                self.model_path,
+                tensor_parallel_size = self.tensor_parallel_size,
+                gpu_memory_utilization = self.gpu_memory_utilization,
+                enable_lora = True,
+                max_lora_rank = 64,
+                max_logprobs = 32016,
+                max_model_len = self.max_model_len
+            )
+        else:
+            self.model = LLM(
+                self.model_path,
+                tensor_parallel_size = self.tensor_parallel_size,
+                gpu_memory_utilization = self.gpu_memory_utilization,
+                max_logprobs = 32016,
+                max_model_len = self.max_model_len
+            )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
     
-#     def update_additional_setting(self):
-#         if "gpu_memory_utilization" not in self._config:
-#             self.gpu_memory_utilization = 0.85
-#         else:
-#             self.gpu_memory_utilization = self._config["gpu_memory_utilization"]
-#         if self.gpu_num != 1 and self.gpu_num % 2 != 0:
-#             self.tensor_parallel_size = self.gpu_num - 1
-#         else:
-#             self.tensor_parallel_size = self.gpu_num
+    def update_additional_setting(self):
+        if "gpu_memory_utilization" not in self._config:
+            self.gpu_memory_utilization = 0.85
+        else:
+            self.gpu_memory_utilization = self._config["gpu_memory_utilization"]
+        if self.gpu_num != 1 and self.gpu_num % 2 != 0:
+            self.tensor_parallel_size = self.gpu_num - 1
+        else:
+            self.tensor_parallel_size = self.gpu_num
 
-#         self.lora_path = None if "generator_lora_path" not in self._config else self._config["generator_lora_path"]
-#         self.use_lora = False
-#         if self.lora_path is not None:
-#             self.use_lora = True
-#         self.max_model_len = self._config['generator_max_input_len']
+        self.lora_path = None if "generator_lora_path" not in self._config else self._config["generator_lora_path"]
+        self.use_lora = False
+        if self.lora_path is not None:
+            self.use_lora = True
+        self.max_model_len = self._config['generator_max_input_len']
 
-#     def generate(
-#         self,
-#         input_list: List[str],
-#         return_raw_output=False,
-#         return_scores=False,
-#         **params,
-#     ):
-#         from vllm import SamplingParams
+    def generate(
+        self,
+        input_list: List[str],
+        return_raw_output=False,
+        return_scores=False,
+        **params,
+    ):
+        from vllm import SamplingParams
 
-#         if isinstance(input_list, str):
-#             input_list = [input_list]
+        if isinstance(input_list, str):
+            input_list = [input_list]
 
-#         generation_params = deepcopy(self.generation_params)
-#         generation_params.update(params)
-#         if "do_sample" in generation_params:
-#             do_sample_flag = generation_params.pop("do_sample")
-#             if not do_sample_flag:
-#                 generation_params["temperature"] = 0
-#         generation_params["seed"] = self._config["seed"]
+        generation_params = deepcopy(self.generation_params)
+        generation_params.update(params)
+        if "do_sample" in generation_params:
+            do_sample_flag = generation_params.pop("do_sample")
+            if not do_sample_flag:
+                generation_params["temperature"] = 0
+        generation_params["seed"] = self._config["seed"]
 
-#         # handle param conflict
-#         generation_params = resolve_max_tokens(params, generation_params, prioritize_new_tokens=False)
+        # handle param conflict
+        generation_params = resolve_max_tokens(params, generation_params, prioritize_new_tokens=False)
 
-#         # fix for llama3
-#         if "stop" in generation_params:
-#             generation_params["stop"].append("<|eot_id|>")
-#             generation_params["include_stop_str_in_output"] = True
-#         else:
-#             generation_params["stop"] = ["<|eot_id|>"]
+        # fix for llama3
+        if "stop" in generation_params:
+            generation_params["stop"].append("<|eot_id|>")
+            generation_params["include_stop_str_in_output"] = True
+        else:
+            generation_params["stop"] = ["<|eot_id|>"]
 
-#         if return_scores:
-#             if "logprobs" not in generation_params:
-#                 generation_params["logprobs"] = 100
+        if return_scores:
+            if "logprobs" not in generation_params:
+                generation_params["logprobs"] = 100
 
-#         sampling_params = SamplingParams(**generation_params)
+        sampling_params = SamplingParams(**generation_params)
 
-#         if self.use_lora:
-#             from vllm.lora.request import LoRARequest
+        if self.use_lora:
+            from vllm.lora.request import LoRARequest
 
-#             outputs = self.model.generate(
-#                 input_list,
-#                 sampling_params,
-#                 lora_request=LoRARequest("lora_module", 1, self.lora_path),
-#             )
-#         else:
-#             outputs = self.model.generate(input_list, sampling_params)
+            outputs = self.model.generate(
+                input_list,
+                sampling_params,
+                lora_request=LoRARequest("lora_module", 1, self.lora_path),
+            )
+        else:
+            outputs = self.model.generate(input_list, sampling_params)
 
-#         if return_raw_output:
-#             base_output = outputs
-#         else:
-#             generated_texts = [
-#                 [c.text for c in output.outputs] if len(output.outputs) > 1 else output.outputs[0].text
-#                 for output in outputs
-#             ]
-#             base_output = generated_texts
-#         if return_scores:
-#             scores = []
-#             for output in outputs:
-#                 for single_output in output.outputs:
-#                     if single_output.logprobs:
-#                         token_probs = [np.exp(list(score_dict.values())[0].logprob) 
-#                                       for score_dict in single_output.logprobs]
-#                         output_scores.append(token_probs)
-#                     else:
-#                         output_scores.append([])
-#                 if len(output_scores) == 1:
-#                     scores.append(output_scores[0])
-#                 else:
-#                     scores.append(output_scores)
-#             return base_output, scores
-#         else:
-#             return base_output
+        if return_raw_output:
+            base_output = outputs
+        else:
+            generated_texts = [
+                [c.text for c in output.outputs] if len(output.outputs) > 1 else output.outputs[0].text
+                for output in outputs
+            ]
+            base_output = generated_texts
+        if return_scores:
+            scores = []
+            for output in outputs:
+                for single_output in output.outputs:
+                    if single_output.logprobs:
+                        token_probs = [np.exp(list(score_dict.values())[0].logprob) 
+                                      for score_dict in single_output.logprobs]
+                        output_scores.append(token_probs)
+                    else:
+                        output_scores.append([])
+                if len(output_scores) == 1:
+                    scores.append(output_scores[0])
+                else:
+                    scores.append(output_scores)
+            return base_output, scores
+        else:
+            return base_output
