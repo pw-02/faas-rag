@@ -11,7 +11,7 @@ import faiss
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pwrag.args.args import AppConfig
-from pwrag.utils.utils import get_reranker, get_cache
+from pwrag.utils.utils import get_reranker, get_cache, timed
 from pwrag.retriever.utils import inspect_faiss_index, load_corpus, load_docs, convert_numpy, judge_image, judge_zh, unwrap_faiss_index
 from pwrag.retriever.encoder import Encoder, STEncoder, ClipEncoder
 from pwrag.retriever.caches import ProximityCache
@@ -383,68 +383,71 @@ class DenseRetriever(BaseTextRetriever):
                 f"Pooling method in model config file is {detect_pooling_method}, but the input is {pooling_method}. Please check carefully."
             )
 
-    def _search(self, query: str, num: int = None, return_score=False, metrics: dict[str, float] = None) -> List[Dict[str, str]]:
+    def _search(self, query: str, 
+                num: int = None, 
+                return_score=False, 
+                metrics: dict[str, float] = None) -> List[Dict[str, str]]:
         
         if metrics is None:
             metrics = {}
+            
         k = self.topk if num is None else num
         
         # -----------------
         # Encode (normalize)
         # -----------------
         t0 = time.perf_counter()
-        query_emb = self.encoder.encode(query)
-        metrics["encode_query_time(s)"] = time.perf_counter() - t0
-        
+
+        with timed(metrics, "encode_query_time(s)"):
+            query_emb = self.encoder.encode(query)
+            
         # Search
-        t1 = time.perf_counter()
-        idxs = None
-        scores = None
+        with timed(metrics, "search_time(s)"):
+            idxs = None
+            scores = None
 
-        #check cache
-        if self.use_cache and self.cache is not None:
-            t_cache = time.perf_counter()
-            cache_results = self.cache.find(query_emb)
-            metrics["cache_check_time(s)"] = time.perf_counter() - t_cache
-            
-            if cache_results is not None:
-                metrics["cache_hit"] = 1
-                idxs = cache_results
-                # idxs_1d = idxs_1d[:k]  # if cache stored more than requested
-                scores = [0] * len(cache_results)  # no scores available from cache
-                metrics["vec_db_check_time(s)"] = 0.0
-        else:
-            metrics["cache_check_time(s)"] = 0.0
-        
-        # cache miss -> ANN search    
-        if idxs is None:
-            metrics["cache_hit"] = 0
-            t_db = time.perf_counter()
-           
-            scores, idxs = self.index.search(query_emb, k=k)
-            metrics["vec_db_check_time(s)"] = time.perf_counter() - t_db
-
-            # Normalize shapes
-            idxs = np.asarray(idxs).reshape(-1).astype(np.int64) #int type for indexing corpus
-            scores = np.asarray(scores).reshape(-1) if scores is not None else None
-            
-            # store ONLY doc ids in cache
+            #check cache
             if self.use_cache and self.cache is not None:
-                self.cache.insert(query_emb, idxs.tolist()) 
-                
-        metrics["search_time(s)"] = time.perf_counter() - t1    
+                with timed(metrics, "cache_check_time(s)"):
+                    cache_results = self.cache.find(query_emb)
 
+                if cache_results is not None:
+                    metrics["cache_hit"] = 1
+                    idxs = cache_results
+                    # idxs_1d = idxs_1d[:k]  # if cache stored more than requested
+                    scores = [0] * len(cache_results)  # no scores available from cache
+                    metrics["vec_db_check_time(s)"] = 0.0
+            else:
+                metrics["cache_check_time(s)"] = 0.0
+            
+            # cache miss -> ANN search    
+            if idxs is None:
+                metrics["cache_hit"] = 0
+
+                with timed(metrics, "vec_db_check_time(s)"):
+                    scores, idxs = self.index.search(query_emb, k=k)
+
+                # Normalize shapes
+                idxs = np.asarray(idxs).reshape(-1).astype(np.int64) #int type for indexing corpus
+                scores = np.asarray(scores).reshape(-1) if scores is not None else None
+                
+                # store ONLY doc ids in cache
+                if self.use_cache and self.cache is not None:
+                    self.cache.insert(query_emb, idxs.tolist()) 
+                
         # Load docs
-        t2 = time.perf_counter()
-        results = load_docs(self.corpus, idxs)
-        metrics["load_doc_time(s)"] = time.perf_counter() - t2
+        with timed(metrics, "load_doc_time(s)"):
+            results = load_docs(self.corpus, idxs)
 
         if return_score:
             return results, scores
         else:
             return results
         
-    def _batch_search(self, query: List[str], num: int = None, return_score=False):
+    def _batch_search(self, query: List[str], num: int = None, return_score=False, metrics: dict[str, float] = None):
+
+        if metrics is None:
+            metrics = {}
 
         if isinstance(query, str):
             query = [query]
@@ -454,23 +457,20 @@ class DenseRetriever(BaseTextRetriever):
 
         results = []
         scores = []
-
-        emb = self.encoder.encode(query, batch_size=batch_size, is_query=True)
-
-        print("Start searching...")
-        t_now = time.perf_counter()
-        scores, idxs = self.index.search(emb, k=num)
-        print(f"Search time: {time.perf_counter() - t_now:.2f}s")
+        
+        with timed(metrics, "encode_batch(s)"):
+            emb = self.encoder.encode(query, batch_size=batch_size, is_query=True)
+        with timed(metrics, "search_batch(s)"):
+            scores, idxs = self.index.search(emb, k=num)
         scores = scores.tolist()
         idxs = idxs.tolist()
 
         flat_idxs = [idx for sublist in idxs for idx in sublist]
-        print("Start loading docs...")
-        t_now = time.perf_counter()
-        results = load_docs(self.corpus, flat_idxs)
-        print(f"Loading docs time: {time.perf_counter() - t_now:.2f}s")
-        results = [results[i * num : (i + 1) * num] for i in range(len(idxs))]
 
+        with timed(metrics, "load_doc_batch_time(s)"):
+            results = load_docs(self.corpus, flat_idxs)
+            results = [results[i * num : (i + 1) * num] for i in range(len(idxs))]
+        
         if return_score:
             return results, scores
         else:

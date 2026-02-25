@@ -1,3 +1,4 @@
+import time
 from typing import List
 from copy import deepcopy
 import warnings
@@ -139,13 +140,18 @@ class HFCausalLMGenerator(BaseGenerator):
     def generate(
         self,
         input_list: List[str],
+        metrics: dict[str, float] = None,
         batch_size=None,
         return_scores=False,
         return_dict=False,
-        return_usage=False,
         **params,
     ):
         """Generate batches one by one. The generated content needs to exclude input."""
+
+        if metrics is None:
+            metrics = {}
+
+        t0 = time.perf_counter()
 
         if isinstance(input_list, str):
             input_list = [input_list]
@@ -281,35 +287,31 @@ class HFCausalLMGenerator(BaseGenerator):
 
                 responses.append(gen_text.strip())
 
-        usage = {
-            "prompt_tokens_per_item": prompt_tokens_per_item,
-            "completion_tokens_per_item": completion_tokens_per_item,
-            "prompt_tokens": sum(prompt_tokens_per_item),
-            "completion_tokens": sum(completion_tokens_per_item),
-            "total_tokens": sum(prompt_tokens_per_item) + sum(completion_tokens_per_item),
-        }
-
+        # if metrics is not None:
+        # metrics["prompt_tokens_per_item"] = prompt_tokens_per_item
+        # metrics["completion_tokens_per_item"] = completion_tokens_per_item
+        metrics["prompt_tokens"] = sum(prompt_tokens_per_item)
+        metrics["completion_tokens"] = sum(completion_tokens_per_item)
+        metrics["total_tokens"] = metrics["prompt_tokens"] + metrics["completion_tokens"]
+        metrics["generation_time(s)"] = time.perf_counter() - t0
+        
         if return_dict:
             generated_token_ids = torch.cat(generated_token_ids, dim=0) if generated_token_ids else None
             generated_token_logits = torch.cat(generated_token_logits, dim=0) if generated_token_logits else None
-            out = {
+            return {
                 "generated_token_ids": generated_token_ids,
                 "generated_token_logits": generated_token_logits,
                 "responses": responses,
                 "scores": scores,
             }
-            if return_usage:
-                out["usage"] = usage
-            return out
-
-        # return combinations
-        if return_scores and return_usage:
-            return responses, scores, usage
+        
         if return_scores:
             return responses, scores
-        if return_usage:
-            return responses, usage
-        return responses
+        else:
+            return responses
+
+
+
 
 
     def cal_gen_probs(self, prev, next):

@@ -1,7 +1,18 @@
+import time
+
 from transformers import AutoTokenizer, AutoConfig
 from pwrag.args.args import AppConfig
 import tiktoken
 import warnings
+
+  # self.zero_shot_templete = PromptTemplate(
+    #         config=config,
+    #         system_prompt="Answer the question based on your own knowledge. \
+    #                         Only give me the answer and do not output any other words.",
+    #         user_prompt="Question: {question}",
+    #     )
+
+
 
 class PromptTemplate:
     placeholders = ["reference", "question"]
@@ -108,8 +119,19 @@ class PromptTemplate:
 
 
 
-    def get_string(self, question=None, retrieval_result=None, formatted_reference=None, 
-                   previous_gen=None, messages=None, **params):
+    def get_string(self, 
+                   question=None, 
+                   retrieval_result=None, 
+                   formatted_reference=None, 
+                   previous_gen=None, 
+                   messages=None, 
+                   metrics: dict[str, float] = None,
+                   **params):
+        
+        if metrics is None:
+            metrics = {}
+        t0 = time.perf_counter()
+
         if messages is not None:
             if isinstance(messages, str):
                 return self.truncate_prompt(messages)
@@ -163,6 +185,8 @@ class PromptTemplate:
                 
             else:
                 input += previous_gen
+            
+        metrics["create_prompt_time(s)"] = time.perf_counter() - t0
 
         return self.truncate_prompt(input)
 

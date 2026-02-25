@@ -1,0 +1,4 @@
+name: skr
+model_path: pwrag.judger.adaptive.AdaptiveJudger
+batch_size: 16
+max_length: 512

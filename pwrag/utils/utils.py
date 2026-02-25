@@ -93,6 +93,14 @@ def get_cache(config: AppConfig):    # if config.retriever.pipeline.use_cache:
 def get_refiner(config):
     pass
 
-def get_judger(config):
-    pass
+def get_judger(config:AppConfig):
+    judger_name = config.judger_name
+    if "skr" in judger_name.lower():
+        from pwrag.judger.judger import SKRJudger
+        return SKRJudger(config)
+    elif "adaptive" in judger_name.lower():
+        from pwrag.judger.judger import AdaptiveJudger
+        return AdaptiveJudger(config)
+    else:
+        assert False, "No implementation!"
 

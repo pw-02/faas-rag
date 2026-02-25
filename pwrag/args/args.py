@@ -1,6 +1,15 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 
+# ---- Judger ----
+@dataclass
+class JudgerConfig:
+    name: str = "adaptive"  # options: skr, adaptive, null
+    model_path: Optional[str] = None
+    batch_size: int = 64
+    max_length: int = 128
+    device: str = "cuda:0"
+
 # ---- Generator ----
 @dataclass
 class GeneratorConfig:

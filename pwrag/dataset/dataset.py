@@ -114,6 +114,7 @@ class Dataset:
         self.dataset_path = dataset_path
         self.sample_num = sample_num
         self.random_sample = random_sample
+        
 
         if data is None:
             self.data = self._load_data(self.dataset_name, self.dataset_path)
@@ -162,6 +163,12 @@ class Dataset:
         assert len(self.data) == len(value_list)
         for item, value in zip(self.data, value_list):
             item.update_output(key, value)
+    
+    def update_metrics(self, key: str, value_list: List[Any]) -> None:
+        """Update the overall metrics field for each sample in the dataset."""
+        assert len(self.data) == len(value_list)
+        for item, value in zip(self.data, value_list):
+            item.update_metrics(key, value)
             
     @property
     def question(self) -> List[Optional[str]]:
