@@ -125,13 +125,8 @@ class PromptTemplate:
                    formatted_reference=None, 
                    previous_gen=None, 
                    messages=None, 
-                   metrics: dict[str, float] = None,
                    **params):
-        
-        if metrics is None:
-            metrics = {}
-        t0 = time.perf_counter()
-
+  
         if messages is not None:
             if isinstance(messages, str):
                 return self.truncate_prompt(messages)
@@ -186,7 +181,6 @@ class PromptTemplate:
             else:
                 input += previous_gen
             
-        metrics["create_prompt_time(s)"] = time.perf_counter() - t0
 
         return self.truncate_prompt(input)
 

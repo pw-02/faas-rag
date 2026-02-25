@@ -458,16 +458,16 @@ class DenseRetriever(BaseTextRetriever):
         results = []
         scores = []
         
-        with timed(metrics, "encode_batch(s)"):
+        with timed(metrics, "encode(s)"):
             emb = self.encoder.encode(query, batch_size=batch_size, is_query=True)
-        with timed(metrics, "search_batch(s)"):
+        with timed(metrics, "index_search(s)"):
             scores, idxs = self.index.search(emb, k=num)
         scores = scores.tolist()
         idxs = idxs.tolist()
 
         flat_idxs = [idx for sublist in idxs for idx in sublist]
 
-        with timed(metrics, "load_doc_batch_time(s)"):
+        with timed(metrics, "load_docs(s)"):
             results = load_docs(self.corpus, flat_idxs)
             results = [results[i * num : (i + 1) * num] for i in range(len(idxs))]
         

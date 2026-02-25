@@ -2,6 +2,7 @@ from pwrag.args.args import AppConfig
 from transformers import AutoConfig
 from contextlib import contextmanager
 import time
+from typing import Any
 
 @contextmanager
 def timed(store: dict, key: str):
@@ -9,6 +10,33 @@ def timed(store: dict, key: str):
     yield
     store[key] = time.perf_counter() - t0
 
+
+class AverageMeter:
+    """Computes and stores the average and current value"""
+    def __init__(self, name: str, fmt: str = ":.4f"):
+        self.name = name
+        self.fmt = fmt
+        self.reset()
+
+    def reset(self) -> None:
+        self.val = 0.0
+        self.avg = 0.0
+        self.sum = 0.0
+        self.count = 0
+
+    def update(self, val: Any, n: int = 1) -> None:
+        try:
+            v = float(val)
+        except Exception:
+            return
+        self.val = v
+        self.sum += v * n
+        self.count += n
+        self.avg = self.sum / self.count if self.count else 0.0
+
+    def __str__(self) -> str:
+        fmtstr = "{name}:{avg" + self.fmt + "}"
+        return fmtstr.format(**self.__dict__)
 
 
 def get_generator(config: AppConfig):
