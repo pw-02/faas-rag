@@ -86,6 +86,10 @@ def load_faiss(index_path: Path, id_map_path: Optional[Path]) -> FaissDB:
     id_map = np.load(str(id_map_path)) if id_map_path else None
     if id_map is not None and id_map.ndim != 1:
         raise ValueError(f"id_map must be 1D, got {id_map.shape}")
+    #use gpu if available
+    if torch.cuda.is_available():
+        res = faiss.StandardGpuResources()
+        index = faiss.index_cpu_to_gpu(res, 0, index)
     return FaissDB(index=index, id_map=id_map)
 
 
