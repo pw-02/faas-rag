@@ -122,7 +122,16 @@ class Summary:
     dataset: str
     num_queries: int
     hit_rate: float
+
+    # old: count in [0..topk]
     avg_overlap: float
+
+    # new: percent in [0..1], averaged
+    avg_overlap_pct: float
+
+    # new: percent in [0..1], averaged ONLY on cache hits (more meaningful)
+    avg_overlap_pct_on_hits: float
+
     wall_s: float
     qps_measured: float
     qps_effective_no_gt: float
@@ -144,18 +153,12 @@ def eval_one_dataset(
     details_csv: Optional[Path],
 ) -> Summary:
     """
-    Clean + efficient behavior:
-
     - Encode questions in batches.
-    - For each query:
-        1) cache lookup
-        2a) HIT: retrieved_doc_ids = cached; run a FAISS search only for GT (eval-only)
-        2b) MISS: run ONE FAISS search with k=max(topk_gt, topk_ret)
-                - GT = first topk_gt
-                - Retrieved = first topk_ret
-                - insert Retrieved into cache
-    - Overlap = |Retrieved ∩ GT|
-    - "effective_no_gt" subtracts ONLY the eval-only GT time (which happens only on cache hits).
+    - HIT: retrieved_doc_ids = cached; run FAISS GT only for eval.
+    - MISS: one FAISS search reused for both GT + retrieval; store retrieval in cache.
+    - Overlap count = |Retrieved ∩ GT| (0..topk_gt)
+    - Overlap pct = overlap_count / topk_gt (0..1)
+    - avg_overlap_pct_on_hits reports overlap pct ONLY for cache hits.
     """
 
     # Optional details writer
@@ -167,7 +170,8 @@ def eval_one_dataset(
         details_writer = csv.DictWriter(
             details_f,
             fieldnames=[
-                "id", "cache_hit", "overlap",
+                "id", "cache_hit",
+                "overlap", "overlap_pct",
                 "t_total", "t_encode", "t_gt", "t_cache", "t_retrieve",
                 "t_effective_no_gt",
             ],
@@ -177,7 +181,12 @@ def eval_one_dataset(
     # Aggregate counters/timers
     num_queries = 0
     num_cache_hits = 0
+
     overlap_sum = 0
+    overlap_pct_sum = 0.0
+
+    overlap_pct_hits_sum = 0.0  # only cache hits
+    num_hits_for_overlap = 0
 
     sum_total = 0.0
     sum_encode = 0.0
@@ -185,18 +194,18 @@ def eval_one_dataset(
     sum_cache = 0.0
     sum_retrieve = 0.0
 
-    # Batch buffers (only what we actually use)
+    # Batch buffers
     batch_query_ids: List[str] = []
     batch_questions: List[str] = []
 
     def process_batch() -> None:
-        nonlocal num_queries, num_cache_hits, overlap_sum
+        nonlocal num_queries, num_cache_hits
+        nonlocal overlap_sum, overlap_pct_sum, overlap_pct_hits_sum, num_hits_for_overlap
         nonlocal sum_total, sum_encode, sum_gt_eval_only, sum_cache, sum_retrieve
 
         if not batch_questions:
             return
 
-        # Encode batch (amortize per query for reporting)
         with Timer() as t_encode:
             question_embeddings = encoder.encode(batch_questions)  # type: ignore[attr-defined]
         question_embeddings = np.asarray(question_embeddings, dtype=np.float32)
@@ -218,7 +227,6 @@ def eval_one_dataset(
 
                 # 2) Retrieval + GT
                 if cached_doc_ids is not None:
-                    # HIT: use cached docs for retrieval; do GT search only for eval
                     cache_hit = True
                     retrieved_doc_ids = cached_doc_ids
                     retrieve_time = 0.0
@@ -226,16 +234,14 @@ def eval_one_dataset(
                     with Timer() as t_gt:
                         gt_doc_ids = db.search_ids(query_embedding, topk_gt)
                     gt_eval_time = t_gt.dt
-
                 else:
-                    # MISS: single FAISS search reused for both GT + retrieval
                     cache_hit = False
                     k = max(topk_gt, topk_ret)
 
                     with Timer() as t_retrieve:
                         all_doc_ids = db.search_ids(query_embedding, k)
                     retrieve_time = t_retrieve.dt
-                    gt_eval_time = 0.0  # no extra "GT-only" search on misses
+                    gt_eval_time = 0.0
 
                     gt_doc_ids = all_doc_ids[:topk_gt]
                     retrieved_ids_np = all_doc_ids[:topk_ret]
@@ -243,13 +249,18 @@ def eval_one_dataset(
 
                     cache_store(cache, query_embedding, retrieved_doc_ids)
 
-                # 3) Overlap
+                # 3) Overlap (count + pct)
                 gt_set = {int(x) for x in gt_doc_ids.tolist() if int(x) >= 0}
                 overlap = len(set(retrieved_doc_ids) & gt_set)
+                overlap_pct = overlap / float(topk_gt) if topk_gt > 0 else 0.0
 
             if cache_hit:
                 num_cache_hits += 1
+                overlap_pct_hits_sum += overlap_pct
+                num_hits_for_overlap += 1
+
             overlap_sum += overlap
+            overlap_pct_sum += overlap_pct
 
             sum_total += t_total.dt
             sum_encode += per_query_encode
@@ -263,6 +274,7 @@ def eval_one_dataset(
                         "id": qid,
                         "cache_hit": int(cache_hit),
                         "overlap": overlap,
+                        "overlap_pct": f"{overlap_pct:.6f}",
                         "t_total": f"{t_total.dt:.6f}",
                         "t_encode": f"{per_query_encode:.6f}",
                         "t_gt": f"{gt_eval_time:.6f}",
@@ -275,7 +287,6 @@ def eval_one_dataset(
         batch_query_ids.clear()
         batch_questions.clear()
 
-    # Stream dataset, encode in batches
     wall_start = time.perf_counter()
 
     for obj in read_jsonl(dataset_path):
@@ -298,9 +309,15 @@ def eval_one_dataset(
 
     hit_rate = (num_cache_hits / num_queries) if num_queries else 0.0
     avg_overlap = (overlap_sum / num_queries) if num_queries else 0.0
+    avg_overlap_pct = (overlap_pct_sum / num_queries) if num_queries else 0.0
+    avg_overlap_pct_on_hits = (
+        overlap_pct_hits_sum / num_hits_for_overlap
+        if num_hits_for_overlap > 0
+        else 0.0
+    )
 
     qps_measured = (num_queries / wall_time) if wall_time > 0 else 0.0
-    effective_wall = max(1e-9, wall_time - sum_gt_eval_only)  # subtract eval-only GT time
+    effective_wall = max(1e-9, wall_time - sum_gt_eval_only)
     qps_effective = num_queries / effective_wall
 
     return Summary(
@@ -308,6 +325,8 @@ def eval_one_dataset(
         num_queries=num_queries,
         hit_rate=hit_rate,
         avg_overlap=avg_overlap,
+        avg_overlap_pct=avg_overlap_pct,
+        avg_overlap_pct_on_hits=avg_overlap_pct_on_hits,
         wall_s=wall_time,
         qps_measured=qps_measured,
         qps_effective_no_gt=qps_effective,
@@ -325,7 +344,8 @@ def write_summary_csv(path: Path, summaries: List[Summary]) -> None:
         w = csv.DictWriter(
             f,
             fieldnames=[
-                "dataset", "num_queries", "hit_rate", "avg_overlap",
+                "dataset", "num_queries", "hit_rate",
+                "avg_overlap", "avg_overlap_pct", "avg_overlap_pct_on_hits",
                 "wall_s", "qps_measured", "qps_effective_no_gt",
                 "avg_total_s", "avg_encode_s", "avg_gt_s", "avg_cache_s", "avg_retrieve_s",
             ],
@@ -337,17 +357,13 @@ def write_summary_csv(path: Path, summaries: List[Summary]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    #corpus/faiss_wiki_dpr/flat_100k/index_psgs_w100_nq_no_index_flat_ip_100000.faiss
-    #corpus/faiss_wiki_dpr/hnsw_all/index_psgs_w100_nq_no_index_hnsw_ip_all.faiss
-    #corpus/faiss_wiki_dpr/flat_all/index_psgs_w100_nq_no_index_flat_ip_all.faiss
-
     ap.add_argument("--index", default="corpus/faiss_wiki_dpr/hnsw_all/index_psgs_w100_nq_no_index_hnsw_ip_all.faiss")
     ap.add_argument("--id_map", default=None)
-    ap.add_argument("--datasets", nargs="+", default=
-                     [ 
-                        # "data/datasets/qa/nq/nq_dev.jsonl",
-                        "data/datasets/mmlu/subjects/econometrics/dev.jsonl",
-                    ])
+    ap.add_argument(
+        "--datasets",
+        nargs="+",
+        default=["data/datasets/mmlu/subjects/econometrics/dev.jsonl"],
+    )
 
     ap.add_argument("--topk_gt", type=int, default=5)
     ap.add_argument("--topk_ret", type=int, default=5)
@@ -365,14 +381,16 @@ def main() -> None:
     ap.add_argument("--lsh_dim", type=int, default=8)
     ap.add_argument("--lsh_seed", type=int, default=42)
 
-    # encoder params (make explicit so you can swap models without editing code)
+    # encoder params
     ap.add_argument("--encoder_model_name", default="dpr")
     ap.add_argument("--encoder_model_path", default="facebook/dpr-question_encoder-single-nq-base")
     ap.add_argument("--max_length", type=int, default=64)
     ap.add_argument("--fp16", action="store_true")
 
     args = ap.parse_args()
-    #load all jsonl files in the datasets directory
+
+    # You currently override --datasets and evaluate *everything* under data/datasets.
+    # Keeping your behavior as-is:
     dataset_dir = Path("data/datasets")
     args.datasets = [str(p) for p in dataset_dir.glob("**/*.jsonl")]
 
@@ -380,11 +398,11 @@ def main() -> None:
     print("Loading FAISS index...")
 
     db = load_faiss(Path(args.index), Path(args.id_map) if args.id_map else None)
+
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
     print(f"FAISS index loaded: {args.index} (dim={db.dim})")
-
     print(f"Using device: {device}")
+
     encoder = STEncoder(
         model_name=args.encoder_model_name,
         model_path=args.encoder_model_path,
@@ -399,26 +417,21 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summaries: List[Summary] = []
-
     for dataset in args.datasets:
-     
-     #count rows in the dataset
         with open(dataset, "r", encoding="utf-8") as f:
             num_rows = sum(1 for line in f if line.strip())
         print(f"Evaluating dataset: {dataset} ({num_rows} rows)")
-        
-        #recreate cache for each dataset to avoid cross-dataset contamination
+
+        #new cache for each datasset
         cache = make_cache(
             policy=args.policy,
             tolerance=args.tolerance,
-            capacity=num_rows,
+            capacity=num_rows if num_rows > 0 else args.capacity,
             lsh_bucket_capacity=args.lsh_bucket_capacity,
             lsh_num_hashes=args.lsh_num_hashes,
             lsh_dim=args.lsh_dim,
             lsh_seed=args.lsh_seed,
         )
-
-   
 
         dataset_path = Path(dataset)
         details_csv = (out_dir / f"{dataset_path.stem}.details.csv") if args.details else None
@@ -438,6 +451,8 @@ def main() -> None:
         print(
             f"{dataset_path}: n={summary.num_queries}, hit_rate={summary.hit_rate:.3f}, "
             f"avg_overlap={summary.avg_overlap:.3f}, "
+            f"avg_overlap_pct={summary.avg_overlap_pct*100:.1f}%, "
+            f"avg_overlap_pct_on_hits={summary.avg_overlap_pct_on_hits*100:.1f}%, "
             f"qps(measured)={summary.qps_measured:.2f}, "
             f"qps(no_gt)={summary.qps_effective_no_gt:.2f}"
         )
