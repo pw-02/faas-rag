@@ -45,7 +45,7 @@ def run_eval(
             raise TypeError(f"Unsupported pipeline type: {type(pipeline).__name__}")
 
         # Always attach perf metrics
-        item.update_metrics("metrics", perf_metrics)
+        item.update_metrics("perf_metrics", perf_metrics)
         
         # Logging + progress reporting (if enabled)
         if run_logger is not None:
@@ -61,14 +61,14 @@ def main(cfg: AppConfig) -> None:
     evaluator = Evaluator(cfg)
     dataset = Dataset(cfg)
 
-    pipeline = SequentialPipeline(cfg)
-    # pipeline: PipelineT = LLMOnlyPipeline(cfg)
-    # pipeline: PipelineT = RetrievalOnlyPipeline(cfg)
+    #pipeline = SequentialPipeline(cfg)
+    #pipeline = LLMOnlyPipeline(cfg)
+    pipeline = RetrievalOnlyPipeline(cfg)
     
     run_logger = RunLogger(
         cfg,
         pipeline_name=pipeline.pipeline_name,
-        run_name=cfg.run_name,
+        dataset_name=dataset.dataset_name,
         overwrite=True,
         report_every=10,
         log_items=True,

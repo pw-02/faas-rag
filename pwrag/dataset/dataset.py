@@ -21,7 +21,7 @@ class Item:
         self.metadata: Dict[str, Any] = item_dict.get("metadata", {})
         self.output: Dict[str, Any] = item_dict.get("output", {})
         self.metrics: Dict[str, Any] = item_dict.get("metrics", {})
-
+        
         # if self.choices:
         #     self.golden_answers = [self.choices[idx] for idx in self.golden_answers]
        

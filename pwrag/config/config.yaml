@@ -19,8 +19,6 @@ generator_device: cuda:0
 retriever_embedder_device: cuda:0
 
 metrics: ["em", "f1", "acc", "precision", "recall"]
-save_sample_metrics: false
-save_summary_metrics: false
 
 max_sample_num: 500   # number of samples to test (only work in dev/test split), if None, test all samples
 random_sample: False # whether to randomly sample the test samples

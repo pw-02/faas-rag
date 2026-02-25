@@ -41,10 +41,10 @@ class RunLogger:
         self,
         config: AppConfig,
         pipeline_name: Optional[str] = "",
+        dataset_name: Optional[str] = "",
         overwrite: bool = True,
         report_every: int = 10,
         log_items: bool = True,
-        run_name: Optional[str] = None,
         flush_every: int = 50,
         fsync: bool = False,
     ):
@@ -54,21 +54,16 @@ class RunLogger:
         self.log_items = bool(log_items)
         self.flush_every = int(flush_every)
         self.fsync = bool(fsync)
+        self.dataset_name = dataset_name
+        start_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # self.save_dir = os.path.join(
-        #     config.save_dir,
-        #     config.dataset.dataset_name,
-        #     config.generator.name,
-        #     self.pipeline_name,
-        #     # datetime.now().strftime("%Y%m%d_%H%M%S")
-        # )
-        self.save_dir =  config.save_dir
+    
+        self.save_dir =  os.path.join(config.save_dir, self.pipeline_name)
         os.makedirs(self.save_dir, exist_ok=True)
 
-        # self.run_name = run_name or f"run_{config.dataset.dataset_name}_{config.generator.name}"
-        self.run_name = run_name or f"items"
-        self.jsonl_path = os.path.join(self.save_dir, f"{self.run_name}.jsonl")
-        self.summary_csv = os.path.join(self.save_dir, f"{self.run_name}_summary.csv")
+        self.run_name = f"{self.dataset_name}_{self.pipeline_name}_{start_datetime}"
+        self.jsonl_path = os.path.join(self.save_dir, f"{dataset_name}_items.jsonl")
+        self.summary_csv = os.path.join(self.save_dir, f"{dataset_name}_summary.csv")
 
         if overwrite:
             if os.path.exists(self.summary_csv):
@@ -92,7 +87,7 @@ class RunLogger:
     def save_config(self, cfg) -> str:
         """Save resolved Hydra config next to the logs. Returns path."""
         os.makedirs(self.save_dir, exist_ok=True)
-        path = os.path.join(self.save_dir, f"config.yaml")
+        path = os.path.join(self.save_dir, f"{self.dataset_name}_config.yaml")
         OmegaConf.save(config=cfg, f=path, resolve=True)
         return path
 
@@ -129,18 +124,19 @@ class RunLogger:
         self.n += 1
 
         metrics = record.get("metrics", {}) or {}
-        acc = metrics.get("acc_metrics", {}) or {}
+        perf_metrics = metrics.get("perf_metrics", {}) or {}
+        acc_metrics = metrics.get("acc_metrics", {}) or {}
 
-        if isinstance(acc, dict):
-            for k, v in acc.items():
+        if isinstance(acc_metrics, dict):
+            for k, v in acc_metrics.items():
                 self._get_meter(self.acc_meters, k).update(v)
 
-        if isinstance(metrics, dict):
-            for k, v in metrics.items():
+        if isinstance(perf_metrics, dict):
+            for k, v in perf_metrics.items():
                 self._get_meter(self.metric_meters, k).update(v)
 
         try:
-            if float(acc.get("em", 0)) >= 1.0:
+            if float(acc_metrics.get("em", 0)) >= 1.0:
                 self.em_correct += 1
         except Exception:
             pass
@@ -178,6 +174,7 @@ class RunLogger:
 
         summary = {
             "run_name": self.run_name,
+            "timestamp": datetime.now().isoformat(),
             "dataset": self.run_config.dataset.dataset_path,
             "num_samples": self.n,
             "pipeline": self.pipeline_name,

@@ -106,9 +106,5 @@ class AppConfig:
     random_sample: bool = False
     generator_device: str = "cuda:0"
     retriever_embedder_device: str = "cuda:0"
-    
     metrics: List[str] = field(default_factory=lambda: ["em", "f1", "acc", "precision", "recall", "input_tokens"])
-    save_sample_metrics: bool = False
-    save_summary_metrics: bool = False
     is_reasoning: bool = False
-    run_name: Optional[str] = None

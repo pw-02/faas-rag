@@ -413,6 +413,8 @@ class DenseRetriever(BaseTextRetriever):
                 # idxs_1d = idxs_1d[:k]  # if cache stored more than requested
                 scores = [0] * len(cache_results)  # no scores available from cache
                 metrics["vec_db_check_time(s)"] = 0.0
+        else:
+            metrics["cache_check_time(s)"] = 0.0
         
         # cache miss -> ANN search    
         if idxs is None:
