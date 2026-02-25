@@ -13,13 +13,10 @@ from pwrag.evaluator.evaluator import Evaluator
 from pwrag.pipeline.pipeline import LLMOnlyPipeline, RetrievalOnlyPipeline, SequentialPipeline
 
 
-PipelineT = Union[LLMOnlyPipeline, SequentialPipeline, RetrievalOnlyPipeline]
-
-
 def run_eval(
     cfg: AppConfig,
     dataset: Dataset,
-    pipeline: PipelineT,
+    pipeline: Union[LLMOnlyPipeline, SequentialPipeline, RetrievalOnlyPipeline],
     evaluator: Evaluator,
     run_logger: Optional[RunLogger] = None,
     desc: str = "Generating + Evaluating",
@@ -59,16 +56,15 @@ def run_eval(
         run_logger.finalize()
 
 
-@hydra.main(config_path="../config", config_name="config", version_base=None)  # local_config.yaml, config.yaml
+@hydra.main(config_path="../config", config_name="local_config", version_base=None)  # local_config.yaml, config.yaml
 def main(cfg: AppConfig) -> None:
     evaluator = Evaluator(cfg)
     dataset = Dataset(cfg)
 
-    # Choose your pipeline here
-    pipeline: PipelineT = SequentialPipeline(cfg)
+    pipeline = SequentialPipeline(cfg)
     # pipeline: PipelineT = LLMOnlyPipeline(cfg)
     # pipeline: PipelineT = RetrievalOnlyPipeline(cfg)
-
+    
     run_logger = RunLogger(
         cfg,
         pipeline_name=pipeline.pipeline_name,

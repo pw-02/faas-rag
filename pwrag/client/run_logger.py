@@ -163,8 +163,8 @@ class RunLogger:
         }
         
         for key in ["encode_query_time(s)", "search_time(s)", "generation_time(s)"]:
-            if key in self.cost_meters:
-                postfix[key_mapping[key]] = f"{self.cost_meters[key].avg:.2f}"
+            if key in self.metric_meters:
+                postfix[key_mapping[key]] = f"{self.metric_meters[key].avg:.2f}"
         # for k, m in self.cost_meters.items():
         #     postfix[k] = f"{m.avg:.2f}"
         postfix["n"] = self.n

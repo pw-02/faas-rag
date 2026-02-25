@@ -395,6 +395,7 @@ def main() -> None:
     # You currently override --datasets and evaluate *everything* under data/datasets.
     # Keeping your behavior as-is:
     dataset_folders = ["data/datasets/mmlu", "data/datasets/multi_hop", "data/datasets/qa"]
+    print("Collecting datasets from folders:", dataset_folders)
     all_datasets = []
     for folder in dataset_folders:
         folder_path = Path(folder)
