@@ -395,8 +395,9 @@ def main() -> None:
 
     # You currently override --datasets and evaluate *everything* under data/datasets.
     # Keeping your behavior as-is:
-    dataset_dir = Path("data/datasets")
-    args.datasets = [str(p) for p in dataset_dir.glob("**/*.jsonl")]
+    
+    # dataset_dir = Path("data/datasets")
+    # args.datasets = [str(p) for p in dataset_dir.glob("**/*.jsonl")]
 
     print("Total datasets to evaluate:", len(args.datasets))
     print("Loading FAISS index...")
@@ -418,6 +419,7 @@ def main() -> None:
     )
 
     out_dir = Path(args.out_dir)
+    out_dir = out_dir / f"{args.policy}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summaries: List[Summary] = []
