@@ -124,6 +124,8 @@ class Timer:
 @dataclass
 class Summary:
     dataset: str
+    cache_policy: str
+    cache_tolerance: float
     num_queries: int
     hit_rate: float
 
@@ -328,6 +330,8 @@ def eval_one_dataset(
 
     return Summary(
         dataset=str(dataset_path),
+        cache_policy=cache.policy,
+        cache_tolerance=cache.tolerance,
         num_queries=num_queries,
         hit_rate=hit_rate,
         avg_overlap=avg_overlap,
@@ -344,22 +348,13 @@ def eval_one_dataset(
     )
 
 
-def write_summary_csv(path: Path, summaries: List[Summary]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(
-            f,
-            fieldnames=[
-                "dataset", "num_queries", "hit_rate",
-                "avg_overlap", "avg_overlap_pct", "avg_overlap_pct_on_hits",
-                "wall_s", "qps_measured", "qps_effective_no_gt",
-                "avg_total_s", "avg_encode_s", "avg_gt_s", "avg_cache_s", "avg_retrieve_s",
-            ],
-        )
-        w.writeheader()
-        for s in summaries:
-            w.writerow(s.__dict__)
-
+def write_summary_to_csv(path: Path, summary: Summary) -> None:
+    file_exists = path.exists()
+    with path.open("a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=Summary.__dataclass_fields__.keys())
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(summary.__dict__)
 
 def main() -> None:
     ap = argparse.ArgumentParser()
@@ -399,6 +394,14 @@ def main() -> None:
 
     # You currently override --datasets and evaluate *everything* under data/datasets.
     # Keeping your behavior as-is:
+    dataset_folders = ["data/datasets/mmlu", "data/datasets/multi_hop", "data/datasets/qa"]
+    all_datasets = []
+    for folder in dataset_folders:
+        folder_path = Path(folder)
+        if folder_path.is_dir():
+            all_datasets.extend(str(p) for p in folder_path.glob("**/*.jsonl"))
+    
+    args.datasets = all_datasets
 
     # dataset_dir = Path("data/datasets")
     # args.datasets = [str(p) for p in dataset_dir.glob("**/*.jsonl")]
@@ -430,10 +433,9 @@ def main() -> None:
     )
 
     out_dir = Path(args.out_dir)
-    out_dir = out_dir / f"{args.policy}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    summaries: List[Summary] = []
+    # summaries: List[Summary] = []
     
     for tol in tolerences:
         for dataset in args.datasets:
@@ -465,19 +467,17 @@ def main() -> None:
                 encode_batch=args.encode_batch,
                 details_csv=details_csv,
             )
-            summaries.append(summary)
+            write_summary_to_csv(out_dir / "summary.csv", summary)
 
             print(
                 f"{dataset_path}: n={summary.num_queries}, hit_rate={summary.hit_rate:.3f}, "
+
                 f"avg_overlap={summary.avg_overlap:.3f}, "
                 f"avg_overlap_pct={summary.avg_overlap_pct*100:.1f}%, "
                 f"avg_overlap_pct_on_hits={summary.avg_overlap_pct_on_hits*100:.1f}%, "
                 f"qps(measured)={summary.qps_measured:.2f}, "
                 f"qps(no_gt)={summary.qps_effective_no_gt:.2f}"
             )
-
-    write_summary_csv(out_dir / "summary.csv", summaries)
-    print(f"Wrote: {out_dir / 'summary.csv'}")
 
 
 if __name__ == "__main__":
