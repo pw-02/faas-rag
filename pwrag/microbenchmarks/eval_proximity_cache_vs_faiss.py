@@ -338,7 +338,10 @@ def write_summary_csv(path: Path, summaries: List[Summary]) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     #corpus/faiss_wiki_dpr/flat_100k/index_psgs_w100_nq_no_index_flat_ip_100000.faiss
-    ap.add_argument("--index", default="corpus/faiss_wiki_dpr/flat_all/index_psgs_w100_nq_no_index_flat_ip_all.faiss")
+    #corpus/faiss_wiki_dpr/hnsw_all/index_psgs_w100_nq_no_index_hnsw_ip_all.faiss
+    #corpus/faiss_wiki_dpr/flat_all/index_psgs_w100_nq_no_index_flat_ip_all.faiss
+
+    ap.add_argument("--index", default="corpus/faiss_wiki_dpr/hnsw_all/index_psgs_w100_nq_no_index_hnsw_ip_all.faiss")
     ap.add_argument("--id_map", default=None)
     ap.add_argument("--datasets", nargs="+", default=
                      [ 
@@ -350,7 +353,7 @@ def main() -> None:
     ap.add_argument("--topk_ret", type=int, default=5)
     ap.add_argument("--encode_batch", type=int, default=1)
 
-    ap.add_argument("--out_dir", default="results/cache_eval")
+    ap.add_argument("--out_dir", default="results/cache_eval/hnsw_21m")
     ap.add_argument("--details", action="store_true", default=False)
 
     # cache params
@@ -392,7 +395,7 @@ def main() -> None:
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
     print(f"FAISS index loaded: {args.index} (dim={db.dim})")
-    
+
     print(f"Using device: {device}")
     encoder = STEncoder(
         model_name=args.encoder_model_name,
