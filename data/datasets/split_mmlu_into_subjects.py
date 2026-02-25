@@ -14,7 +14,7 @@ def slug(s: str) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input", default="data/datasets/mmlu/mmlu/mmlu_test.jsonl", help="Path to input JSONL file (one JSON object per line).")
+    ap.add_argument("--input", default="data/datasets/mmlu/mmlu/mmlu_dev.jsonl", help="Path to input JSONL file (one JSON object per line).")
     ap.add_argument("--out_dir", default="data/datasets/mmlu/subjects/", help="Output root directory.")
     args = ap.parse_args()
 
@@ -29,7 +29,7 @@ def main():
         if subject_folder not in writers:
             folder = out_root / subject_folder
             folder.mkdir(parents=True, exist_ok=True)
-            f = open(folder / "test.jsonl", "a", encoding="utf-8")
+            f = open(folder / "dev.jsonl", "a", encoding="utf-8")
             writers[subject_folder] = f
         return writers[subject_folder]
 
