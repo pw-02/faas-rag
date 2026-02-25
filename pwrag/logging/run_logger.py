@@ -145,6 +145,7 @@ class RunLogger:
                 self._fh_batches.close()
                 self._fh_batches = None
 
+    
     # -------- logging --------
     def log_batch(
         self,

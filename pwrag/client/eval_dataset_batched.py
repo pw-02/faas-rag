@@ -8,7 +8,7 @@ from pwrag.args.args import AppConfig
 from pwrag.dataset.dataset import Dataset
 from pwrag.evaluator.evaluator import Evaluator
 from pwrag.pipeline.pipeline import LLMOnlyPipeline, RetrievalOnlyPipeline, SequentialPipeline
-from pwrag.client.run_logger import RunLogger  # <-- update import path
+from pwrag.logging.run_logger import RunLogger  # <-- update import path
 
 BATCH_SIZE = 2  # default if not in cfg
 
@@ -36,6 +36,7 @@ def main(cfg: AppConfig) -> None:
     pbar = tqdm(total=len(dataset), desc="Evaluating")
 
     for bidx, batch in enumerate(dataset.iter_batches(batch_size), start=1):
+        print(f"Processing batch {bidx} with {len(batch)} items...")
         batch, batch_perf_metrics = pipeline.run_batch(batch)
         if not isinstance(pipeline, RetrievalOnlyPipeline):
             batch_acc_metrics = evaluator.evaluate(batch)
@@ -53,8 +54,8 @@ def main(cfg: AppConfig) -> None:
     summary = logger.finalize()
     pbar.close()
 
-    print("Done. Summary:")
-    print(summary)
+    # print("Done. Summary:")
+    # print(summary)
 
 
 if __name__ == "__main__":
