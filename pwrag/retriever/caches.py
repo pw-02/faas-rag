@@ -37,8 +37,8 @@ class ProximityCache:
             raise ValueError(f"Unknown policy={policy!r} (normalized={self.policy!r})")
         if self.capacity <= 0:
             raise ValueError("capacity must be > 0")
-        if not (0.0 < self.tolerance <= 1.0):
-            raise ValueError("tolerance must be in (0, 1]")
+        # if not (0.0 < self.tolerance <= 1.0):
+        #     raise ValueError("tolerance must be in (0, 1]")
         self._cache = self._create_cache()
 
     def _create_cache(self):
