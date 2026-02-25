@@ -1,53 +1,83 @@
-from asyncio import run
+#!/usr/bin/env python3
+from __future__ import annotations
+
 from typing import Any, Callable, Optional, Union
-from tqdm import tqdm
-# main.py
+
 import hydra
-from omegaconf import OmegaConf
 from tqdm import tqdm
+
 from pwrag.args.args import AppConfig
-from pwrag.evaluator.evaluator import Evaluator
-from pwrag.dataset.dataset import Dataset
-from pwrag.pipeline.pipeline import LLMOnlyPipeline, SequentialPipeline
 from pwrag.client.run_logger import RunLogger
+from pwrag.dataset.dataset import Dataset
+from pwrag.evaluator.evaluator import Evaluator
+from pwrag.pipeline.pipeline import LLMOnlyPipeline, RetrievalOnlyPipeline, SequentialPipeline
+
+
+PipelineT = Union[LLMOnlyPipeline, SequentialPipeline, RetrievalOnlyPipeline]
+
+
 def run_eval(
-    *,
     cfg: AppConfig,
-    dataset : Dataset,
-    pipeline: Union[LLMOnlyPipeline, SequentialPipeline],
+    dataset: Dataset,
+    pipeline: PipelineT,
     evaluator: Evaluator,
     run_logger: Optional[RunLogger] = None,
     desc: str = "Generating + Evaluating",
-    get_pred: Optional[Callable[[Any, Any], Any]] = None,
-):
-    run_logger.save_config(cfg)
+) -> None:
+    """Run pipeline over dataset, log per-item results, and compute accuracy where applicable."""
+
+    if run_logger is not None:
+        run_logger.save_config(cfg)
+
     pbar = tqdm(dataset.data, desc=desc, unit="item")
+
     for item in pbar:
-        pred, cost_metrics = pipeline.run(question=item.question, return_metrics=True)
-        item.update_output("pred", pred)
-        acc_metrics = evaluator.evaluate_item(item)
-        item.update_metrics("acc_metrics", acc_metrics)
-        item.update_metrics("metrics", cost_metrics)
-        run_logger.log_item(item.to_dict())
-        run_logger.maybe_report(pbar)
-    run_logger.finalize()
+        question = item.question
+        # Run pipeline (avoid repeating this logic)
+        if isinstance(pipeline, RetrievalOnlyPipeline):
+            retrieved_docs, perf_metrics = pipeline.run(question=question, return_metrics=True)
+            # If you want these persisted in outputs, uncomment:
+            # item.update_output("retrieved_docs", retrieved_docs)
+
+        elif isinstance(pipeline, (LLMOnlyPipeline, SequentialPipeline)):
+            pred, perf_metrics = pipeline.run(question=question, return_metrics=True)          
+            item.update_output("pred", pred)
+            acc_metrics = evaluator.evaluate_item(item)
+            item.update_metrics("acc_metrics", acc_metrics)
+        else:
+            raise TypeError(f"Unsupported pipeline type: {type(pipeline).__name__}")
+
+        # Always attach perf metrics
+        item.update_metrics("metrics", perf_metrics)
+        
+        # Logging + progress reporting (if enabled)
+        if run_logger is not None:
+            run_logger.log_item(item.to_dict())
+            run_logger.maybe_report(pbar)
+
+    if run_logger is not None:
+        run_logger.finalize()
 
 
-@hydra.main(config_path="../config", config_name="config", version_base=None) #local_config.yaml, config.yaml
-def main(cfg: AppConfig):
-    # print(OmegaConf.to_yaml(cfg, resolve=True))
+@hydra.main(config_path="../config", config_name="config", version_base=None)  # local_config.yaml, config.yaml
+def main(cfg: AppConfig) -> None:
     evaluator = Evaluator(cfg)
     dataset = Dataset(cfg)
-    # pipeline = LLMOnlyPipeline(cfg)
-    pipeline = SequentialPipeline(cfg)
 
-    run_logger = RunLogger(cfg, 
-                           pipeline_name=pipeline.pipeline_name, 
-                           run_name=cfg.run_name,
-                           overwrite=True, 
-                           report_every=10,
-                           log_items=True,
-                           flush_every=1)
+    # Choose your pipeline here
+    pipeline: PipelineT = SequentialPipeline(cfg)
+    # pipeline: PipelineT = LLMOnlyPipeline(cfg)
+    # pipeline: PipelineT = RetrievalOnlyPipeline(cfg)
+
+    run_logger = RunLogger(
+        cfg,
+        pipeline_name=pipeline.pipeline_name,
+        run_name=cfg.run_name,
+        overwrite=True,
+        report_every=10,
+        log_items=True,
+        flush_every=1,
+    )
 
     run_eval(
         cfg=cfg,

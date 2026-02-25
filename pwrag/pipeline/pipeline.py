@@ -46,6 +46,27 @@ class LLMOnlyPipeline(BasicPipeline):
             return predictions, metrics
         return predictions
     
+class RetrievalOnlyPipeline(BasicPipeline):
+    """The pipeline runs the retrieval process without generation.
+        inference stage: query -> retriever
+    """
+    def __init__(self, config, prompt_template=None, retriever=None):
+        
+        super().__init__(config, prompt_template)
+        self.pipeline_name = "RetrievalOnlyPipeline"
+
+        if retriever is None:
+            self.retriever = get_retriever(config)
+        else:
+            self.retriever = retriever
+
+    def run(self, question, return_dict=False, return_scores=False, return_metrics=False):
+        metrics: dict[str, float] = {}
+        retrieval_result = self.retriever.search(question, metrics=metrics, return_score=return_scores)
+        if return_metrics:
+            return retrieval_result, metrics
+        return retrieval_result
+    
 class SequentialPipeline(BasicPipeline):
 
     """The pipeline runs the retrieval, generation and evaluation process sequentially."""

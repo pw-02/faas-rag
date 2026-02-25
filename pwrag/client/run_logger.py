@@ -81,7 +81,7 @@ class RunLogger:
         self._since_flush = 0
 
         self.acc_meters: Dict[str, AverageMeter] = {}
-        self.cost_meters: Dict[str, AverageMeter] = {}
+        self.metric_meters: Dict[str, AverageMeter] = {}
         self.em_correct = 0
 
         # keep file handle open
@@ -130,15 +130,14 @@ class RunLogger:
 
         metrics = record.get("metrics", {}) or {}
         acc = metrics.get("acc_metrics", {}) or {}
-        cost = metrics.get("metrics", {}) or {}
 
         if isinstance(acc, dict):
             for k, v in acc.items():
                 self._get_meter(self.acc_meters, k).update(v)
 
-        if isinstance(cost, dict):
-            for k, v in cost.items():
-                self._get_meter(self.cost_meters, k).update(v)
+        if isinstance(metrics, dict):
+            for k, v in metrics.items():
+                self._get_meter(self.metric_meters, k).update(v)
 
         try:
             if float(acc.get("em", 0)) >= 1.0:
@@ -190,7 +189,7 @@ class RunLogger:
             summary[f"avg.{k}"] = m.avg
             # summary[f"acc_sum.{k}"] = m.sum
 
-        for k, m in self.cost_meters.items():
+        for k, m in self.metric_meters.items():
             summary[f"avg.{k}"] = m.avg
             summary[f"sum.{k}"] = m.sum
 
