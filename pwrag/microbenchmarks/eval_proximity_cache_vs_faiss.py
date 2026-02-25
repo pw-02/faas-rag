@@ -368,7 +368,7 @@ def main() -> None:
     ap.add_argument(
         "--datasets",
         nargs="+",
-        default=["data/datasets/mmlu/subjects/econometrics/dev.jsonl"],
+        default=["data/datasets/mmlu/subjects/econometrics/test.jsonl"],
     )
 
     ap.add_argument("--topk_gt", type=int, default=5)
@@ -400,8 +400,8 @@ def main() -> None:
     # You currently override --datasets and evaluate *everything* under data/datasets.
     # Keeping your behavior as-is:
 
-    dataset_dir = Path("data/datasets")
-    args.datasets = [str(p) for p in dataset_dir.glob("**/*.jsonl")]
+    # dataset_dir = Path("data/datasets")
+    # args.datasets = [str(p) for p in dataset_dir.glob("**/*.jsonl")]
 
     if args.tolerance_sweep is not None:
         tolerences = args.tolerance_sweep
