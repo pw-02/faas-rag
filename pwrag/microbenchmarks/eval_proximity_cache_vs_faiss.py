@@ -373,6 +373,9 @@ def main() -> None:
     dataset_dir = Path("data/datasets")
     args.datasets = [str(p) for p in dataset_dir.glob("**/*.jsonl")]
 
+    print("Total datasets to evaluate:", len(args.datasets))
+    print("Loading FAISS index...")
+
     db = load_faiss(Path(args.index), Path(args.id_map) if args.id_map else None)
     cache = make_cache(
         policy=args.policy,
@@ -387,6 +390,10 @@ def main() -> None:
 
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+    print(f"FAISS index loaded: {args.index} (dim={db.dim})")
+    
+    print(f"Using device: {device}")
     encoder = STEncoder(
         model_name=args.encoder_model_name,
         model_path=args.encoder_model_path,
