@@ -380,18 +380,6 @@ def main() -> None:
     print("Loading FAISS index...")
 
     db = load_faiss(Path(args.index), Path(args.id_map) if args.id_map else None)
-    cache = make_cache(
-        policy=args.policy,
-        tolerance=args.tolerance,
-        capacity=args.capacity,
-        lsh_bucket_capacity=args.lsh_bucket_capacity,
-        lsh_num_hashes=args.lsh_num_hashes,
-        lsh_dim=args.lsh_dim,
-        lsh_seed=args.lsh_seed,
-    )
-
-
-
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
     print(f"FAISS index loaded: {args.index} (dim={db.dim})")
@@ -411,11 +399,26 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summaries: List[Summary] = []
+
     for dataset in args.datasets:
-        #count rows in the dataset
+     
+     #count rows in the dataset
         with open(dataset, "r", encoding="utf-8") as f:
             num_rows = sum(1 for line in f if line.strip())
         print(f"Evaluating dataset: {dataset} ({num_rows} rows)")
+        
+        #recreate cache for each dataset to avoid cross-dataset contamination
+        cache = make_cache(
+            policy=args.policy,
+            tolerance=args.tolerance,
+            capacity=num_rows,
+            lsh_bucket_capacity=args.lsh_bucket_capacity,
+            lsh_num_hashes=args.lsh_num_hashes,
+            lsh_dim=args.lsh_dim,
+            lsh_seed=args.lsh_seed,
+        )
+
+   
 
         dataset_path = Path(dataset)
         details_csv = (out_dir / f"{dataset_path.stem}.details.csv") if args.details else None
