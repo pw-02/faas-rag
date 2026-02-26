@@ -67,10 +67,9 @@ class RunLogger:
         self.report_every_items = int(report_every_items)
         
         self.report_perf_keys = report_perf_keys or [
-            "encode_query_time(s)",
-            "search_time(s)",
-            "generation_time(s)",
-            "cache_hit",
+            "index_search(s)",
+            "load_docs(s)",
+            "generation(s)",
         ]
         self.weight_batch_metrics_by_size = bool(weight_batch_metrics_by_size)
         start = datetime.now().strftime("%Y%m%d_%H%M%S")
