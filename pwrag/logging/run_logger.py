@@ -20,6 +20,7 @@ class LogPaths:
     save_dir: str
     batches_jsonl: str
     summary_csv: str
+    summary_csv_simplified: str
     config_yaml: str
 
 
@@ -80,6 +81,7 @@ class RunLogger:
             batches_jsonl=os.path.join(self.save_dir, f"{self.dataset_name}_{self.index_name}.jsonl"),
             # summary_csv=os.path.join(save_dir, f"{self.dataset_name}_{self.index_name}_summary.csv"),
             summary_csv=os.path.join(self.save_dir, f"summary.csv"),
+            summary_csv_simplified=os.path.join(self.save_dir, f"summary_simplified.csv"),
             config_yaml=os.path.join(self.save_dir, f"{self.dataset_name}_{self.index_name}_config.yaml"),
         )
 
@@ -258,10 +260,29 @@ class RunLogger:
             # "generation_time(s)": self.perf_batch["generation_time(s)"].sum if "generation_time(s)" in self.perf_batch else "",
             # "total_time(s)": self.perf_batch["total_time(s)"].sum if "total_time(s)" in self.perf_batch else "",
             # "toal_tokens": self.perf_batch["total_tokens"].sum if "total_tokens" in self.perf_batch else "",
-
         }
 
-    
+        simplifed_summary = {
+            "encode(s)": self.perf_batch["encode_query_time(s)"].sum if "encode_query_time(s)" in self.perf_batch else "",
+            "index_search(s)": self.perf_batch["search_time(s)"].sum if "search_time(s)" in self.perf_batch else "",
+            "get_prompts(s)": self.perf_batch["get_prompts_time(s)"].sum if "get_prompts_time(s)" in self.perf_batch else "",
+            "load_docs(s)": self.perf_batch["load_docs_time(s)"].sum if "load_docs_time(s)" in self.perf_batch else "",
+            "generation(s)": self.perf_batch["generation_time(s)"].sum if "generation_time(s)" in self.perf_batch else "",
+            "toal_time(s)": self.perf_batch["total_time(s)"].sum if "total_time(s)" in self.perf_batch else "",
+            "prompt_tokens": self.perf_batch["prompt_tokens"].sum if "prompt_tokens" in self.perf_batch else "",
+            "completion_tokens": self.perf_batch["completion_tokens"].sum if "completion_tokens" in self.perf_batch else "",
+            "total_tokens": self.perf_batch["prompt_tokens"].sum + self.perf_batch["completion_tokens"].sum if "prompt_tokens" in self.perf_batch and "completion_tokens" in self.perf_batch else "",
+        }
+
+        simplifed_summary = summary.update(simplifed_summary)
+
+        file_exists = os.path.exists(self.paths.summary_csv_simplified) and os.path.getsize(self.paths.summary_csv_simplified) > 0
+        with open(self.paths.summary_csv_simplified, "a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=list(simplifed_summary.keys()))
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(simplifed_summary)
+        
 
         # item-weighted outputs
         for k, m in self.acc_item.items():
