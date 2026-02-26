@@ -255,9 +255,13 @@ class RunLogger:
             ),
             "batches_jsonl": self.paths.batches_jsonl if self.log_batches else "",
             "config_yaml": self.paths.config_yaml,
+            # "generation_time(s)": self.perf_batch["generation_time(s)"].sum if "generation_time(s)" in self.perf_batch else "",
+            # "total_time(s)": self.perf_batch["total_time(s)"].sum if "total_time(s)" in self.perf_batch else "",
+            # "toal_tokens": self.perf_batch["total_tokens"].sum if "total_tokens" in self.perf_batch else "",
+
         }
 
-        
+    
 
         # item-weighted outputs
         for k, m in self.acc_item.items():
