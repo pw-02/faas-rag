@@ -222,10 +222,9 @@ class RunLogger:
             postfix["em"] = f"{self.acc_item['em'].avg:.3f}"
 
         key_mapping = {
-            "encode_query_time(s)": "encode_q(s)",
-            "search_time(s)": "search(s)",
-            "generation_time(s)": "gen(s)",
-            "cache_hit": "cache_hits",
+            "index_search(s)": "search(s)",
+            "load_docs(s)": "encode_q(s)",
+            "generation(s)": "gen(s)",
         }
 
         for key in self.report_perf_keys:
@@ -263,7 +262,7 @@ class RunLogger:
             "index_search(s)": self.perf_batch["index_search(s)"].sum if "index_search(s)" in self.perf_batch else "",
             "get_prompts(s)": self.perf_batch["get_prompts(s)"].sum if "get_prompts(s)" in self.perf_batch else "",
             "load_docs(s)": self.perf_batch["load_docs(s)"].sum if "load_docs(s)" in self.perf_batch else "",
-            "generation(s)": self.perf_batch["generation_time(s)"].sum if "generation_time(s)" in self.perf_batch else "",
+            "generation(s)": self.perf_batch["generation(s)"].sum if "generation(s)" in self.perf_batch else "",
             "total_time(s)": self.perf_batch["total_time(s)"].sum if "total_time(s)" in self.perf_batch else "",
             "prompt_tokens": self.perf_batch["prompt_tokens"].sum if "prompt_tokens" in self.perf_batch else "",
             "completion_tokens": self.perf_batch["completion_tokens"].sum if "completion_tokens" in self.perf_batch else "",

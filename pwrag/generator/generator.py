@@ -293,7 +293,7 @@ class HFCausalLMGenerator(BaseGenerator):
         metrics["prompt_tokens"] = sum(prompt_tokens_per_item)
         metrics["completion_tokens"] = sum(completion_tokens_per_item)
         metrics["total_tokens"] = metrics["prompt_tokens"] + metrics["completion_tokens"]
-        metrics["generation_time(s)"] = time.perf_counter() - t0
+        metrics["generation(s)"] = time.perf_counter() - t0
         
         if return_dict:
             generated_token_ids = torch.cat(generated_token_ids, dim=0) if generated_token_ids else None
