@@ -165,11 +165,19 @@ class RunLogger:
             self._get_meter(self.perf_batch, k).update(v, n=1)
 
         # ----- update item-average meters (each item counts once) -----
-        item_weight = bs if self.weight_batch_metrics_by_size else 1
+         # Accuracy: your batch acc metrics are averages over items -> weight by batch size
         for k, v in batch_acc_metrics.items():
-            self._get_meter(self.acc_item, k).update(v, n=item_weight)
+            self._get_meter(self.acc_item, k).update(v, n=bs)
+        
+        # Perf:for timings (totals per batch)
         for k, v in batch_perf_metrics.items():
-            self._get_meter(self.perf_item, k).update(v, n=item_weight)
+            # store per-item derived metric too
+            per_item_key = f"{k}_per_item"
+            try:
+                per_item_val = float(v) / max(1, bs)
+                self._get_meter(self.perf_item, per_item_key).update(per_item_val, n=bs)
+            except Exception:
+                pass
 
         # ----- write batch record -----
         record: Dict[str, Any] = {

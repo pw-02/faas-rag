@@ -58,6 +58,7 @@ def main(cfg: AppConfig) -> None:
             overwrite=False,  # set to True to overwrite existing logs for the same run/dataset/pipeline
             dataset_name=dataset.dataset_name,
             report_every_items=10,               # tqdm postfix refresh cadence
+            weight_batch_metrics_by_size=True,  # whether to weight batch metrics by batch size when updating item-average meters
             flush_every=1)
         
         run_eval(
