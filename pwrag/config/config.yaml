@@ -7,12 +7,11 @@ defaults:
   - retriever/corpus: wiki_21m #wiki_100k
   - retriever/encoder: dpr
   - retriever/index: wiki_dpr_ivf_21m #wiki_dpr_hnsw_100k
-  - retriever/search: topk
   - retriever/cache: none # options: null, proximity
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled
   - _self_
-  
+
 retrieval_topk: 10
 save_dir: results
 run_name: null

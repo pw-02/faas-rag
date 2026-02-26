@@ -6,12 +6,11 @@ defaults:
   - retriever/corpus: wiki_100k #wiki_100k
   - retriever/encoder: dpr
   - retriever/index: wiki_dpr_hnsw_100k #wiki_dpr_hnsw_100k
-  - retriever/search: topk
   - retriever/cache: none # options: null, proximity, none
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled
   - _self_
-  
+
 retrieval_topk: 10
 # ------------
 generator_device: cuda:0
