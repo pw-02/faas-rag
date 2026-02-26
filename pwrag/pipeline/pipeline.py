@@ -51,17 +51,8 @@ class LLMOnlyPipeline(BasicPipeline):
         predictions = self.generator.generate(input_prompts, metrics=perf_metrics)
         item.update_metrics("perf_metrics", perf_metrics)
         return predictions
-    
-    # def run_dataset(self, dataset:Dataset):
-    #     perf_metrics: dict[str, float] = {}
-    #     with timed(perf_metrics, "total_time(s)"):
-    #         input_prompts = [self.prompt_template.get_string(question=q, metrics=perf_metrics) for q in dataset.question]
-    #         pred_answer_list = self.generator.generate(input_prompts, metrics=perf_metrics)
-    #         dataset.update_output("pred", pred_answer_list)
-    #     return dataset, perf_metrics
+   
 
-
-       
 class RetrievalOnlyPipeline(BasicPipeline):
     """The pipeline runs the retrieval process without generation.
         inference stage: query -> retriever
@@ -93,13 +84,6 @@ class RetrievalOnlyPipeline(BasicPipeline):
                 item.update_output("retrieved_docs", retrieved_docs)
         return batch, perf_metrics
     
-    # def run_dataset(self, dataset:Dataset):
-    #     perf_metrics: dict[str, float] = {}
-    #     with timed(perf_metrics, "total_time(s)"):
-    #         input_query = dataset.question
-    #         retrieval_results = self.retriever.batch_search(input_query, metrics=perf_metrics)
-    #         dataset.update_output("retrieved_docs", retrieval_results)
-    #     return dataset, perf_metrics
 
 class SequentialPipeline(BasicPipeline):
 
@@ -145,14 +129,7 @@ class SequentialPipeline(BasicPipeline):
             for item, pred in zip(batch, pred_answer_list):
                 item.update_output("pred", pred)
         return batch, perf_metrics
+    
 
 
-    # def run_dataset(self, dataset:Dataset):
-    #     perf_metrics: dict[str, float] = {}
-    #     with timed(perf_metrics, "total_time(s)"):
-    #         input_query = dataset.question
-    #         retrieval_results = self.retriever.batch_search(input_query, metrics=perf_metrics, return_score=False)
-    #         input_prompts = [self.prompt_template.get_string(question=q, retrieval_result=r, metrics=perf_metrics) for q, r in zip(dataset.question, retrieval_results)]
-    #         pred_answer_list = self.generator.generate(input_prompts, metrics=perf_metrics)
-    #         dataset.update_output("pred", pred_answer_list)
-    #     return dataset, perf_metrics
+    
