@@ -5,3 +5,8 @@ python pwrag/client/eval_dataset.py -m \
   hydra.sweep.dir=results/nq \
   hydra.sweep.subdir='${hydra.runtime.choices.retriever/index}/${hydra.runtime.choices.retriever/cache}' \
   save_dir='${hydra.runtime.output_dir}'
+
+
+  python pwrag/client/eval_dataset.py -m \
+  retriever/index=wiki_dpr_ivf_21m,wiki_dpr_hnsw_21m \
+  batch_size=1,2,4,8,16,32
