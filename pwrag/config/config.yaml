@@ -1,7 +1,7 @@
 defaults:
   # - retriever: wiki_faiss_dpr_ivf_100k #, llama_13_8B_instruct, llama_70b_chat, gpt-3.5-turbo
   - generator:  llama_31_8B_instruct #qwen2_0_5b_instruct 
-  - dataset: repeated_question #nq, repeated_question
+  - dataset: nq #nq, repeated_question
   - judger: null #skr, adaptive, null
   - retriever/pipeline: dense
   - retriever/corpus: wiki_21m #wiki_100k
@@ -13,9 +13,6 @@ defaults:
   - override hydra/hydra_logging: disabled
   - _self_
 
-
-
-
 save_dir: results
 run_name: null
 # ------------
@@ -25,12 +22,12 @@ judger_device: cuda:0
 
 metrics: ["em", "f1", "acc", "precision", "recall"]
 
-max_sample_num: 500   # number of samples to test (only work in dev/test split), if None, test all samples
+max_sample_num: 1000   # number of samples to test (only work in dev/test split), if None, test all samples
 random_sample: False # whether to randomly sample the test samples
 is_reasoning: false
 
 seed: 2024
-
+batch_size: 1 #batch size for which items are processed
 hydra:
   run:
     dir: .

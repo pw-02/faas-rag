@@ -63,6 +63,7 @@ class RetrieverEmbedderConfig:
 
 @dataclass
 class RetrieverIndexConfig:
+    name: str = ""
     index_path: str = ""
     index_type: str = "ivf"             # flat | ivf | hnsw
     metric: str = "cosine"
@@ -117,3 +118,4 @@ class AppConfig:
     retriever_embedder_device: str = "cuda:0"
     metrics: List[str] = field(default_factory=lambda: ["em", "f1", "acc", "precision", "recall", "input_tokens"])
     is_reasoning: bool = False
+    batch_size: int = 1

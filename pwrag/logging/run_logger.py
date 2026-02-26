@@ -38,30 +38,33 @@ class RunLogger:
 
     def __init__(
         self,
-        config: AppConfig,
+        conf: AppConfig,
         pipeline_name: str = "",
-        dataset_name: str = "",
         overwrite: bool = True,
         log_batches: bool = True,
         store_item_details_in_batch: bool = False,
-        flush_every: int = 50,
+        flush_every: int = 10,
         fsync: bool = False,
-        report_every_items: int = 50,
+        report_every_items: int = 10,
         report_perf_keys: Optional[List[str]] = None,
         # If your batch metrics are per-item averages (typical), keep this True.
         # It affects ONLY avg_item.* meters.
         weight_batch_metrics_by_size: bool = True,
     ) -> None:
-        self.cfg = config
-        self.pipeline_name = pipeline_name or ""
-        self.dataset_name = dataset_name or ""
+        self.cfg = conf
+        self.pipeline_name = pipeline_name
+        self.dataset_name = self.cfg.dataset.dataset_name
+        self.dataset_path = self.cfg.dataset.dataset_path
+        self.index_path = self.cfg.retriever.index.index_path
+        self.index_name = self.cfg.retriever.index.name
+
         self.flush_every = int(flush_every)
         self.fsync = bool(fsync)
-
+        self.save_dir = self.cfg.save_dir
         self.log_batches = bool(log_batches)
         self.store_item_details_in_batch = bool(store_item_details_in_batch)
-
         self.report_every_items = int(report_every_items)
+        
         self.report_perf_keys = report_perf_keys or [
             "encode_query_time(s)",
             "search_time(s)",
@@ -69,18 +72,17 @@ class RunLogger:
             "cache_hit",
         ]
         self.weight_batch_metrics_by_size = bool(weight_batch_metrics_by_size)
-
         start = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.run_name = f"{self.dataset_name}_{self.pipeline_name}_{start}"
-
-        save_dir = os.path.join(self.cfg.save_dir, self.pipeline_name)
+        save_dir = os.path.join(self.save_dir, self.pipeline_name)
         os.makedirs(save_dir, exist_ok=True)
 
         self.paths = LogPaths(
             save_dir=save_dir,
-            batches_jsonl=os.path.join(save_dir, f"{self.dataset_name}_batches.jsonl"),
+            batches_jsonl=os.path.join(save_dir, f"{self.dataset_name}_{self.index_name}.jsonl"),
+            # summary_csv=os.path.join(save_dir, f"{self.dataset_name}_{self.index_name}_summary.csv"),
             summary_csv=os.path.join(save_dir, f"{self.dataset_name}_summary.csv"),
-            config_yaml=os.path.join(save_dir, f"{self.dataset_name}_config.yaml"),
+            config_yaml=os.path.join(save_dir, f"{self.dataset_name}_{self.index_name}_config.yaml"),
         )
 
         if overwrite:
@@ -241,9 +243,11 @@ class RunLogger:
             "timestamp": _now_iso(),
             "dataset": getattr(self.cfg.dataset, "dataset_path", ""),
             "dataset_name": self.dataset_name,
+            "index_name": self.index_name,
             "pipeline": self.pipeline_name,
             "num_items": self.num_items,
             "num_batches": self.num_batches,
+            "batch_size": self.cfg.batch_size,
             "retrieval_topk": (
                 getattr(getattr(self.cfg, "retriever", None), "search", None).retrieval_topk
                 if getattr(self.cfg, "retriever", None) is not None

@@ -157,6 +157,9 @@ class Dataset:
     # ✅ easy iteration over items
     def __iter__(self) -> Iterator[Item]:
         return iter(self.data)
+    
+    def num_batches(self, batch_size: int) -> int:
+        return (len(self.data) + batch_size - 1) // batch_size
 
     # ✅ iterate over dataset in batches (returns Dataset objects)
     def iter_batches(self, batch_size: int) -> Iterator["Dataset"]:
