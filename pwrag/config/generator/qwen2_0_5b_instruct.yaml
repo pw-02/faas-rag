@@ -1,7 +1,7 @@
 name: qwen2_0_5b_instruct
 generator_framework: hf
 generator_model: Qwen/Qwen2-0.5B-Instruct
-generator_max_input_length: 4096
+generator_max_input_length: 32
 generator_batch_size: 32
 
 generation_params:
