@@ -75,10 +75,6 @@ class RetrieverIndexConfig:
     # faiss_index_params: Dict[str, Any] = None
 
 @dataclass
-class RetrieverSearchConfig:
-    retrieval_topk: int = 5
-        
-@dataclass
 class RetrieverPipelineConfig:
     type: str = "dense"
     use_cache: bool = False
@@ -89,13 +85,11 @@ class RetrieverPipelineConfig:
 @dataclass
 class RetrieverConfig:
     name: str = "dense"
-
     # these map 1:1 to the yaml groups
     pipeline: RetrieverPipelineConfig = field(default_factory=RetrieverPipelineConfig)
     corpus: RetrieverCorpusConfig = field(default_factory=RetrieverCorpusConfig)
     encoder: RetrieverEncoderConfig = field(default_factory=RetrieverEncoderConfig)
     index: RetrieverIndexConfig = field(default_factory=RetrieverIndexConfig)
-    search: RetrieverSearchConfig = field(default_factory=RetrieverSearchConfig)
     cache: RetrieverCacheConfig = field(default_factory=RetrieverCacheConfig)
 
 # ---- Dataset ----
@@ -119,3 +113,4 @@ class AppConfig:
     metrics: List[str] = field(default_factory=lambda: ["em", "f1", "acc", "precision", "recall", "input_tokens"])
     is_reasoning: bool = False
     batch_size: int = 1
+    retrieval_topk: int = 5

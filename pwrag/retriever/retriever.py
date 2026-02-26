@@ -63,7 +63,7 @@ class BaseRetriever:
 
     def update_base_setting(self):
         self.retrieval_method = self.config.retriever.encoder.retrieval_method
-        self.topk = self.config.retriever.search.retrieval_topk
+        self.topk = self.config.retrieval_topk
         self.device = self.config.retriever_encoder_device if "cuda" in self.config.retriever_encoder_device and torch.cuda.is_available() else "cpu"
 
         self.index_path = self.config.retriever.index.index_path

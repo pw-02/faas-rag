@@ -250,11 +250,7 @@ class RunLogger:
             "num_items": self.num_items,
             "num_batches": self.num_batches,
             "batch_size": self.cfg.batch_size,
-            "retrieval_topk": (
-                getattr(getattr(self.cfg, "retriever", None), "search", None).retrieval_topk
-                if getattr(self.cfg, "retriever", None) is not None
-                else ""
-            ),
+            "retrieval_topk": self.cfg.retrieval_topk,
             "batches_jsonl": self.paths.batches_jsonl if self.log_batches else "",
             "config_yaml": self.paths.config_yaml,
             # "generation_time(s)": self.perf_batch["generation_time(s)"].sum if "generation_time(s)" in self.perf_batch else "",

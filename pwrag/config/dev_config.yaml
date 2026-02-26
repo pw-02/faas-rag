@@ -11,7 +11,8 @@ defaults:
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled
   - _self_
-
+  
+retrieval_topk: 10
 # ------------
 generator_device: cuda:0
 retriever_encoder_device: cuda:0
