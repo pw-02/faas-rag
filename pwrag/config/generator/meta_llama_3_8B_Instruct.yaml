@@ -2,7 +2,7 @@ name: llama_3_8B_instruct
 generator_framework: hf
 generator_model: meta-llama/Meta-Llama-3-8B-Instruct #Meta-Llama-3-8B-Instruct
 generator_max_input_length: 4096
-generator_batch_size: 1
+generator_batch_size: 32
 
 generation_params:
   do_sample: false
