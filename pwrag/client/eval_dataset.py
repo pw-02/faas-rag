@@ -57,7 +57,10 @@ def main(cfg: AppConfig) -> None:
         dataset = Dataset(cfg)
         pipeline = pipeline(cfg)
         cfg.save_dir = os.path.join(cfg.save_dir, pipeline.pipeline_name)  # Save under subdir for each pipeline 
-        logger = RunLogger(conf=cfg, pipeline_name=pipeline.pipeline_name)
+        logger = RunLogger(conf=cfg, 
+                           pipeline_name=pipeline.pipeline_name,
+                           log_batches=False
+                           )
         
         run_eval(
             cfg=cfg,

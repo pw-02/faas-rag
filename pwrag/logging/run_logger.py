@@ -178,27 +178,29 @@ class RunLogger:
                 self._get_meter(self.perf_item, per_item_key).update(per_item_val, n=bs)
             except Exception:
                 pass
-
-        # ----- write batch record -----
-        record: Dict[str, Any] = {
-            "timestamp": _now_iso(),
-            "dataset_name": self.dataset_name,
-            "pipeline_name": self.pipeline_name,
-            "batch_id": int(batch_id),
-            "batch_size": bs,
-            "metrics": {
-                "perf_metrics": batch_perf_metrics,
-                "acc_metrics": batch_acc_metrics,
-            },
-        }
-
-        if self.store_item_details_in_batch:
-            record["items"] = [it.to_dict() for it in items]
-
-        self._write_jsonl(self._fh_batches, record)
-
+        
         self.num_items += bs
         self.num_batches += 1
+
+        if self.log_batches:
+            # ----- write batch record -----
+            record: Dict[str, Any] = {
+                "timestamp": _now_iso(),
+                "dataset_name": self.dataset_name,
+                "pipeline_name": self.pipeline_name,
+                "batch_id": int(batch_id),
+                "batch_size": bs,
+                "metrics": {
+                    "perf_metrics": batch_perf_metrics,
+                    "acc_metrics": batch_acc_metrics,
+                },
+            }
+
+            if self.store_item_details_in_batch:
+                record["items"] = [it.to_dict() for it in items]
+
+            self._write_jsonl(self._fh_batches, record)
+
 
     # -------- progress reporting --------
     def maybe_report(self, pbar=None) -> None:
