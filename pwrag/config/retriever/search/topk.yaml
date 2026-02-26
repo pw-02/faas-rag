@@ -1,4 +1,2 @@
 # config/retriever/search/topk.yaml
-retrieval_topk: 50
-batch_size: 64
-query_max_length: 64
+retrieval_topk: 10

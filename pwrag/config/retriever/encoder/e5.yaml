@@ -1,7 +1,8 @@
 # config/retriever/embedder/e5.yaml
 retrieval_method: e5
 retrieval_model: intfloat/e5-large-v2
-
+query_max_length: 64
+batch_size: 16
 dim: 1024
 metric: ip
 pooling_method: mean

@@ -4,7 +4,8 @@
 
 retrieval_method: dpr
 retrieval_model: facebook/dpr-question_encoder-single-nq-base
-
+query_max_length: 64
+batch_size: 16
 dim: 768
 metric: ip                 # cosine | ip | l2
 pooling_method: cls        # cls | mean

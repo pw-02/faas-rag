@@ -263,25 +263,27 @@ class RunLogger:
         }
 
         simplifed_summary = {
-            "encode(s)": self.perf_batch["encode_query_time(s)"].sum if "encode_query_time(s)" in self.perf_batch else "",
-            "index_search(s)": self.perf_batch["search_time(s)"].sum if "search_time(s)" in self.perf_batch else "",
-            "get_prompts(s)": self.perf_batch["get_prompts_time(s)"].sum if "get_prompts_time(s)" in self.perf_batch else "",
-            "load_docs(s)": self.perf_batch["load_docs_time(s)"].sum if "load_docs_time(s)" in self.perf_batch else "",
+            "encode(s)": self.perf_batch["encode(s)"].sum if "encode(s)" in self.perf_batch else "",
+            "index_search(s)": self.perf_batch["index_search(s)"].sum if "index_search(s)" in self.perf_batch else "",
+            "get_prompts(s)": self.perf_batch["get_prompts(s)"].sum if "get_prompts(s)" in self.perf_batch else "",
+            "load_docs(s)": self.perf_batch["load_docs(s)"].sum if "load_docs(s)" in self.perf_batch else "",
             "generation(s)": self.perf_batch["generation_time(s)"].sum if "generation_time(s)" in self.perf_batch else "",
-            "toal_time(s)": self.perf_batch["total_time(s)"].sum if "total_time(s)" in self.perf_batch else "",
+            "total_time(s)": self.perf_batch["total_time(s)"].sum if "total_time(s)" in self.perf_batch else "",
             "prompt_tokens": self.perf_batch["prompt_tokens"].sum if "prompt_tokens" in self.perf_batch else "",
             "completion_tokens": self.perf_batch["completion_tokens"].sum if "completion_tokens" in self.perf_batch else "",
-            "total_tokens": self.perf_batch["prompt_tokens"].sum + self.perf_batch["completion_tokens"].sum if "prompt_tokens" in self.perf_batch and "completion_tokens" in self.perf_batch else "",
+            "total_tokens": self.perf_batch["total_tokens"].sum if "total_tokens" in self.perf_batch else "",
         }
 
-        simplifed_summary = summary.update(simplifed_summary)
+        #merge summary and simplified_summary, with simplified keys taking precedence
+        bsummary = summary.copy()
+        bsummary.update(simplifed_summary)
 
         file_exists = os.path.exists(self.paths.summary_csv_simplified) and os.path.getsize(self.paths.summary_csv_simplified) > 0
         with open(self.paths.summary_csv_simplified, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=list(simplifed_summary.keys()))
+            writer = csv.DictWriter(f, fieldnames=list(bsummary.keys()))
             if not file_exists:
                 writer.writeheader()
-            writer.writerow(simplifed_summary)
+            writer.writerow(bsummary)
         
 
         # item-weighted outputs

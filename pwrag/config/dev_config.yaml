@@ -4,7 +4,7 @@ defaults:
   - dataset: repeated_question #nq, repeated_question, mmlu_econometrics
   - retriever/pipeline: dense
   - retriever/corpus: wiki_100k #wiki_100k
-  - retriever/embedder: dpr
+  - retriever/encoder: dpr
   - retriever/index: wiki_dpr_hnsw_100k #wiki_dpr_hnsw_100k
   - retriever/search: topk
   - retriever/cache: none # options: null, proximity, none
@@ -14,16 +14,16 @@ defaults:
 
 # ------------
 generator_device: cuda:0
-retriever_embedder_device: cuda:0
+retriever_encoder_device: cuda:0
 metrics: ["em", "f1", "acc", "precision", "recall"]
 save_dir: results
 
-max_sample_num: 25   # number of samples to test (only work in dev/test split), if None, test all samples
+max_sample_num: 5   # number of samples to test (only work in dev/test split), if None, test all samples
 random_sample: False # whether to randomly sample the test samples
 is_reasoning: false
 
 seed: 2024
-batch_size: 1 #batch size for which items are processed
+batch_size: 1 #batch size for which items are sent through the pipeline
 
 hydra:
   run:

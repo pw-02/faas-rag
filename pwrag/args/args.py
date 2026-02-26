@@ -49,7 +49,7 @@ class RetrieverCorpusConfig:
     corpus_path: str = ""
 
 @dataclass
-class RetrieverEmbedderConfig:
+class RetrieverEncoderConfig:
     retrieval_method: str = "dpr"
     retrieval_model: str = ""
     dim: int = 768
@@ -59,6 +59,8 @@ class RetrieverEmbedderConfig:
     use_sentence_transformer: bool = True
     # device: str = "cpu:0"
     use_fp16: bool = True
+    query_max_length: int = 512
+    batch_size: int = 16
 
 
 @dataclass
@@ -75,9 +77,7 @@ class RetrieverIndexConfig:
 @dataclass
 class RetrieverSearchConfig:
     retrieval_topk: int = 5
-    batch_size: int = 64
-    query_max_length: int = 64
-
+        
 @dataclass
 class RetrieverPipelineConfig:
     type: str = "dense"
@@ -93,7 +93,7 @@ class RetrieverConfig:
     # these map 1:1 to the yaml groups
     pipeline: RetrieverPipelineConfig = field(default_factory=RetrieverPipelineConfig)
     corpus: RetrieverCorpusConfig = field(default_factory=RetrieverCorpusConfig)
-    embedder: RetrieverEmbedderConfig = field(default_factory=RetrieverEmbedderConfig)
+    encoder: RetrieverEncoderConfig = field(default_factory=RetrieverEncoderConfig)
     index: RetrieverIndexConfig = field(default_factory=RetrieverIndexConfig)
     search: RetrieverSearchConfig = field(default_factory=RetrieverSearchConfig)
     cache: RetrieverCacheConfig = field(default_factory=RetrieverCacheConfig)
@@ -115,7 +115,7 @@ class AppConfig:
     max_sample_num: Optional[int] = None
     random_sample: bool = False
     generator_device: str = "cuda:0"
-    retriever_embedder_device: str = "cuda:0"
+    retriever_encoder_device: str = "cuda:0"
     metrics: List[str] = field(default_factory=lambda: ["em", "f1", "acc", "precision", "recall", "input_tokens"])
     is_reasoning: bool = False
     batch_size: int = 1

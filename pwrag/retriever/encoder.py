@@ -256,7 +256,7 @@ class STEncoder:
         if self._is_dpr:
             return self._encode_dpr(
                 query_list=query_list,
-                batch_size=batch_size or 64,
+                batch_size=batch_size or 16,
                 is_query=is_query,
                 normalize_embeddings=normalize_embeddings,
             )
