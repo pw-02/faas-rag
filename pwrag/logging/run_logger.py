@@ -84,7 +84,7 @@ class RunLogger:
         )
 
         if overwrite:
-            for p in [self.paths.batches_jsonl, self.paths.summary_csv, self.paths.config_yaml]:
+            for p in [self.paths.batches_jsonl, self.paths.config_yaml]: 
                 if os.path.exists(p):
                     os.remove(p)
 
@@ -245,6 +245,8 @@ class RunLogger:
             "config_yaml": self.paths.config_yaml,
         }
 
+        
+
         # item-weighted outputs
         for k, m in self.acc_item.items():
             summary[f"avg_item.acc.{k}"] = m.avg
@@ -259,9 +261,11 @@ class RunLogger:
             summary[f"avg_batch.perf.{k}"] = m.avg
             summary[f"sum_batch.perf.{k}"] = m.sum
 
-        with open(self.paths.summary_csv, "w", newline="", encoding="utf-8") as f:
+        file_exists = os.path.exists(self.paths.summary_csv) and os.path.getsize(self.paths.summary_csv) > 0
+        with open(self.paths.summary_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=list(summary.keys()))
-            writer.writeheader()
+            if not file_exists:
+                writer.writeheader()
             writer.writerow(summary)
 
         return summary

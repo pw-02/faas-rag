@@ -6,7 +6,7 @@ from typing import Any, Callable, Optional, Union
 import hydra
 from tqdm import tqdm
 from pwrag.args.args import AppConfig
-from pwrag.client.run_logger import RunLogger
+from pwrag.logging.run_logger import RunLogger
 from pwrag.dataset.dataset import Dataset
 from pwrag.evaluator.evaluator import Evaluator
 from pwrag.pipeline.pipeline import LLMOnlyPipeline, RetrievalOnlyPipeline, SequentialPipeline, ConditionalPipeline
