@@ -10,4 +10,4 @@ python pwrag/client/eval_dataset.py -m \
 
   python pwrag/client/eval_dataset.py -m \
   retriever/index=wiki_dpr_ivf_21m \
-  retrieval_topk=5,10,25,50
+  retrieval_topk=5

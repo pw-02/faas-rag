@@ -69,8 +69,8 @@ def ivf_params(n: Optional[int]) -> tuple[str, str, str, str]:
       - batch_size: build/add batching
     """
     if n is None:
-        # "all" — pick conservative big-corpus defaults (tweak if you want)
-        nlist = 65536
+        # "all" — pick conservative big-corpus defaults (tweak if you want) 
+        nlist = 4580
         train_size = 2_000_000
         nprobe = 256
         batch = 32768
