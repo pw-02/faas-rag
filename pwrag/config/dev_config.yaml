@@ -23,6 +23,7 @@ random_sample: False # whether to randomly sample the test samples
 is_reasoning: false
 
 seed: 2024
+batch_size: 1 #batch size for which items are processed
 
 hydra:
   run:

@@ -73,16 +73,14 @@ class RunLogger:
         ]
         self.weight_batch_metrics_by_size = bool(weight_batch_metrics_by_size)
         start = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.run_name = f"{self.dataset_name}_{self.pipeline_name}_{start}"
-        save_dir = os.path.join(self.save_dir, self.pipeline_name)
-        os.makedirs(save_dir, exist_ok=True)
+        os.makedirs(self.save_dir, exist_ok=True)
 
         self.paths = LogPaths(
-            save_dir=save_dir,
-            batches_jsonl=os.path.join(save_dir, f"{self.dataset_name}_{self.index_name}.jsonl"),
+            save_dir=self.save_dir,
+            batches_jsonl=os.path.join(self.save_dir, f"{self.dataset_name}_{self.index_name}.jsonl"),
             # summary_csv=os.path.join(save_dir, f"{self.dataset_name}_{self.index_name}_summary.csv"),
-            summary_csv=os.path.join(save_dir, f"{self.dataset_name}_summary.csv"),
-            config_yaml=os.path.join(save_dir, f"{self.dataset_name}_{self.index_name}_config.yaml"),
+            summary_csv=os.path.join(self.save_dir, f"summary.csv"),
+            config_yaml=os.path.join(self.save_dir, f"{self.dataset_name}_{self.index_name}_config.yaml"),
         )
 
         if overwrite:
@@ -184,7 +182,6 @@ class RunLogger:
         # ----- write batch record -----
         record: Dict[str, Any] = {
             "timestamp": _now_iso(),
-            "run_name": self.run_name,
             "dataset_name": self.dataset_name,
             "pipeline_name": self.pipeline_name,
             "batch_id": int(batch_id),
@@ -239,11 +236,12 @@ class RunLogger:
         self.close()
 
         summary: Dict[str, Any] = {
-            "run_name": self.run_name,
             "timestamp": _now_iso(),
-            "dataset": getattr(self.cfg.dataset, "dataset_path", ""),
+            "dataset": self.dataset_path,
             "dataset_name": self.dataset_name,
             "index_name": self.index_name,
+            "index_path": self.index_path,
+            "batches_jsonl": self.paths.batches_jsonl if self.log_batches else "",
             "pipeline": self.pipeline_name,
             "num_items": self.num_items,
             "num_batches": self.num_batches,

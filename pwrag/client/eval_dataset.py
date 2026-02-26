@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+import os
 from typing import Optional
 import hydra
 from tqdm import tqdm
@@ -47,20 +48,16 @@ def run_eval(
     pbar.close()
 
 
-@hydra.main(config_path="../config", config_name="local_config", version_base=None)  # local_config.yaml, config.yaml
+@hydra.main(config_path="../config", config_name="config", version_base=None)  # dev_config.yaml, config.yaml
 def main(cfg: AppConfig) -> None:
 
     for pipeline in [SequentialPipeline]:
         print(f"Running evaluation with {pipeline.__name__}...")
         evaluator = Evaluator(cfg)
         dataset = Dataset(cfg)
-        pipeline = pipeline(cfg)     
-        logger = RunLogger(
-            conf=cfg,
-            pipeline_name=pipeline.pipeline_name,
-            report_every_items=10,               # tqdm postfix refresh cadence
-            weight_batch_metrics_by_size=True,  # whether to weight batch metrics by batch size when updating item-average meters
-            flush_every=1)
+        pipeline = pipeline(cfg)
+        cfg.save_dir = os.path.join(cfg.save_dir, pipeline.pipeline_name)  # Save under subdir for each pipeline 
+        logger = RunLogger(conf=cfg, pipeline_name=pipeline.pipeline_name)
         
         run_eval(
             cfg=cfg,
