@@ -65,12 +65,16 @@ class RunLogger:
         self.log_batches = bool(log_batches)
         self.store_item_details_in_batch = bool(store_item_details_in_batch)
         self.report_every_items = int(report_every_items)
-        
-        self.report_perf_keys = report_perf_keys or [
-            "index_search(s)",
-            "load_docs(s)",
-            "generation(s)",
-        ]
+
+        if report_perf_keys is not None:
+            self.report_perf_keys = report_perf_keys
+        else:
+            self.report_perf_keys = [
+                "index_search(s)",
+                "load_docs(s)",
+                "generation(s)",
+            ]
+
         self.weight_batch_metrics_by_size = bool(weight_batch_metrics_by_size)
         start = datetime.now().strftime("%Y%m%d_%H%M%S")
         os.makedirs(self.save_dir, exist_ok=True)
@@ -145,6 +149,10 @@ class RunLogger:
             if self._fh_batches is not None:
                 self._fh_batches.close()
                 self._fh_batches = None
+    
+    def conf_to_dict(self) -> Dict[str, Any]:
+        # Convert OmegaConf to a regular dict for easier logging
+        return OmegaConf.to_container(self.cfg, resolve=True)
 
     
     # -------- logging --------
@@ -227,9 +235,9 @@ class RunLogger:
         }
 
         for key in self.report_perf_keys:
-            if key in self.perf_item:
+            if key in self.perf_batch:
                 label = key_mapping.get(key, key)
-                postfix[label] = f"{self.perf_item[key].avg:.2f}"
+                postfix[label] = f"{self.perf_batch[key].avg:.2f}"
 
         pbar.set_postfix(postfix)
 
@@ -250,7 +258,7 @@ class RunLogger:
             "batch_size": self.cfg.batch_size,
             "retrieval_topk": self.cfg.retrieval_topk,
             "batches_jsonl": self.paths.batches_jsonl if self.log_batches else "",
-            "config_yaml": self.paths.config_yaml,
+            "config_yaml": self.conf_to_dict(),
             # "generation_time(s)": self.perf_batch["generation_time(s)"].sum if "generation_time(s)" in self.perf_batch else "",
             # "total_time(s)": self.perf_batch["total_time(s)"].sum if "total_time(s)" in self.perf_batch else "",
             # "toal_tokens": self.perf_batch["total_tokens"].sum if "total_tokens" in self.perf_batch else "",
