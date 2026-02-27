@@ -10,4 +10,4 @@ python pwrag/client/eval_dataset.py -m \
 
   python pwrag/client/eval_dataset.py -m \
   retriever/index=wiki_dpr_ivf_21m \
-  batch_size=1,2,4,8,16,32
+  batch_size=1,4,8,16,32
