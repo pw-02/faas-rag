@@ -60,6 +60,7 @@ def main(cfg: AppConfig) -> None:
         logger = RunLogger(conf=cfg, 
                            pipeline_name=pipeline.pipeline_name,
                            log_batches=False
+                    
                            )
         
         run_eval(
