@@ -48,7 +48,7 @@ def run_eval(
     pbar.close()
 
 
-@hydra.main(config_path="../config", config_name="config", version_base=None)  # dev_config.yaml, config.yaml
+@hydra.main(config_path="../config", config_name="dev_config", version_base=None)  # dev_config.yaml, config.yaml
 def main(cfg: AppConfig) -> None:
 
     for pipeline in [SequentialPipeline]:

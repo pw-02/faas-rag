@@ -48,7 +48,7 @@ class BaseGenerator:
         self.max_input_len = self.config.generator.generator_max_input_length
         self.batch_size = self.config.generator.generator_batch_size
         self.device = self.config.generator_device if "cuda" in self.config.generator_device and torch.cuda.is_available() else "cpu"
-        self.gpu_num = "0" if self.device == "cpu" else self.device.split(":")[1]
+        self.gpu_num = 1 # if self.device == "cpu" else int(self.device.split(":")[1])
 
         # set generation params as a dict not dict config
         self.generation_params = OmegaConf.to_container(self.config.generator.generation_params, resolve=True)
@@ -369,7 +369,7 @@ class VLLMGenerator(BaseGenerator):
         self.use_lora = False
         if self.lora_path is not None:
             self.use_lora = True
-        self.max_model_len = self._config['generator_max_input_len']
+        self.max_model_len = self.config.generator.generator_max_input_length
 
 
 
