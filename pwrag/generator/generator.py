@@ -309,11 +309,6 @@ class HFCausalLMGenerator(BaseGenerator):
             return responses, scores
         else:
             return responses
-
-
-
-
-
     def cal_gen_probs(self, prev, next):
         import torch
         input_ids = self.tokenizer.encode(prev, add_special_tokens=False)
@@ -376,45 +371,86 @@ class VLLMGenerator(BaseGenerator):
             self.use_lora = True
         self.max_model_len = self._config['generator_max_input_len']
 
+
+
     def generate(
         self,
         input_list: List[str],
-        return_raw_output=False,
-        return_scores=False,
+        metrics: dict[str, float] = None,
+        return_raw_output: bool = False,
+        return_scores: bool = False,
+        return_dict: bool = False,
         **params,
     ):
+        """
+        vLLM generate that matches HFCausalLMGenerator's metric collection:
+        - metrics["prompt_tokens"]
+        - metrics["completion_tokens"]
+        - metrics["total_tokens"]
+        - metrics["generation(s)"]
+        """
         from vllm import SamplingParams
+        import numpy as np
+        import time
+
+        if metrics is None:
+            metrics = {}
+
+        t0 = time.perf_counter()
 
         if isinstance(input_list, str):
             input_list = [input_list]
 
         generation_params = deepcopy(self.generation_params)
         generation_params.update(params)
+
+        # HF compatibility: do_sample=False => temperature=0
         if "do_sample" in generation_params:
             do_sample_flag = generation_params.pop("do_sample")
             if not do_sample_flag:
                 generation_params["temperature"] = 0
+
         generation_params["seed"] = self._config["seed"]
 
-        # handle param conflict
+        # handle param conflict / max tokens
         generation_params = resolve_max_tokens(params, generation_params, prioritize_new_tokens=False)
 
-        # fix for llama3
+        # fix for llama3 / stop tokens
         if "stop" in generation_params:
+            # be robust if user passed a string
+            if isinstance(generation_params["stop"], str):
+                generation_params["stop"] = [generation_params["stop"]]
             generation_params["stop"].append("<|eot_id|>")
             generation_params["include_stop_str_in_output"] = True
         else:
             generation_params["stop"] = ["<|eot_id|>"]
 
-        if return_scores:
-            if "logprobs" not in generation_params:
-                generation_params["logprobs"] = 100
+        # If returning scores, ensure logprobs are requested.
+        # NOTE: vLLM logprobs are per generated token.
+        if return_scores and "logprobs" not in generation_params:
+            generation_params["logprobs"] = 100
 
         sampling_params = SamplingParams(**generation_params)
 
+        # ---- prompt token accounting (like HF) ----
+        # Count prompt tokens without padding.
+        # Works for any tokenizer; prefer attention_mask if available.
+        tok = self.tokenizer(
+            input_list,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=getattr(self, "max_input_len", None) or getattr(self, "max_model_len", None),
+        )
+        if "attention_mask" in tok:
+            prompt_tokens_per_item = tok["attention_mask"].sum(dim=1).tolist()
+        else:
+            pad_id = self.tokenizer.pad_token_id
+            prompt_tokens_per_item = (tok["input_ids"] != pad_id).sum(dim=1).tolist()
+
+        # ---- run vLLM ----
         if self.use_lora:
             from vllm.lora.request import LoRARequest
-
             outputs = self.model.generate(
                 input_list,
                 sampling_params,
@@ -423,28 +459,63 @@ class VLLMGenerator(BaseGenerator):
         else:
             outputs = self.model.generate(input_list, sampling_params)
 
+        # ---- completion token accounting ----
+        # Prefer vLLM-provided token_ids if present (most reliable).
+        completion_tokens_per_item = []
+        for req_out in outputs:
+            # req_out.outputs can have >1 candidate if n>1 / best_of, etc.
+            # We mirror your current behavior: if multiple, we sum *first* candidate
+            # for metrics, since HF is 1 per prompt by default.
+            # If you prefer sum across all candidates, change this logic.
+            if not req_out.outputs:
+                completion_tokens_per_item.append(0)
+                continue
+
+            first = req_out.outputs[0]
+
+            token_ids = getattr(first, "token_ids", None)
+            if token_ids is not None:
+                completion_tokens_per_item.append(len(token_ids))
+            else:
+                # fallback: tokenize generated text (less exact due to cleanup rules)
+                completion_tokens_per_item.append(len(self.tokenizer.encode(first.text, add_special_tokens=False)))
+
+        metrics["prompt_tokens"] = int(sum(prompt_tokens_per_item))
+        metrics["completion_tokens"] = int(sum(completion_tokens_per_item))
+        metrics["total_tokens"] = int(metrics["prompt_tokens"] + metrics["completion_tokens"])
+        metrics["generation(s)"] = float(time.perf_counter() - t0)
+
+        # ---- format outputs ----
         if return_raw_output:
             base_output = outputs
         else:
             generated_texts = [
-                [c.text for c in output.outputs] if len(output.outputs) > 1 else output.outputs[0].text
-                for output in outputs
+                [c.text for c in out.outputs] if len(out.outputs) > 1 else out.outputs[0].text
+                for out in outputs
             ]
             base_output = generated_texts
+
+        if return_dict:
+            # Optional: expose per-item counts too, similar to your HF internals
+            return {
+                "responses": base_output,
+                "prompt_tokens_per_item": [int(x) for x in prompt_tokens_per_item],
+                "completion_tokens_per_item": [int(x) for x in completion_tokens_per_item],
+                "raw_outputs": outputs if return_raw_output else None,
+            }
+
         if return_scores:
             scores = []
-            for output in outputs:
-                for single_output in output.outputs:
-                    if single_output.logprobs:
-                        token_probs = [np.exp(list(score_dict.values())[0].logprob) 
-                                      for score_dict in single_output.logprobs]
-                        output_scores.append(token_probs)
+            for out in outputs:
+                out_scores = []
+                for single in out.outputs:
+                    if single.logprobs:
+                        # single.logprobs: list[dict[token_id -> Logprob]]
+                        token_probs = [np.exp(list(score_dict.values())[0].logprob) for score_dict in single.logprobs]
+                        out_scores.append(token_probs)
                     else:
-                        output_scores.append([])
-                if len(output_scores) == 1:
-                    scores.append(output_scores[0])
-                else:
-                    scores.append(output_scores)
+                        out_scores.append([])
+                scores.append(out_scores[0] if len(out_scores) == 1 else out_scores)
             return base_output, scores
-        else:
-            return base_output
+
+        return base_output

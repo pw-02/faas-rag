@@ -172,7 +172,7 @@ def load_corpus(corpus_path: str):
             corpus = corpus.rename_column("text", "contents")
         else:
             warnings.warn("No `contents` or `text` field found in corpus.")
-    
+    return corpus
     
     # if 'contents' not in corpus.features:
     #     try:

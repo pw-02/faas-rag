@@ -44,7 +44,8 @@ def get_generator(config: AppConfig):
     if config.generator.generator_framework == 'openai':
         raise NotImplementedError("OpenAI API is not supported yet.")
     if config.generator.generator_framework == "vllm":
-        raise NotImplementedError("VLLM is not supported yet.")
+        from pwrag.generator.generator import VLLMGenerator
+        return VLLMGenerator(config)
     elif config.generator.generator_framework == "fschat":
         raise NotImplementedError("FastChat is not supported yet.")
     elif config.generator.generator_framework == "hf":
