@@ -1,5 +1,0 @@
-# config/retriever/pipeline/dense_rerank.yaml
-type: dense
-use_reranker: true
-reranker_model: BAAI/bge-reranker-large
-reranker_topk: 50

@@ -8,8 +8,10 @@ from typing import Any
 def timed(store: dict, key: str):
     t0 = time.perf_counter()
     yield
-    store[key] = time.perf_counter() - t0
-
+    if key not in store or not isinstance(store[key], (int, float)):
+        store[key] = time.perf_counter() - t0
+    else:
+        store[key] += time.perf_counter() - t0
 
 class AverageMeter:
     """Computes and stores the average and current value"""

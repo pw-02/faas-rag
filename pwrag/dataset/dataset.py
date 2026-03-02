@@ -35,7 +35,13 @@ class Item:
         self.output[key] = value
 
     def update_metrics(self, key: str, value: Any) -> None:
-        self.metrics[key] = value
+        if key in self.metrics and isinstance(value, (int, float)):
+            self.metrics[key] += value  # accumulate if already exists and is numeric
+        else:
+            self.metrics[key] = value
+
+
+
 
     def update_evaluation_score(self, metric_name: str, metric_score: float) -> None:
         if "metric_score" not in self.output:

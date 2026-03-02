@@ -7,13 +7,13 @@ from tqdm import tqdm
 from pwrag.args.args import AppConfig
 from pwrag.dataset.dataset import Dataset
 from pwrag.evaluator.evaluator import Evaluator
-from pwrag.pipeline.pipeline import LLMOnlyPipeline, RetrievalOnlyPipeline, SequentialPipeline
+from pwrag.pipeline.pipeline import LLMOnlyPipeline, RetrievalOnlyPipeline, SequentialRAGPipeline, FLAREPipeline
 from pwrag.logging.run_logger import RunLogger  # <-- update import path
 
 def run_eval(
     cfg: AppConfig,
     dataset: Dataset,
-    pipeline: SequentialPipeline,
+    pipeline: Optional[LLMOnlyPipeline | RetrievalOnlyPipeline | SequentialRAGPipeline | FLAREPipeline],
     evaluator: Evaluator,
     run_logger: Optional[RunLogger] = None,
     desc: str = "Generating + Evaluating",
@@ -35,6 +35,7 @@ def run_eval(
             batch_acc_metrics = evaluator.evaluate(batch)
         else:
             batch_acc_metrics = {}       
+        
         run_logger.log_batch(
             batch_id=bidx,
             items=batch.data,  # Dataset holds items in .data
@@ -48,28 +49,40 @@ def run_eval(
     pbar.close()
 
 
-@hydra.main(config_path="../config", config_name="config", version_base=None)  # dev_config.yaml, config.yaml
-def main(cfg: AppConfig) -> None:
+@hydra.main(config_path="../config", config_name="dev_config", version_base=None)  # dev_config.yaml, config.yaml
 
-    for pipeline in [SequentialPipeline]:
-        print(f"Running evaluation with {pipeline.__name__}...")
+def main(cfg: AppConfig) -> None:
+    if cfg.retriever.pipeline.name == "llm_only":
+        pipelines = [LLMOnlyPipeline]
+        print("Running evaluation with LLMOnlyPipeline...")
+    elif cfg.retriever.pipeline.name == "retrieval_only":
+        pipelines = [RetrievalOnlyPipeline(cfg)]
+        print("Running evaluation with RetrievalOnlyPipeline...")
+    elif cfg.retriever.pipeline.name == "sequential_rag":
+        pipelines = [SequentialRAGPipeline(cfg)]
+        print("Running evaluation with SequentialRAGPipeline...")
+    elif cfg.retriever.pipeline.name == "flare":
+        pipelines = [FLAREPipeline(cfg)]
+        print("Running evaluation with FLAREPipeline...")
+    elif cfg.retriever.pipeline.name == "all":
+        print("Running evaluation with all pipelines...")
+        pipelines = [LLMOnlyPipeline, RetrievalOnlyPipeline(cfg), SequentialRAGPipeline(cfg), FLAREPipeline(cfg)]
+    else:
+        raise ValueError(f"Unknown pipeline name: {cfg.retriever.pipeline.name}")
+    
+    for pipeline in pipelines:
         evaluator = Evaluator(cfg)
         dataset = Dataset(cfg)
         pipeline = pipeline(cfg)
         cfg.save_dir = os.path.join(cfg.save_dir, pipeline.pipeline_name)  # Save under subdir for each pipeline 
-        logger = RunLogger(conf=cfg, 
-                           pipeline_name=pipeline.pipeline_name,
-                           log_batches=False
-                    
-                           )
-        
+        logger = RunLogger(conf=cfg, pipeline_name=pipeline.pipeline_name,log_batches=False)
         run_eval(
             cfg=cfg,
             dataset=dataset,
             pipeline=pipeline,
             evaluator=evaluator,
             run_logger=logger,
-            desc=f"Eval: {type(pipeline).__name__}",
+            desc=f"Eval: {pipeline.pipeline_name}",
             batch_size=cfg.batch_size
         )
 

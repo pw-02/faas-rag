@@ -397,19 +397,18 @@ class DenseRetriever(BaseTextRetriever):
         # -----------------
         # Encode (normalize)
         # -----------------
-        t0 = time.perf_counter()
 
-        with timed(metrics, "encode_query_time(s)"):
+        with timed(metrics, "encode(s)"):
             query_emb = self.encoder.encode(query)
             
         # Search
-        with timed(metrics, "search_time(s)"):
+        with timed(metrics, "total_search(s)"):
             idxs = None
             scores = None
 
             #check cache
             if self.use_cache and self.cache is not None:
-                with timed(metrics, "cache_check_time(s)"):
+                with timed(metrics, "cache_search(s)"):
                     cache_results = self.cache.find(query_emb)
 
                 if cache_results is not None:
@@ -417,15 +416,15 @@ class DenseRetriever(BaseTextRetriever):
                     idxs = cache_results
                     # idxs_1d = idxs_1d[:k]  # if cache stored more than requested
                     scores = [0] * len(cache_results)  # no scores available from cache
-                    metrics["vec_db_check_time(s)"] = 0.0
+                    metrics["index_search(s)"] = 0.0
             else:
-                metrics["cache_check_time(s)"] = 0.0
+                metrics["cache_search(s)"] = 0.0
             
             # cache miss -> ANN search    
             if idxs is None:
                 metrics["cache_hit"] = 0
 
-                with timed(metrics, "vec_db_check_time(s)"):
+                with timed(metrics, "index_search(s)"):
                     scores, idxs = self.index.search(query_emb, k=k)
 
                 # Normalize shapes
@@ -437,7 +436,7 @@ class DenseRetriever(BaseTextRetriever):
                     self.cache.insert(query_emb, idxs.tolist()) 
                 
         # Load docs
-        with timed(metrics, "load_doc_time(s)"):
+        with timed(metrics, "load_docs(s)"):
             results = load_docs(self.corpus, idxs)
 
         if return_score:

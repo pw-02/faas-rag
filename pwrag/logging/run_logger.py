@@ -168,8 +168,9 @@ class RunLogger:
         bs = len(items)
 
         # ----- update batch-average meters (each batch counts once) -----
-        for k, v in batch_acc_metrics.items():
-            self._get_meter(self.acc_batch, k).update(v, n=1)
+        # for k, v in batch_acc_metrics.items():
+        #     self._get_meter(self.acc_batch, k).update(v, n=1)
+        
         for k, v in batch_perf_metrics.items():
             self._get_meter(self.perf_batch, k).update(v, n=1)
 

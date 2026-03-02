@@ -76,7 +76,7 @@ class RetrieverIndexConfig:
 
 @dataclass
 class RetrieverPipelineConfig:
-    type: str = "dense"
+    name: str
     use_cache: bool = False
     use_reranker: bool = False
     reranker_model: Optional[str] = None
@@ -84,13 +84,15 @@ class RetrieverPipelineConfig:
 
 @dataclass
 class RetrieverConfig:
-    name: str = "dense"
     # these map 1:1 to the yaml groups
     pipeline: RetrieverPipelineConfig = field(default_factory=RetrieverPipelineConfig)
     corpus: RetrieverCorpusConfig = field(default_factory=RetrieverCorpusConfig)
     encoder: RetrieverEncoderConfig = field(default_factory=RetrieverEncoderConfig)
     index: RetrieverIndexConfig = field(default_factory=RetrieverIndexConfig)
     cache: RetrieverCacheConfig = field(default_factory=RetrieverCacheConfig)
+
+
+
 
 # ---- Dataset ----
 @dataclass

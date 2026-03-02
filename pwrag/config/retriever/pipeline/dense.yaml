@@ -1,4 +1,0 @@
-# config/retriever/pipeline/dense.yaml
-type: dense
-use_reranker: false
-use_cache: true
