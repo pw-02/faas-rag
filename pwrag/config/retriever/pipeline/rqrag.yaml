@@ -1,0 +1,4 @@
+name: rqrag
+use_reranker: false
+use_cache: false
+reranker_model: BAAI/bge-reranker-large

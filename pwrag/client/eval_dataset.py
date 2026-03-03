@@ -7,7 +7,8 @@ from tqdm import tqdm
 from pwrag.args.args import AppConfig
 from pwrag.dataset.dataset import Dataset
 from pwrag.evaluator.evaluator import Evaluator
-from pwrag.pipeline.pipeline import LLMOnlyPipeline, RetrievalOnlyPipeline, SequentialRAGPipeline, FLAREPipeline
+from pwrag.pipeline.pipeline import LLMOnlyPipeline, RetrievalOnlyPipeline, SequentialRAGPipeline
+from pwrag.pipeline.active_pipeline import FLAREPipeline, RQRAGPipeline
 from pwrag.logging.run_logger import RunLogger  # <-- update import path
 
 def run_eval(
@@ -64,6 +65,9 @@ def main(cfg: AppConfig) -> None:
     elif cfg.retriever.pipeline.name == "flare":
         pipelines = [FLAREPipeline(cfg)]
         print("Running evaluation with FLAREPipeline...")
+    elif cfg.retriever.pipeline.name == "rqrag":
+        print("Running evaluation with RQRAGPipeline...")
+        pipelines = [RQRAGPipeline(cfg)]
     elif cfg.retriever.pipeline.name == "all":
         print("Running evaluation with all pipelines...")
         pipelines = [LLMOnlyPipeline(cfg), RetrievalOnlyPipeline(cfg), SequentialRAGPipeline(cfg), FLAREPipeline(cfg)]
