@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Optional
 
 PY = sys.executable
-SCRIPT = "data/indexes/wiki-dpr/build_wikidpr_fiass_index.py"
+SCRIPT = "data/indexes/wiki-dpr/build_wikidpr_faiss_index.py"
 
-ROOT_OUT_DIR = Path("artifacts/wiki-dpr/faiss_wiki_dpr")
+ROOT_OUT_DIR = Path("artifacts/faiss_wiki_dpr")
 MANIFEST_PATH = ROOT_OUT_DIR / "manifest.csv"
 
 DATASET_NAME = "psgs_w100.nq.no_index"
@@ -30,7 +30,7 @@ COMMON = [
 
 # You want exactly two sizes: 100k and full corpus
 SIZES = [
-    ("100k", 100_000),
+    # ("100k", 100_000),
     ("all", None),  # full split (requires builder script with --all_vectors)
 ]
 
@@ -70,7 +70,7 @@ def ivf_params(n: Optional[int]) -> tuple[str, str, str, str]:
     """
     if n is None:
         # "all" — pick conservative big-corpus defaults (tweak if you want) 
-        nlist = 4580
+        nlist = 4582
         train_size = 2_000_000
         nprobe = 256
         batch = 32768
@@ -91,27 +91,29 @@ def ivf_params(n: Optional[int]) -> tuple[str, str, str, str]:
 # ---------------- Build job list: 2 per index type ----------------
 for tag, n in SIZES:
     # FLAT
-    flat_args = ["--index_type", "flat_ip"]
-    if n is None:
-        flat_args += ["--all_vectors"]
-    else:
-        flat_args += ["--n_vectors", str(n)]
-    JOBS.append((f"flat_{tag}", flat_args))
+
+    # flat_args = ["--index_type", "flat_ip"]
+    # if n is None:
+    #     flat_args += ["--all_vectors"]
+    # else:
+    #     flat_args += ["--n_vectors", str(n)]
+    # JOBS.append((f"flat_{tag}", flat_args))
 
     # HNSW
-    batch, ef_search = hnsw_params(n)
-    hnsw_args = [
-        "--index_type", "hnsw_ip",
-        "--batch_size", batch,
-        "--n_neighbors", "32",
-        "--ef_construction", "200",
-        "--ef_search", ef_search,
-    ]
-    if n is None:
-        hnsw_args += ["--all_vectors"]
-    else:
-        hnsw_args += ["--n_vectors", str(n)]
-    JOBS.append((f"hnsw_{tag}", hnsw_args))
+
+    # batch, ef_search = hnsw_params(n)
+    # hnsw_args = [
+    #     "--index_type", "hnsw_ip",
+    #     "--batch_size", batch,
+    #     "--n_neighbors", "32",
+    #     "--ef_construction", "200",
+    #     "--ef_search", ef_search,
+    # ]
+    # if n is None:
+    #     hnsw_args += ["--all_vectors"]
+    # else:
+    #     hnsw_args += ["--n_vectors", str(n)]
+    # JOBS.append((f"hnsw_{tag}", hnsw_args))
 
     # IVF
     n_lists, train_size, nprobe, batch = ivf_params(n)
