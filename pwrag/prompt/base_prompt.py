@@ -123,7 +123,7 @@ class PromptTemplate:
         if metrics is None:
             metrics = {}
           
-        with timed(metrics, "prompt_formatting_time(s)"):
+        with timed(metrics, "format_prompt(s)"):
             if messages is not None:
                 if isinstance(messages, str):
                     return self.truncate_prompt(messages)

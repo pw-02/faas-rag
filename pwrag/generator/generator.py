@@ -287,9 +287,11 @@ class HFCausalLMGenerator(BaseGenerator):
 
                     responses.append(gen_text.strip())
 
+           
+            
             perf_info = {
-                "prompt_tokens_per_item": prompt_tokens_per_item,
-                "completion_tokens_per_item": completion_tokens_per_item,
+                "prompt_tokens": sum(prompt_tokens_per_item),
+                "completion_tokens": sum(completion_tokens_per_item),
                 "total_tokens": sum(prompt_tokens_per_item) + sum(completion_tokens_per_item),
             }
             for key in perf_info.keys():

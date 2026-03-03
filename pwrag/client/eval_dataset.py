@@ -53,7 +53,7 @@ def run_eval(
 
 def main(cfg: AppConfig) -> None:
     if cfg.retriever.pipeline.name == "llm_only":
-        pipelines = [LLMOnlyPipeline]
+        pipelines = [LLMOnlyPipeline(cfg)]
         print("Running evaluation with LLMOnlyPipeline...")
     elif cfg.retriever.pipeline.name == "retrieval_only":
         pipelines = [RetrievalOnlyPipeline(cfg)]
@@ -66,16 +66,19 @@ def main(cfg: AppConfig) -> None:
         print("Running evaluation with FLAREPipeline...")
     elif cfg.retriever.pipeline.name == "all":
         print("Running evaluation with all pipelines...")
-        pipelines = [LLMOnlyPipeline, RetrievalOnlyPipeline(cfg), SequentialRAGPipeline(cfg), FLAREPipeline(cfg)]
+        pipelines = [LLMOnlyPipeline(cfg), RetrievalOnlyPipeline(cfg), SequentialRAGPipeline(cfg), FLAREPipeline(cfg)]
     else:
         raise ValueError(f"Unknown pipeline name: {cfg.retriever.pipeline.name}")
     
     for pipeline in pipelines:
         evaluator = Evaluator(cfg)
         dataset = Dataset(cfg)
-        pipeline = pipeline(cfg)
-        cfg.save_dir = os.path.join(cfg.save_dir, pipeline.pipeline_name)  # Save under subdir for each pipeline 
-        logger = RunLogger(conf=cfg, pipeline_name=pipeline.pipeline_name,log_batches=False)
+        # pipeline = pipeline(cfg)
+        cfg.save_dir = os.path.join(cfg.save_dir, cfg.retriever.pipeline.name)  # Save under subdir for each pipeline 
+        logger = RunLogger(conf=cfg, 
+                           pipeline_name=pipeline.pipeline_name,
+                           log_batches=False)
+        
         run_eval(
             cfg=cfg,
             dataset=dataset,

@@ -84,7 +84,7 @@ class RunLogger:
             batches_jsonl=os.path.join(self.save_dir, f"{self.dataset_name}_{self.index_name}.jsonl"),
             # summary_csv=os.path.join(save_dir, f"{self.dataset_name}_{self.index_name}_summary.csv"),
             summary_csv=os.path.join(self.save_dir, f"summary.csv"),
-            summary_csv_simplified=os.path.join(self.save_dir, f"summary_simplified.csv"),
+            summary_csv_simplified=os.path.join(self.save_dir, f"summary_friendly.csv"),
             config_yaml=os.path.join(self.save_dir, f"{self.dataset_name}_{self.index_name}_config.yaml"),
         )
 
@@ -259,18 +259,14 @@ class RunLogger:
             "batch_size": self.cfg.batch_size,
             "retrieval_topk": self.cfg.retrieval_topk,
             "batches_jsonl": self.paths.batches_jsonl if self.log_batches else "",
-            "config_yaml": self.conf_to_dict(),
-            # "generation_time(s)": self.perf_batch["generation_time(s)"].sum if "generation_time(s)" in self.perf_batch else "",
-            # "total_time(s)": self.perf_batch["total_time(s)"].sum if "total_time(s)" in self.perf_batch else "",
-            # "toal_tokens": self.perf_batch["total_tokens"].sum if "total_tokens" in self.perf_batch else "",
         }
 
         simplifed_summary = {
             "encode(s)": self.perf_batch["encode(s)"].sum if "encode(s)" in self.perf_batch else "",
             "index_search(s)": self.perf_batch["index_search(s)"].sum if "index_search(s)" in self.perf_batch else "",
-            "get_prompts(s)": self.perf_batch["get_prompts(s)"].sum if "get_prompts(s)" in self.perf_batch else "",
+            "format_prompt(s)": self.perf_batch["format_prompt(s)"].sum if "format_prompt(s)" in self.perf_batch else "",
             "load_docs(s)": self.perf_batch["load_docs(s)"].sum if "load_docs(s)" in self.perf_batch else "",
-            "generation(s)": self.perf_batch["generation(s)"].sum if "generation(s)" in self.perf_batch else "",
+            "generate(s)": self.perf_batch["generate(s)"].sum if "generate(s)" in self.perf_batch else "",
             "total_time(s)": self.perf_batch["total_time(s)"].sum if "total_time(s)" in self.perf_batch else "",
             "prompt_tokens": self.perf_batch["prompt_tokens"].sum if "prompt_tokens" in self.perf_batch else "",
             "completion_tokens": self.perf_batch["completion_tokens"].sum if "completion_tokens" in self.perf_batch else "",
@@ -302,6 +298,8 @@ class RunLogger:
         for k, m in self.perf_batch.items():
             summary[f"avg_batch.perf.{k}"] = m.avg
             summary[f"sum_batch.perf.{k}"] = m.sum
+
+        summary["config"] = self.conf_to_dict()
 
         file_exists = os.path.exists(self.paths.summary_csv) and os.path.getsize(self.paths.summary_csv) > 0
         with open(self.paths.summary_csv, "a", newline="", encoding="utf-8") as f:

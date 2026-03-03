@@ -40,12 +40,11 @@ class LLMOnlyPipeline(BasicPipeline):
     def run_batch(self, batch:List[Item]):
         perf_metrics: dict[str, float] = {}
         with timed(perf_metrics, "total_time(s)"):
-            with timed(perf_metrics, "get_prompts(s)"):
-                input_prompts = [self.prompt_template.get_string(question=item.question) for item in batch]
+            input_prompts = [self.prompt_template.get_string(question=item.question, metrics=perf_metrics) for item in batch]
             predictions = self.generator.generate(input_prompts, metrics=perf_metrics)
             for item, pred in zip(batch, predictions):
-                item.update_output("pred", pred)
-        return batch, perf_metrics
+                    item.update_output("pred", pred)
+            return batch, perf_metrics
 
 
     def run_item(self, item: Item):
@@ -78,10 +77,8 @@ class RetrievalOnlyPipeline(BasicPipeline):
     
     def run_batch(self, batch:List[Item]):
         perf_metrics: dict[str, float] = {}
-        
         with timed(perf_metrics, "total_time(s)"):
             input_query = [item.question for item in batch]
-
             retrieval_results = self.retriever.batch_search(input_query, metrics=perf_metrics, return_score=False)
             for item, retrieved_docs in zip(batch, retrieval_results):
                 item.update_output("retrieved_docs", retrieved_docs)
@@ -121,11 +118,10 @@ class SequentialRAGPipeline(BasicPipeline):
        
         with timed(perf_metrics, "total_time(s)"):
             input_query = [item.question for item in batch]
-
             retrieval_results = self.retriever.batch_search(input_query, metrics=perf_metrics, return_score=False)
-
-            with timed(perf_metrics, "get_prompts(s)"):
-                input_prompts = [self.prompt_template.get_string(question=item.question, retrieval_result=retrieval_result) for item, retrieval_result in zip(batch, retrieval_results)]
+            input_prompts = [self.prompt_template.get_string(question=item.question, 
+                                                             metrics=perf_metrics,
+                                                             retrieval_result=retrieval_result) for item, retrieval_result in zip(batch, retrieval_results)]
             
             pred_answer_list = self.generator.generate(input_prompts, metrics=perf_metrics)
             
@@ -206,7 +202,6 @@ class FLAREPipeline(BasicPipeline):
         
 
     def run_item(self, item: Item, perf_metrics=None):
-
         if perf_metrics is None:
             perf_metrics = {}
 
@@ -228,7 +223,7 @@ class FLAREPipeline(BasicPipeline):
                 input_prompt, return_scores=True, stop=self.stop_sym, max_new_tokens=self.look_ahead_steps,
                 metrics=perf_metrics
             )
-
+            
             round_gen_output, scores = round_gen_output[0], scores[0]
             # next_sent_scores: token logits of the first sent in generation seq
             next_sent, next_sent_score = self.get_next_sentence(round_gen_output, scores, metrics=perf_metrics)
