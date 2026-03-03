@@ -1,6 +1,6 @@
 defaults:
   # - retriever: wiki_faiss_dpr_ivf_100k #, llama_13_8B_instruct, llama_70b_chat, gpt-3.5-turbo
-  - generator:  qwen2_0_5b_instruct #qwen2_0_5b_instruct 
+  - generator:  qwen2_0_5b_instruct #qwen2_0_5b_instruct, llama_31_8B_instruct, rq_rag_llama2_7B
   - dataset: repeated_question #nq, repeated_question, mmlu_econometrics
   - retriever/pipeline: rqrag # options: sequential_rag,  llm_only, retrieval_only, flare, rqrag, all
   - retriever/corpus: wiki_100k #wiki_100k

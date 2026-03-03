@@ -11,7 +11,7 @@ python data/indexes/wiki-dpr/build_many.py
 python data/datasets/download.py
 python faasrag/experiments/sweep_runner.py
 
-faasrag/client/evaluate_dataset.py
+python pwrag/client/eval_dataset.py
 
 
 
