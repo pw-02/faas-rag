@@ -1,5 +1,5 @@
 name: rq_rag_llama2_7B
-generator_framework: hf
+generator_framework: vllm
 generator_model: chiminchan/rq_rag_llama2_7B #Meta-Llama-3-8B-Instruct
 generator_max_input_length: 512
 generator_batch_size: 32
