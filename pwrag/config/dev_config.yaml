@@ -11,14 +11,14 @@ defaults:
   - override hydra/hydra_logging: disabled
   - _self_
 
-retrieval_topk: 10
+retrieval_topk: 2
 # ------------
 generator_device: cuda:0
 retriever_encoder_device: cuda:0
 metrics: ["em", "f1", "acc", "precision", "recall"]
 save_dir: results
 
-max_sample_num: 5   # number of samples to test (only work in dev/test split), if None, test all samples
+max_sample_num: 2   # number of samples to test (only work in dev/test split), if None, test all samples
 random_sample: False # whether to randomly sample the test samples
 is_reasoning: false
 
