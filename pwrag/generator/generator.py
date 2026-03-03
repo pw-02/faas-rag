@@ -49,7 +49,8 @@ class BaseGenerator:
         self.max_input_len = self.config.generator.generator_max_input_length
         self.batch_size = self.config.generator.generator_batch_size
         self.device = self.config.generator_device if "cuda" in self.config.generator_device and torch.cuda.is_available() else "cpu"
-        self.gpu_num = 1 # if self.device == "cpu" else int(self.device.split(":")[1])
+        # self.gpu_num = 0 if self.device == "cpu" else int(self.device.split(":")[1])
+        self.gpu_num = 0 if self.device == "cpu" else 1 #default to 1 gpu for vLLM
 
         # set generation params as a dict not dict config
         self.generation_params = OmegaConf.to_container(self.config.generator.generation_params, resolve=True)
@@ -367,9 +368,11 @@ class VLLMGenerator(BaseGenerator):
             self.gpu_memory_utilization = 0.85
         else:
             self.gpu_memory_utilization = self._config["gpu_memory_utilization"]
+        
         if self.gpu_num != 1 and self.gpu_num % 2 != 0:
             self.tensor_parallel_size = self.gpu_num - 1
         else:
+            print(f"Using {self.gpu_num} GPUs for tensor parallelism.")
             self.tensor_parallel_size = self.gpu_num
 
         self.lora_path = None if "generator_lora_path" not in self._config else self._config["generator_lora_path"]
