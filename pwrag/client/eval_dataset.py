@@ -1,15 +1,25 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+
+# ---- MUST be first: before importing anything that might touch torch/cuda ----
 import os
+os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
+# os.environ["TOKENIZERS_PARALLELISM"] = "false"  # optional
+
+import multiprocessing as mp
 from typing import Optional
+
 import hydra
 from tqdm import tqdm
+
 from pwrag.args.args import AppConfig
 from pwrag.dataset.dataset import Dataset
 from pwrag.evaluator.evaluator import Evaluator
-from pwrag.pipeline.pipeline import LLMOnlyPipeline, RetrievalOnlyPipeline, SequentialRAGPipeline
+from pwrag.pipeline.pipeline import (
+    LLMOnlyPipeline, RetrievalOnlyPipeline, SequentialRAGPipeline
+)
 from pwrag.pipeline.active_pipeline import FLAREPipeline, RQRAGPipeline
-from pwrag.logging.run_logger import RunLogger  # <-- update import path
+from pwrag.logging.run_logger import RunLogger
 
 def run_eval(
     cfg: AppConfig,
