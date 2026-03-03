@@ -153,7 +153,6 @@ class FLAREPipeline(BasicPipeline):
 
 
 
-
 class RQRAGPipeline(BasicPipeline):
     expand_on_tokens = [
         "[S_Rewritten_Query]",
