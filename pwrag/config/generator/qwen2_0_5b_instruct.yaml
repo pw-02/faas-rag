@@ -1,5 +1,5 @@
 name: qwen2_0_5b_instruct
-generator_framework: hf #vllm, hf
+generator_framework: vllm #vllm, hf
 generator_model: Qwen/Qwen2-0.5B-Instruct
 generator_max_input_length: 512
 generator_batch_size: 32
