@@ -26,15 +26,19 @@ def rerank_manager(func):
     """
 
     @functools.wraps(func)
-    def wrapper(self, query, metrics=None, num=None, return_score=False):
-        results, scores = func(self, query=query, metrics=metrics, num=num, return_score=True)
+    def wrapper(self, query, metrics=None, num=None, return_score=False, return_timing_metrics=False):
+        results, scores, time_metrics = func(self, query=query, num=num, return_score=True, return_timing_metrics=True)
         if self.use_reranker:
             results, scores = self.reranker.rerank(query, results)
             if "batch" not in func.__name__:
                 results = results[0]
                 scores = scores[0]
         if return_score:
+            if return_timing_metrics:
+                return results, scores, time_metrics
             return results, scores
+        if return_timing_metrics:
+            return results, time_metrics
         else:
             return results
 
@@ -111,7 +115,7 @@ class BaseRetriever:
 
         pass
 
-    def _batch_search(self, query, num, return_score):
+    def _batch_search(self, query, num, return_score, return_timing_metrics=False):
         pass
 
     def search(self, *args, **kwargs):
@@ -245,13 +249,14 @@ class BM25Retriever(BaseTextRetriever):
         else:
             return results
 
-    def _batch_search(self, query, num: int = None, return_score=False):
+    def _batch_search(self, query, num: int = None, return_score=False, return_timing_metrics=False):
         if self.backend == "pyserini":
             # TODO: modify batch method
             results = []
             scores = []
+            time_metrics = {}
             for _query in query:
-                item_result, item_score = self._search(_query, num, True)
+                item_result, item_score = self._search(_query, num, True, return_timing_metrics=return_timing_metrics)
                 results.append(item_result)
                 scores.append(item_score)
         elif self.backend == "bm25s":
@@ -387,44 +392,41 @@ class DenseRetriever(BaseTextRetriever):
     def _search(self, query: str, 
                 num: int = None, 
                 return_score=False, 
-                metrics: dict[str, float] = None) -> List[Dict[str, str]]:
+                return_timing_metrics=False) -> List[Dict[str, str]]:
         
-        if metrics is None:
-            metrics = {}
-            
-        k = self.topk if num is None else num
+        time_metrics = {}
         
         # -----------------
         # Encode (normalize)
         # -----------------
 
-        with timed(metrics, "encode(s)"):
+        with timed(time_metrics, "encode_(s)"):
             query_emb = self.encoder.encode(query)
             
         # Search
-        with timed(metrics, "total_search(s)"):
+        with timed(time_metrics, "total_search(s)"):
             idxs = None
             scores = None
 
             #check cache
             if self.use_cache and self.cache is not None:
-                with timed(metrics, "cache_search(s)"):
+                with timed(time_metrics, "cache_search(s)"):
                     cache_results = self.cache.find(query_emb)
 
                 if cache_results is not None:
-                    metrics["cache_hit"] = 1
+                    time_metrics["cache_hit"] = 1
                     idxs = cache_results
                     # idxs_1d = idxs_1d[:k]  # if cache stored more than requested
                     scores = [0] * len(cache_results)  # no scores available from cache
-                    metrics["index_search(s)"] = 0.0
+                    time_metrics["index_search(s)"] = 0.0
             else:
-                metrics["cache_search(s)"] = 0.0
+                time_metrics["cache_search(s)"] = 0.0
             
             # cache miss -> ANN search    
             if idxs is None:
-                metrics["cache_hit"] = 0
+                time_metrics["cache_hit"] = 0
 
-                with timed(metrics, "index_search(s)"):
+                with timed(time_metrics, "index_search(s)"):
                     scores, idxs = self.index.search(query_emb, k=k)
 
                 # Normalize shapes
@@ -436,18 +438,25 @@ class DenseRetriever(BaseTextRetriever):
                     self.cache.insert(query_emb, idxs.tolist()) 
                 
         # Load docs
-        with timed(metrics, "load_docs(s)"):
+        with timed(time_metrics, "load_docs(s)"):
             results = load_docs(self.corpus, idxs)
 
         if return_score:
+            if return_timing_metrics:
+                return results, scores, time_metrics
             return results, scores
+        if return_timing_metrics:
+            return results, time_metrics
         else:
             return results
         
-    def _batch_search(self, query: List[str], num: int = None, return_score=False, metrics: dict[str, float] = None):
+    def _batch_search(self, 
+                      query: List[str], 
+                      num: int = None, 
+                      return_timing_metrics=False,
+                      return_score=False):
 
-        if metrics is None:
-            metrics = {}
+        time_metrics = {}
 
         if isinstance(query, str):
             query = [query]
@@ -457,22 +466,28 @@ class DenseRetriever(BaseTextRetriever):
         batch_size = self.encoder_batch_size or 1
         results = []
         scores = []
+        docs_idxs = []
         
-        with timed(metrics, "encode(s)"):
+        with timed(time_metrics, "encode_query_time(s)"):
             emb = self.encoder.encode(query, batch_size=batch_size, is_query=True)
-        with timed(metrics, "index_search(s)"):
+        with timed(time_metrics, "index_search_time(s)"):
             scores, idxs = self.index.search(emb, k=num)
         scores = scores.tolist()
+        docs_idxs = idxs.tolist()
         idxs = idxs.tolist()
 
         flat_idxs = [idx for sublist in idxs for idx in sublist]
 
-        with timed(metrics, "load_docs(s)"):
+        with timed(time_metrics, "fetch_docs_time(s)"):
             results = load_docs(self.corpus, flat_idxs)
             results = [results[i * num : (i + 1) * num] for i in range(len(idxs))]
         
         if return_score:
+            if return_timing_metrics:
+                return results, scores, time_metrics
             return results, scores
+        elif return_timing_metrics:
+            return results, time_metrics
         else:
             return results
 

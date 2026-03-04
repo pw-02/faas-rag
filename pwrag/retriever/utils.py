@@ -192,7 +192,6 @@ def read_jsonl(file_path):
 
             yield new_item
 
-
 def load_docs(corpus, doc_idxs: List[int]):
     results = []
     for idx in doc_idxs:

@@ -19,7 +19,12 @@ class BasicPipeline:
     def run_batch(self, batch:List[Item]):
         """The inference process of a batch of samples."""
         pass
-    
+
+    def _build_prompt(self, item: Item) -> str:
+        t0 = time.perf_counter()
+        prompt = self.prompt_template.get_string(question=item.question)
+        item.update_perf_metrics("format_prompt_time(s)", time.perf_counter() - t0)
+        return prompt
 
 
 class LLMOnlyPipeline(BasicPipeline):
@@ -37,14 +42,8 @@ class LLMOnlyPipeline(BasicPipeline):
         else:
             self.generator = generator
     
-    def _build_prompt(self, item: Item) -> str:
-        t0 = time.perf_counter()
-        prompt = self.prompt_template.get_string(question=item.question)
-        item.update_perf_metrics("format_prompt_time(s)", time.perf_counter() - t0)
-        return prompt
-
     def run_batch(self, batch:List[Item]):
-        
+
         input_prompts = [self._build_prompt(item) for item in batch]
 
         t0 = time.perf_counter()
@@ -83,20 +82,22 @@ class RetrievalOnlyPipeline(BasicPipeline):
         else:
             self.retriever = retriever
 
-    def run_item(self, item: Item):
-        perf_metrics: dict[str, float] = {}
-        retrieved_docs = self.retriever.search(item.question, metrics=perf_metrics)
-        item.update_metrics("perf_metrics", perf_metrics)
-        return retrieved_docs
-    
     def run_batch(self, batch:List[Item]):
-        perf_metrics: dict[str, float] = {}
-        with timed(perf_metrics, "total_time(s)"):
-            input_query = [item.question for item in batch]
-            retrieval_results = self.retriever.batch_search(input_query, metrics=perf_metrics, return_score=False)
-            for item, retrieved_docs in zip(batch, retrieval_results):
-                item.update_output("retrieved_docs", retrieved_docs)
-        return batch, perf_metrics
+        t0 = time.perf_counter()
+        input_query = [item.question for item in batch]
+        retrieval_results, scores, time_metrics = self.retriever.batch_search(query=input_query,  
+                                                                              return_score=True,
+                                                                              return_timing_metrics=True)
+        #set the generation for item using average time per item in the batch
+        item_generation_time = (time.perf_counter() - t0) / len(batch)
+
+        for item, retrieved_docs, score in zip(batch, retrieval_results, scores):
+            item.update_output("retrieved_docs", retrieved_docs)
+            item.update_output("retrieval_scores", score)
+            item.update_perf_metrics("retrieval_time(s)", item_generation_time)
+            for k, v in time_metrics.items():
+                item.update_perf_metrics(k, v / len(batch))
+        return batch
     
 
 class SequentialRAGPipeline(BasicPipeline):

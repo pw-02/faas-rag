@@ -80,11 +80,11 @@ def main(cfg: AppConfig) -> None:
         evaluator = Evaluator(cfg)
         dataset = Dataset(cfg)
         # pipeline = pipeline(cfg)
-        cfg.save_dir = os.path.join(cfg.save_dir, cfg.retriever.pipeline.name)  # Save under subdir for each pipeline 
+        cfg.save_dir = os.path.join(cfg.save_dir, pipeline.pipeline_name)  # Save under subdir for each pipeline 
         logger = RunLogger(conf=cfg, 
                            pipeline_name=pipeline.pipeline_name,
                             overwrite=True, 
-                            log_items=False,
+                            log_items=True,
                             log_batches=True)
         
         run_eval(
