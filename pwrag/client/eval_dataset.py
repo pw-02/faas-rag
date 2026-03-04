@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 # ---- MUST be first: before importing anything that might touch torch/cuda ----
+#'FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION')
+
 import os
 os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
-os.environ["VLLM_ATTENTION_BACKEND"] = "FLASHINFER"
+os.environ["VLLM_ATTENTION_BACKEND"] = "TRITON_ATTN"
 # os.environ["TOKENIZERS_PARALLELISM"] = "false"  # optional
 from typing import Optional
 
