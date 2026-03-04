@@ -1,4 +1,4 @@
-name: llama_31_8B_instruct
+name: meta_llama_31_8B_instruct
 framework: vllm #hf
 model_name: meta-llama/Meta-Llama-3.1-8B-Instruct #Meta-Llama-3-8B-Instruct
 model_path: meta-llama/Meta-Llama-3.1-8B-Instruct
