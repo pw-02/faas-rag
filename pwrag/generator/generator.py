@@ -408,7 +408,8 @@ class VLLMGenerator(BaseGenerator):
                 tensor_parallel_size = self.tensor_parallel_size,
                 gpu_memory_utilization = self.gpu_memory_utilization,
                 max_logprobs = 32016,
-                max_model_len = self.max_model_len
+                max_model_len = self.max_model_len,
+                enforce_eager = True, # enforce_egar can help with vLLM's sometimes generation cut off issue, but it may cause some performance drop. So we set it to True by default but you can set it to False if you want.
             )
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
         # if "llama" in self.model_path.lower():
