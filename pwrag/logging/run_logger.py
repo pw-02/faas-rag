@@ -68,7 +68,7 @@ class RunLogger:
         )
 
         if overwrite:
-            for p in [self.paths.batches_csv, self.paths.items_jsonl, self.paths.summary_csv, self.paths.config_yaml]:
+            for p in [self.paths.batches_csv, self.paths.items_jsonl, self.paths.config_yaml]:
                 if os.path.exists(p):
                     os.remove(p)
 
