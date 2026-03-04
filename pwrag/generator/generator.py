@@ -411,10 +411,16 @@ class VLLMGenerator(BaseGenerator):
                 max_model_len = self.max_model_len
             )
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
-        if "llama" in self.model_path.lower():
+        # if "llama" in self.model_path.lower():
+        #     self.tokenizer.pad_token = self.tokenizer.eos_token
+        # self.tokenizer.padding_side = "left"
+        # Safe for Llama + many decoder-only models
+
+        if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         self.tokenizer.padding_side = "left"
-    
+        
     def update_additional_setting(self):
         if "gpu_memory_utilization" not in self._config:
             self.gpu_memory_utilization = 0.85
