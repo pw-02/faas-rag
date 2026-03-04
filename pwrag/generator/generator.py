@@ -139,6 +139,7 @@ class HFCausalLMGenerator(BaseGenerator):
         embedding_layer.weight.data = new_embedding_weights
         self.model.eval()
         self.model.cuda()
+    
     def generate(
         self,
         input_list: List[str],
@@ -410,6 +411,10 @@ class VLLMGenerator(BaseGenerator):
                 max_model_len = self.max_model_len
             )
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
+        if "llama" in self.model_path.lower():
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.padding_side = "left"
+    
     def update_additional_setting(self):
         if "gpu_memory_utilization" not in self._config:
             self.gpu_memory_utilization = 0.85
