@@ -32,6 +32,9 @@ class Item:
         if key in ["id", "question", "golden_answers", "output", "choices"]:
             raise AttributeError(f"{key} should not be changed")
         self.output[key] = value
+    
+    def update_metadata(self, key: str, value: Any) -> None:
+        self.metadata[key] = value
 
     def update_perf_metrics(self, key: str, value: Any) -> None:
         if "metric_perf" not in self.output:

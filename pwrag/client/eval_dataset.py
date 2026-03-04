@@ -5,7 +5,7 @@ from __future__ import annotations
 #'FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION')
 
 import os
-os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
+# os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
 # os.environ["VLLM_ATTENTION_BACKEND"] = "FLEX_ATTENTION"
 # os.environ["TOKENIZERS_PARALLELISM"] = "false"  # optional
 # print("backend:", os.environ.get("VLLM_ATTENTION_BACKEND"))
