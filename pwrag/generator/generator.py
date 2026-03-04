@@ -26,7 +26,7 @@ class BaseGenerator:
     """`BaseGenerator` is a base object of Generator model."""
 
     def __init__(self, config: AppConfig):
-        self._config = config
+        self._config: AppConfig = config
         self.update_config()
 
     @property
@@ -412,7 +412,7 @@ class VLLMGenerator(BaseGenerator):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
     def update_additional_setting(self):
         if "gpu_memory_utilization" not in self._config:
-            self.gpu_memory_utilization = 0.85
+            self.gpu_memory_utilization = 0.75
         else:
             self.gpu_memory_utilization = self._config["gpu_memory_utilization"]
         if self.gpu_num != 1 and self.gpu_num % 2 != 0:
@@ -424,7 +424,7 @@ class VLLMGenerator(BaseGenerator):
         self.use_lora = False
         if self.lora_path is not None:
             self.use_lora = True
-        self.max_model_len = self._config['generator_max_input_len']
+        self.max_model_len = self.config.generator.max_input_length
 
     def generate(
         self,
