@@ -1,7 +1,8 @@
 # This file defines the configuration for the synthetic generator
-generator_framework: hf
-generator_model: synthetic
-generator_max_input_length: 4096
-generator_batch_size: 1
-generator_do_sample: false
-generator_max_tokens: 32
+framework: hf
+model_name: synthetic
+model_path: synthetic
+max_input_length: 4096
+batch_size: 1
+do_sample: false
+max_tokens: 32

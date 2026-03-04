@@ -5,8 +5,6 @@ from __future__ import annotations
 import os
 os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
 # os.environ["TOKENIZERS_PARALLELISM"] = "false"  # optional
-
-import multiprocessing as mp
 from typing import Optional
 
 import hydra
@@ -42,6 +40,7 @@ def run_eval(
 
     for bidx, batch in enumerate(dataset.iter_batches(batch_size), start=1):
         batch, batch_perf_metrics = pipeline.run_batch(batch)
+        
         if not isinstance(pipeline, RetrievalOnlyPipeline):
             batch_acc_metrics = evaluator.evaluate(batch)
         else:

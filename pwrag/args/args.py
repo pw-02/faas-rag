@@ -14,10 +14,11 @@ class JudgerConfig:
 @dataclass
 class GeneratorConfig:
     name: str
-    generator_framework: str  # 'hf','vllm','fschat'
-    generator_model: str = "llama3-8B-instruct"
-    generator_max_input_length: int = 2048
-    generator_batch_size: int = 2
+    framework: str  # 'hf','vllm','fschat'
+    model_name: str = "llama3-8B-instruct"
+    model_path: Optional[str] = None
+    max_input_length: int = 2048
+    batch_size: int = 2
     generation_params: Optional[Dict[str, Any]] = None
 
 

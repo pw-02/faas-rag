@@ -19,6 +19,8 @@ class BasicPipeline:
     def run_batch(self, batch:List[Item]):
         """The inference process of a batch of samples."""
         pass
+    
+
 
 class LLMOnlyPipeline(BasicPipeline):
     """The pipeline runs the generation process without retrieval.
@@ -35,23 +37,34 @@ class LLMOnlyPipeline(BasicPipeline):
         else:
             self.generator = generator
     
+    def _build_prompt(self, item: Item) -> str:
+        t0 = time.perf_counter()
+        prompt = self.prompt_template.get_string(question=item.question)
+        item.update_output("format_prompt_time(s)", time.perf_counter() - t0)
+        return prompt
+
     def run_batch(self, batch:List[Item]):
-        perf_metrics: dict[str, float] = {}
-        with timed(perf_metrics, "total_time(s)"):
-            input_prompts = [self.prompt_template.get_string(question=item.question, metrics=perf_metrics) for item in batch]
-            predictions = self.generator.generate(input_prompts, metrics=perf_metrics)
-            for item, pred in zip(batch, predictions):
-                    item.update_output("pred", pred)
-            return batch, perf_metrics
+        
+        input_prompts = [self._build_prompt(item) for item in batch]
 
-
-    def run_item(self, item: Item):
-        perf_metrics: dict[str, float] = {}
-        input_prompts = [self.prompt_template.get_string(question=item.question, metrics=perf_metrics)]
-        predictions = self.generator.generate(input_prompts, metrics=perf_metrics)
-        item.update_metrics("perf_metrics", perf_metrics)
-        return predictions
-   
+        predictions, token_info = self.generator.generate(
+            input_list=input_prompts,
+            return_token_counts=True,)
+        
+        for item, pred, p, c, t in zip(
+            batch,
+            predictions,
+            token_info["prompt_token_counts"],
+            token_info["completion_token_counts"],
+            token_info["total_token_counts"],
+        ):
+            item.update_output("pred", pred)
+            item.update_metrics("prompt_tokens", int(p))
+            item.update_metrics("completion_tokens", int(c))
+            item.update_metrics("total_tokens", int(t))
+        return batch
+    
+    
 
 class RetrievalOnlyPipeline(BasicPipeline):
     """The pipeline runs the retrieval process without generation.

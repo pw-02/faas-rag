@@ -118,68 +118,70 @@ class PromptTemplate:
                         self._get_tokenizer().decode(tokenized_prompt[-half:], skip_special_tokens=True)
             return prompt
 
-    def get_string(self, question=None, retrieval_result=None, formatted_reference=None, previous_gen=None, messages=None,metrics=None, **params):
+    def get_string(self, 
+                   question=None,
+                   retrieval_result=None, 
+                   formatted_reference=None, 
+                   previous_gen=None, 
+                   messages=None,
+                   **params):
         
-        if metrics is None:
-            metrics = {}
-          
-        with timed(metrics, "format_prompt(s)"):
-            if messages is not None:
-                if isinstance(messages, str):
+        if messages is not None:
+            if isinstance(messages, str):
+                return self.truncate_prompt(messages)
+            if self.is_chat and self.enable_chat:
+                if self.is_openai:
                     return self.truncate_prompt(messages)
-                if self.is_chat and self.enable_chat:
-                    if self.is_openai:
-                        return self.truncate_prompt(messages)
-                    else:
-                        prompt = self._get_tokenizer().apply_chat_template(
-                            messages, tokenize=False, add_generation_prompt=True
-                        )
-                        return self.truncate_prompt(prompt)
                 else:
-                    prompt = "\n\n".join(
-                        [message['content'] for message in messages if message['content']]
+                    prompt = self._get_tokenizer().apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True
                     )
                     return self.truncate_prompt(prompt)
-
-            if formatted_reference is None:
-                if retrieval_result is not None:
-                    formatted_reference = self.format_reference(retrieval_result)
-                else:
-                    formatted_reference = ""
-
-            input_params = {"question": question, "reference": formatted_reference}
-            input_params.update(**params)
-
-            system_prompt = self.system_prompt.format(**input_params)
-            user_prompt = self.user_prompt.format(**input_params)
-
-            if self.is_chat and self.enable_chat:
-                input = []
-                if system_prompt != "":
-                    input.append({"role": "system", "content": system_prompt})
-                if user_prompt != "":
-                    input.append({"role": "user", "content": user_prompt})
-                if not self.is_openai:
-                    try:
-                        input = self._get_tokenizer().apply_chat_template(input, tokenize=False, add_generation_prompt=True)
-                    except:
-                        print("Warning: the generator tokenizer not support `apply_chat_template`")
-                        input = system_prompt + '\n\n' + user_prompt
             else:
-                input = "\n\n".join([prompt for prompt in [system_prompt, user_prompt] if prompt != ""])
+                prompt = "\n\n".join(
+                    [message['content'] for message in messages if message['content']]
+                )
+                return self.truncate_prompt(prompt)
 
-            if previous_gen is not None and previous_gen not in ["", " "]:
-                if self.is_openai:
-                    if self.enable_chat:
-                        input.append({"role": 'assistant', 'content': previous_gen})
-                    else:    
-                        input += f'<|endoftext|>{previous_gen}'
-                    
-                else:
-                    input += previous_gen
-        
-            return self.truncate_prompt(input)
-        
+        if formatted_reference is None:
+            if retrieval_result is not None:
+                formatted_reference = self.format_reference(retrieval_result)
+            else:
+                formatted_reference = ""
+
+        input_params = {"question": question, "reference": formatted_reference}
+        input_params.update(**params)
+
+        system_prompt = self.system_prompt.format(**input_params)
+        user_prompt = self.user_prompt.format(**input_params)
+
+        if self.is_chat and self.enable_chat:
+            input = []
+            if system_prompt != "":
+                input.append({"role": "system", "content": system_prompt})
+            if user_prompt != "":
+                input.append({"role": "user", "content": user_prompt})
+            if not self.is_openai:
+                try:
+                    input = self._get_tokenizer().apply_chat_template(input, tokenize=False, add_generation_prompt=True)
+                except:
+                    print("Warning: the generator tokenizer not support `apply_chat_template`")
+                    input = system_prompt + '\n\n' + user_prompt
+        else:
+            input = "\n\n".join([prompt for prompt in [system_prompt, user_prompt] if prompt != ""])
+
+        if previous_gen is not None and previous_gen not in ["", " "]:
+            if self.is_openai:
+                if self.enable_chat:
+                    input.append({"role": 'assistant', 'content': previous_gen})
+                else:    
+                    input += f'<|endoftext|>{previous_gen}'
+                
+            else:
+                input += previous_gen
+    
+        return self.truncate_prompt(input)
+    
 
 
     def get_string_with_varying_examplars(
