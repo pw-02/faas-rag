@@ -1,5 +1,5 @@
 name: meta_llama_3_8B_Instruct
-framework: vllm #hf
+framework: hf #hf
 model_name: meta-llama/Meta-Llama-3-8B-Instruct #Meta-Llama-3-8B-Instruct
 model_path: meta-llama/Meta-Llama-3-8B-Instruct
 max_input_length: 512
