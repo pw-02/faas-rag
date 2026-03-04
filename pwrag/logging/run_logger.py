@@ -174,6 +174,7 @@ class RunLogger:
             "index_name": self.index_name,
             "pipeline": self.pipeline_name,
             "num_items": int(self.num_items),
+            "generator": self.cfg.generator.model_name,
             "num_batches": int(self.num_batches),
             "batch_size": int(self.cfg.batch_size),
             "retrieval_topk": int(self.cfg.retrieval_topk),
