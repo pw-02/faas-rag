@@ -412,7 +412,7 @@ class VLLMGenerator(BaseGenerator):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
     def update_additional_setting(self):
         if "gpu_memory_utilization" not in self._config:
-            self.gpu_memory_utilization = 0.75
+            self.gpu_memory_utilization = 0.85
         else:
             self.gpu_memory_utilization = self._config["gpu_memory_utilization"]
         if self.gpu_num != 1 and self.gpu_num % 2 != 0:
