@@ -22,7 +22,6 @@ class Item:
         self.choices: List[str] = item_dict.get("choices", [])
         self.metadata: Dict[str, Any] = item_dict.get("metadata", {})
         self.output: Dict[str, Any] = item_dict.get("output", {})
-        self.metrics: Dict[str, Any] = item_dict.get("metrics", {})
         self.data: Dict[str, Any] = item_dict
 
     # ✅ allow item["question"] style access used elsewhere in your code
@@ -34,14 +33,10 @@ class Item:
             raise AttributeError(f"{key} should not be changed")
         self.output[key] = value
 
-    def update_metrics(self, key: str, value: Any) -> None:
-        if key in self.metrics and isinstance(value, (int, float)):
-            self.metrics[key] += value  # accumulate if already exists and is numeric
-        else:
-            self.metrics[key] = value
-
-
-
+    def update_perf_metrics(self, key: str, value: Any) -> None:
+        if "metric_perf" not in self.output:
+            self.output["metric_perf"] = {}
+        self.output["metric_perf"][key] = value
 
     def update_evaluation_score(self, metric_name: str, metric_score: float) -> None:
         if "metric_score" not in self.output:
@@ -49,7 +44,7 @@ class Item:
         self.output["metric_score"][metric_name] = metric_score
 
     def __getattr__(self, attr_name: str) -> Any:
-        predefined_attrs = ["id", "question", "golden_answers", "metadata", "output", "choices", "metrics", "data"]
+        predefined_attrs = ["id", "question", "golden_answers", "metadata", "output", "choices", "data"]
         if attr_name in predefined_attrs:
             return super().__getattribute__(attr_name)
 
@@ -62,12 +57,9 @@ class Item:
         raise AttributeError(f"Attribute `{attr_name}` not found")
 
     def __setattr__(self, attr_name: str, value: Any) -> None:
-        predefined_attrs = ["id", "question", "golden_answers", "metadata", "output", "choices", "metrics", "data"]
+        predefined_attrs = ["id", "question", "golden_answers", "metadata", "output", "choices", "data"]
         if attr_name in predefined_attrs:
             super().__setattr__(attr_name, value)
-        else:
-            # keep your behavior: unknown attrs go to metrics
-            self.update_metrics(attr_name, value)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -76,8 +68,7 @@ class Item:
             "golden_answers": self.golden_answers,
             "choices": self.choices,
             "metadata": self.metadata,
-            "output": self.output,
-            "metrics": self.metrics,
+            "output": self.output
         }
 
     def __str__(self) -> str:

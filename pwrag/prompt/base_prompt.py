@@ -27,10 +27,10 @@ class PromptTemplate:
     def __init__(self, config: AppConfig, system_prompt="", user_prompt="", reference_template=None, enable_chat=True):
 
         self.config = config
-        self.is_openai = config.generator.generator_framework == "openai"
-        self.max_input_len = config.generator.generator_max_input_length
+        self.is_openai = config.generator.framework == "openai"
+        self.max_input_len = config.generator.max_input_length
         if not self.is_openai:
-            self.generator_path = config.generator.generator_model
+            self.generator_path = config.generator.model_path if config.generator.model_path is not None else config.generator.model_name
             model_config = AutoConfig.from_pretrained(self.generator_path, trust_remote_code=True)
             model_name = model_config._name_or_path.lower()
             self.is_chat = False
@@ -54,7 +54,7 @@ class PromptTemplate:
         if self.tokenizer is None:
             if self.is_openai:
                 try:
-                    self.tokenizer = tiktoken.encoding_for_model(self.config.generator.generator_model)
+                    self.tokenizer = tiktoken.encoding_for_model(self.config.generator.model_name)
                 except Exception as e:
                     print("Error: ", e)
                     warnings.warn("This model is not supported by tiktoken. Use gpt-3.5-turbo instead.")

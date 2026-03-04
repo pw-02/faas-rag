@@ -2,7 +2,7 @@ import os
 import json
 import csv
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 
 from omegaconf import OmegaConf
@@ -18,9 +18,9 @@ def _now_iso() -> str:
 @dataclass
 class LogPaths:
     save_dir: str
-    batches_jsonl: str
+    batches_csv: str
+    items_jsonl: str
     summary_csv: str
-    summary_csv_simplified: str
     config_yaml: str
 
 
@@ -28,13 +28,11 @@ class RunLogger:
     """
     Batch logger + dataset summary.
 
-    Logs:
-      - batch JSONL: one record per batch (with optional embedded items)
-      - dataset CSV: includes BOTH per-item and per-batch averages
-
-    Definitions:
-      - avg_item.* : item-weighted average (each item counts equally)
-      - avg_batch.*: batch average (each batch counts equally)
+    Writes:
+      - items.jsonl (optional): one JSON record per item
+      - batches.csv (optional): one row per batch
+      - summary.csv: one row per run
+      - config.yaml: resolved config dump
     """
 
     def __init__(
@@ -42,78 +40,53 @@ class RunLogger:
         conf: AppConfig,
         pipeline_name: str = "",
         overwrite: bool = True,
+        log_items: bool = False,
         log_batches: bool = True,
-        store_item_details_in_batch: bool = False,
-        flush_every: int = 10,
-        fsync: bool = False,
-        report_every_items: int = 10,
-        report_perf_keys: Optional[List[str]] = None,
-        # If your batch metrics are per-item averages (typical), keep this True.
-        # It affects ONLY avg_item.* meters.
-        weight_batch_metrics_by_size: bool = True,
+        # Optional: stable schema for batch CSV. If None, infer from first batch and freeze.
+        batch_fieldnames: Optional[List[str]] = None,
     ) -> None:
         self.cfg = conf
         self.pipeline_name = pipeline_name
         self.dataset_name = self.cfg.dataset.dataset_name
-        self.dataset_path = self.cfg.dataset.dataset_path
-        self.index_path = self.cfg.retriever.index.index_path
         self.index_name = self.cfg.retriever.index.name
 
-        self.flush_every = int(flush_every)
-        self.fsync = bool(fsync)
-        self.save_dir = self.cfg.save_dir
+        self.log_items = bool(log_items)
         self.log_batches = bool(log_batches)
-        self.store_item_details_in_batch = bool(store_item_details_in_batch)
-        self.report_every_items = int(report_every_items)
 
-        if report_perf_keys is not None:
-            self.report_perf_keys = report_perf_keys
-        else:
-            self.report_perf_keys = [
-                "index_search(s)",
-                "load_docs(s)",
-                "generation(s)",
-            ]
+        self.num_batches = 0
+        self.num_items = 0
 
-        self.weight_batch_metrics_by_size = bool(weight_batch_metrics_by_size)
-        start = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.save_dir = self.cfg.save_dir
         os.makedirs(self.save_dir, exist_ok=True)
 
         self.paths = LogPaths(
             save_dir=self.save_dir,
-            batches_jsonl=os.path.join(self.save_dir, f"{self.dataset_name}_{self.index_name}.jsonl"),
-            # summary_csv=os.path.join(save_dir, f"{self.dataset_name}_{self.index_name}_summary.csv"),
-            summary_csv=os.path.join(self.save_dir, f"summary.csv"),
-            summary_csv_simplified=os.path.join(self.save_dir, f"summary_friendly.csv"),
+            items_jsonl=os.path.join(self.save_dir, f"{self.dataset_name}_{self.index_name}_items.jsonl"),
+            batches_csv=os.path.join(self.save_dir, f"{self.dataset_name}_{self.index_name}_batches.csv"),
+            summary_csv=os.path.join(self.save_dir, f"{self.dataset_name}_{self.index_name}_summary.csv"),
             config_yaml=os.path.join(self.save_dir, f"{self.dataset_name}_{self.index_name}_config.yaml"),
         )
 
         if overwrite:
-            for p in [self.paths.batches_jsonl, self.paths.config_yaml]: 
+            for p in [self.paths.batches_csv, self.paths.items_jsonl, self.paths.summary_csv, self.paths.config_yaml]:
                 if os.path.exists(p):
                     os.remove(p)
 
-        # ---- meters ----
-        # item-weighted (avg over items in dataset)
-        self.acc_item: Dict[str, AverageMeter] = {}
-        self.perf_item: Dict[str, AverageMeter] = {}
+        # meters across whole run
+        self.metric_perf: Dict[str, AverageMeter] = {}
+        self.metric_score: Dict[str, AverageMeter] = {}
 
-        # batch-weighted (avg over batches)
-        self.acc_batch: Dict[str, AverageMeter] = {}
-        self.perf_batch: Dict[str, AverageMeter] = {}
-
-        self.num_items = 0
-        self.num_batches = 0
-
-        self._fh_batches = open(self.paths.batches_jsonl, "a", encoding="utf-8") if self.log_batches else None
-        self._since_flush = 0
+        # batch CSV schema handling
+        self._batch_fieldnames = batch_fieldnames
+        self._batch_header_written = False
 
     # -------- context manager --------
     def __enter__(self) -> "RunLogger":
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        self.close()
+        # no persistent handles; nothing special to close
+        return None
 
     # -------- internals --------
     def _get_meter(self, pool: Dict[str, AverageMeter], key: str) -> AverageMeter:
@@ -121,191 +94,118 @@ class RunLogger:
             pool[key] = AverageMeter(key)
         return pool[key]
 
-    def _write_jsonl(self, fh, obj: Dict[str, Any]) -> None:
-        if fh is None:
-            return
-        fh.write(json.dumps(obj, ensure_ascii=False) + "\n")
-        self._since_flush += 1
-        if self.flush_every > 0 and self._since_flush >= self.flush_every:
-            self.flush()
-
-    # -------- filesystem --------
-    def save_config(self, cfg) -> str:
-        OmegaConf.save(config=cfg, f=self.paths.config_yaml, resolve=True)
+    def save_config(self, conf: AppConfig) -> str:
+        OmegaConf.save(config=conf, f=self.paths.config_yaml, resolve=True)
         return self.paths.config_yaml
 
-    def flush(self) -> None:
-        if self._fh_batches is None:
-            return
-        self._fh_batches.flush()
-        if self.fsync:
-            os.fsync(self._fh_batches.fileno())
-        self._since_flush = 0
-
-    def close(self) -> None:
-        try:
-            self.flush()
-        finally:
-            if self._fh_batches is not None:
-                self._fh_batches.close()
-                self._fh_batches = None
-    
     def conf_to_dict(self) -> Dict[str, Any]:
-        # Convert OmegaConf to a regular dict for easier logging
         return OmegaConf.to_container(self.cfg, resolve=True)
 
-    
+    def _append_jsonl(self, path: str, obj: Dict[str, Any]) -> None:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+
+    def _append_csv_row(self, path: str, row: Dict[str, Any], fieldnames: List[str]) -> None:
+        file_exists = os.path.exists(path) and os.path.getsize(path) > 0
+        with open(path, "a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(row)
+
     # -------- logging --------
-    def log_batch(
-        self,
-        batch_id: int,
-        items: List[Item],
-        batch_perf_metrics: Optional[Dict[str, Any]] = None,
-        batch_acc_metrics: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        batch_perf_metrics = batch_perf_metrics or {}
-        batch_acc_metrics = batch_acc_metrics or {}
-        bs = len(items)
+    def log_batch(self, batch_id: int, batch: List[Item]) -> None:
+        if not batch:
+            return
 
-        # ----- update batch-average meters (each batch counts once) -----
-        # for k, v in batch_acc_metrics.items():
-        #     self._get_meter(self.acc_batch, k).update(v, n=1)
-        
-        for k, v in batch_perf_metrics.items():
-            self._get_meter(self.perf_batch, k).update(v, n=1)
-
-        # ----- update item-average meters (each item counts once) -----
-         # Accuracy: your batch acc metrics are averages over items -> weight by batch size
-        for k, v in batch_acc_metrics.items():
-            self._get_meter(self.acc_item, k).update(v, n=bs)
-        
-        # Perf:for timings (totals per batch)
-        for k, v in batch_perf_metrics.items():
-            # store per-item derived metric too
-            per_item_key = f"{k}_per_item"
-            try:
-                per_item_val = float(v) / max(1, bs)
-                self._get_meter(self.perf_item, per_item_key).update(per_item_val, n=bs)
-            except Exception:
-                pass
-        
-        self.num_items += bs
         self.num_batches += 1
 
-        if self.log_batches:
-            # ----- write batch record -----
-            record: Dict[str, Any] = {
-                "timestamp": _now_iso(),
-                "dataset_name": self.dataset_name,
-                "pipeline_name": self.pipeline_name,
-                "batch_id": int(batch_id),
-                "batch_size": bs,
-                "metrics": {
-                    "perf_metrics": batch_perf_metrics,
-                    "acc_metrics": batch_acc_metrics,
-                },
-            }
+        batch_metric_perf: Dict[str, AverageMeter] = {}
+        batch_metric_score: Dict[str, AverageMeter] = {}
 
-            if self.store_item_details_in_batch:
-                record["items"] = [it.to_dict() for it in items]
+        for item in batch:
+            self.num_items += 1
+            metric_perf = item.output.get("metric_perf", {}) or {}
+            metric_score = item.output.get("metric_score", {}) or {}
 
-            self._write_jsonl(self._fh_batches, record)
+            for k, v in metric_score.items():
+                self._get_meter(self.metric_score, k).update(v)
+                self._get_meter(batch_metric_score, k).update(v)
 
+            for k, v in metric_perf.items():
+                self._get_meter(self.metric_perf, k).update(v)
+                self._get_meter(batch_metric_perf, k).update(v)
 
-    # -------- progress reporting --------
-    def maybe_report(self, pbar=None) -> None:
-        if pbar is None:
-            return
-        if self.num_items == 0 or self.report_every_items <= 0:
-            return
-        if (self.num_items % self.report_every_items) != 0:
+            if self.log_items:
+                self._append_jsonl(self.paths.items_jsonl, item.to_dict())
+
+        if not self.log_batches:
             return
 
-        postfix: Dict[str, Any] = {"items": self.num_items, "batches": self.num_batches}
-
-        # show item-avg acc metrics by default (usually what you care about)
-        if "f1" in self.acc_item:
-            postfix["f1"] = f"{self.acc_item['f1'].avg:.3f}"
-        if "em" in self.acc_item:
-            postfix["em"] = f"{self.acc_item['em'].avg:.3f}"
-
-        key_mapping = {
-            "index_search(s)": "search(s)",
-            "load_docs(s)": "encode_q(s)",
-            "generation(s)": "gen(s)",
-        }
-
-        for key in self.report_perf_keys:
-            if key in self.perf_batch:
-                label = key_mapping.get(key, key)
-                postfix[label] = f"{self.perf_batch[key].avg:.2f}"
-
-        pbar.set_postfix(postfix)
-
-    # -------- finalize --------
-    def finalize(self) -> Dict[str, Any]:
-        self.close()
-
-        summary: Dict[str, Any] = {
+        # batch record
+        record: Dict[str, Any] = {
             "timestamp": _now_iso(),
-            "dataset": self.dataset_path,
             "dataset_name": self.dataset_name,
             "index_name": self.index_name,
-            "index_path": self.index_path,
-            "batches_jsonl": self.paths.batches_jsonl if self.log_batches else "",
+            "pipeline_name": self.pipeline_name,
+            "batch_id": int(batch_id),
+            "batch_size": int(len(batch)),
+        }
+
+        # scores: average across items in batch
+        for k, m in batch_metric_score.items():
+            record[f"score.{k}"] = m.avg
+
+        # perf: log both avg and sum so you can interpret easily
+        for k, m in batch_metric_perf.items():
+            # record[f"perf.{k}_avg"] = m.avg
+            record[f"perf.{k}_sum"] = m.sum
+
+        # freeze schema on first batch if not provided
+        if self._batch_fieldnames is None:
+            self._batch_fieldnames = list(record.keys())
+
+        self._append_csv_row(self.paths.batches_csv, record, self._batch_fieldnames)
+
+    def finalize(self) -> Dict[str, Any]:
+        summary: Dict[str, Any] = {
+            "timestamp": _now_iso(),
+            "dataset_name": self.dataset_name,
+            "index_name": self.index_name,
             "pipeline": self.pipeline_name,
-            "num_items": self.num_items,
-            "num_batches": self.num_batches,
-            "batch_size": self.cfg.batch_size,
-            "retrieval_topk": self.cfg.retrieval_topk,
-            "batches_jsonl": self.paths.batches_jsonl if self.log_batches else "",
+            "num_items": int(self.num_items),
+            "num_batches": int(self.num_batches),
+            "batch_size": int(self.cfg.batch_size),
+            "retrieval_topk": int(self.cfg.retrieval_topk),
         }
 
-        simplifed_summary = {
-            "encode(s)": self.perf_batch["encode(s)"].sum if "encode(s)" in self.perf_batch else "",
-            "index_search(s)": self.perf_batch["index_search(s)"].sum if "index_search(s)" in self.perf_batch else "",
-            "format_prompt(s)": self.perf_batch["format_prompt(s)"].sum if "format_prompt(s)" in self.perf_batch else "",
-            "load_docs(s)": self.perf_batch["load_docs(s)"].sum if "load_docs(s)" in self.perf_batch else "",
-            "generate(s)": self.perf_batch["generate(s)"].sum if "generate(s)" in self.perf_batch else "",
-            "total_time(s)": self.perf_batch["total_time(s)"].sum if "total_time(s)" in self.perf_batch else "",
-            "prompt_tokens": self.perf_batch["prompt_tokens"].sum if "prompt_tokens" in self.perf_batch else "",
-            "completion_tokens": self.perf_batch["completion_tokens"].sum if "completion_tokens" in self.perf_batch else "",
-            "total_tokens": self.perf_batch["total_tokens"].sum if "total_tokens" in self.perf_batch else "",
-        }
+        for k, m in self.metric_score.items():
+            summary[f"score.{k}"] = m.avg
 
-        #merge summary and simplified_summary, with simplified keys taking precedence
-        bsummary = summary.copy()
-        bsummary.update(simplifed_summary)
+        for k, m in self.metric_perf.items():
+            # summary[f"perf.{k}_avg"] = m.avg
+            summary[f"perf.{k}_sum"] = m.sum
 
-        file_exists = os.path.exists(self.paths.summary_csv_simplified) and os.path.getsize(self.paths.summary_csv_simplified) > 0
-        with open(self.paths.summary_csv_simplified, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=list(bsummary.keys()))
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(bsummary)
-        
+        # keep config out of CSV unless you really want giant rows
+        # Instead: store it in config_yaml, and optionally add a pointer.
+        summary["config_path"] = self.paths.config_yaml
 
-        # item-weighted outputs
-        for k, m in self.acc_item.items():
-            summary[f"avg_item.acc.{k}"] = m.avg
-        for k, m in self.perf_item.items():
-            summary[f"avg_item.perf.{k}"] = m.avg
-            summary[f"sum_item.perf.{k}"] = m.sum
-
-        # batch-weighted outputs
-        for k, m in self.acc_batch.items():
-            summary[f"avg_batch.acc.{k}"] = m.avg
-        for k, m in self.perf_batch.items():
-            summary[f"avg_batch.perf.{k}"] = m.avg
-            summary[f"sum_batch.perf.{k}"] = m.sum
-
-        summary["config"] = self.conf_to_dict()
-
-        file_exists = os.path.exists(self.paths.summary_csv) and os.path.getsize(self.paths.summary_csv) > 0
-        with open(self.paths.summary_csv, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=list(summary.keys()))
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(summary)
+        # write summary.csv
+        fieldnames = list(summary.keys())
+        self._append_csv_row(self.paths.summary_csv, summary, fieldnames)
 
         return summary
+    
+    def get_live_metrics(self) -> Dict[str, float]:
+        metrics = {}
+
+        if "generation_time(s)" in self.metric_perf:
+            metrics["gen_s"] = round(self.metric_perf["generation_time(s)"].avg, 3)
+
+        # if "prompt_tokens" in self.metric_perf:
+        #     metrics["prompt_tok"] = round(self.metric_perf["prompt_tokens"].avg, 1)
+
+        # if "completion_tokens" in self.metric_perf:
+        #     metrics["comp_tok"] = round(self.metric_perf["completion_tokens"].avg, 1)
+
+        return metrics

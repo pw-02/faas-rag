@@ -13,6 +13,18 @@ def timed(store: dict, key: str):
     else:
         store[key] += time.perf_counter() - t0
 
+
+
+
+
+
+
+
+
+
+
+
+
 class AverageMeter:
     """Computes and stores the average and current value"""
     def __init__(self, name: str, fmt: str = ":.4f"):
@@ -43,20 +55,20 @@ class AverageMeter:
 
 def get_generator(config: AppConfig):
     """Automatically select generator class based on config."""
-    if config.generator.generator_framework == 'openai':
+    if config.generator.framework == 'openai':
         raise NotImplementedError("OpenAI API is not supported yet.")
-    if config.generator.generator_framework == "vllm":
+    if config.generator.framework == "vllm":
         from pwrag.generator.generator import VLLMGenerator
         return VLLMGenerator(config)
-    elif config.generator.generator_framework == "fschat":
+    elif config.generator.framework == "fschat":
         raise NotImplementedError("FastChat is not supported yet.")
-    elif config.generator.generator_framework == "hf":
+    elif config.generator.framework == "hf":
         from pwrag.generator.generator import HFCausalLMGenerator
-        if "t5" in config.generator.generator_model.lower() or "bart" in config.generator.generator_model.lower():
+        if "t5" in config.generator.model_name.lower() or "bart" in config.generator.model_name.lower():
             raise NotImplementedError("EncoderDecoderGenerator is not supported yet.")
         return HFCausalLMGenerator(config)
     else:
-        raise NotImplementedError("Unsupported generator framework: {}".format(config.generator.generator_framework))
+        raise NotImplementedError("Unsupported generator framework: {}".format(config.generator.framework))
 
 def get_retriever(config: AppConfig):
 

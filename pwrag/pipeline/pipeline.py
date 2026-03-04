@@ -40,16 +40,19 @@ class LLMOnlyPipeline(BasicPipeline):
     def _build_prompt(self, item: Item) -> str:
         t0 = time.perf_counter()
         prompt = self.prompt_template.get_string(question=item.question)
-        item.update_output("format_prompt_time(s)", time.perf_counter() - t0)
+        item.update_perf_metrics("format_prompt_time(s)", time.perf_counter() - t0)
         return prompt
 
     def run_batch(self, batch:List[Item]):
         
         input_prompts = [self._build_prompt(item) for item in batch]
 
+        t0 = time.perf_counter()
         predictions, token_info = self.generator.generate(
             input_list=input_prompts,
             return_token_counts=True,)
+        #set the generation for item using average time per item in the batch
+        item_generation_time = (time.perf_counter() - t0) / len(batch)
         
         for item, pred, p, c, t in zip(
             batch,
@@ -59,12 +62,12 @@ class LLMOnlyPipeline(BasicPipeline):
             token_info["total_token_counts"],
         ):
             item.update_output("pred", pred)
-            item.update_metrics("prompt_tokens", int(p))
-            item.update_metrics("completion_tokens", int(c))
-            item.update_metrics("total_tokens", int(t))
+            item.update_perf_metrics("generation_time(s)", item_generation_time)
+            item.update_perf_metrics("prompt_tokens", int(p))
+            item.update_perf_metrics("completion_tokens", int(c))
+            item.update_perf_metrics("total_tokens", int(t))
         return batch
-    
-    
+
 
 class RetrievalOnlyPipeline(BasicPipeline):
     """The pipeline runs the retrieval process without generation.
