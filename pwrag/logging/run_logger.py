@@ -189,8 +189,7 @@ class RunLogger:
 
         # keep config out of CSV unless you really want giant rows
         # Instead: store it in config_yaml, and optionally add a pointer.
-        summary["config_path"] = self.paths.config_yaml
-
+        summary["config"] = self.conf_to_dict()  # Optional: include full config dict in summary for easy reference
         # write summary.csv
         fieldnames = list(summary.keys())
         self._append_csv_row(self.paths.summary_csv, summary, fieldnames)

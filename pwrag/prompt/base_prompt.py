@@ -239,7 +239,7 @@ class PromptTemplate:
             retrieval_result = [retrieval_result]
         format_reference = ""
         for idx, doc_item in enumerate(retrieval_result):
-            if "faiss_id" in retrieval_result[0].keys():
+            if "title" in retrieval_result[0].keys():
                 # content = doc_item["contents"]
                 title = doc_item['title']
                 text = doc_item['contents']

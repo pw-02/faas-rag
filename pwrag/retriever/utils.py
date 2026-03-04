@@ -168,7 +168,7 @@ def load_corpus(corpus_path: str):
         raise NotImplementedError("Corpus format not supported!")
     if "contents" not in corpus.features:
         if "text" in corpus.features:
-            print("Renaming `text` -> `contents`")
+            # print("Renaming `text` -> `contents`")
             corpus = corpus.rename_column("text", "contents")
         else:
             warnings.warn("No `contents` or `text` field found in corpus.")
