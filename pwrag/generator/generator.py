@@ -492,7 +492,7 @@ class VLLMGenerator(BaseGenerator):
                 lora_request=LoRARequest("lora_module", 1, self.lora_path),
             )
         else:
-            outputs = self.model.generate(input_list, sampling_params)
+            outputs = self.model.generate(input_list, sampling_params, use_tqdm=False)
 
         # ---- completion token counting ----
         if return_token_counts:
