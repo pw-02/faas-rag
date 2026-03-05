@@ -1,5 +1,5 @@
 name: qwen2_0_5b_instruct
-framework: hf #vllm, hf
+framework: vllm #vllm, hf
 model_name: Qwen/Qwen2-0.5B-Instruct
 model_path: Qwen/Qwen2-0.5B-Instruct
 max_input_length: 32768
