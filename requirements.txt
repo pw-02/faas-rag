@@ -22,3 +22,5 @@ bm25s
 PyStemmer
 # seismic
 langid
+pdfplumber
+nltk

@@ -1,0 +1,2 @@
+dataset_name: "2wiki"
+dataset_path: "data/datasets/multi_hop/2wiki/2wiki_dev.jsonl"

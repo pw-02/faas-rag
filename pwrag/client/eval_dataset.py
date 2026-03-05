@@ -21,6 +21,7 @@ from pwrag.pipeline.pipeline import (
     LLMOnlyPipeline, RetrievalOnlyPipeline, SequentialRAGPipeline
 )
 from pwrag.pipeline.active_pipeline import FLAREPipeline, RQRAGPipeline
+from pwrag.pipeline.search_o1 import SearchO1Pipeline
 from pwrag.logging.run_logger import RunLogger
 
 
@@ -73,7 +74,9 @@ def main(cfg: AppConfig) -> None:
         print("Running evaluation with FLAREPipeline...")
     elif cfg.retriever.pipeline.name == "rqrag":
         print("Running evaluation with RQRAGPipeline...")
-        pipelines = [RQRAGPipeline(cfg)]
+    elif cfg.retriever.pipeline.name == "search_o1":
+        print("Running evaluation with SearchO1Pipeline...")
+        pipelines = [SearchO1Pipeline(cfg)]
     elif cfg.retriever.pipeline.name == "all":
         print("Running evaluation with all pipelines...")
         pipelines = [LLMOnlyPipeline(cfg), RetrievalOnlyPipeline(cfg), SequentialRAGPipeline(cfg), FLAREPipeline(cfg)]

@@ -14,6 +14,18 @@ def timed(store: dict, key: str):
         store[key] += time.perf_counter() - t0
 
 
+@contextmanager
+def perf_timer():
+    start = time.perf_counter()
+    yield lambda: time.perf_counter() - start
+
+
+def per_item(elapsed: float, n: int) -> float:
+    return elapsed / n if n else 0.0
+
+
+def default(value, factory):
+    return value if value is not None else factory()
 
 
 

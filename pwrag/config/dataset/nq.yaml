@@ -1,3 +1,3 @@
-dataset_name: "natural_questions"
+dataset_name: "nq"
 dataset_path: "data/datasets/qa/nq/nq_test.jsonl"
 # split: "validation"

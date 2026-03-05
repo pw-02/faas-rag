@@ -54,20 +54,33 @@ class StopWordCriteria(StoppingCriteria):
         # Skip check if no stop words are defined or it is not yet time to check
         if (len(self.stop_words) == 0) or (seq_len % self.check_every != 0):
             return False
-
         for i in range(batch_size):
-            # Calculate starting index for new tokens
             prompt_size = self.input_sizes[i]
             max_new_tokens = (2 * self.max_stop_word_size) + self.check_every
             latest_tokens = input_ids[i, prompt_size:][-max_new_tokens:]
 
-            # Check for stop words in the decoded text
-            if not any(
-                word in self.tokenizer.decode(latest_tokens, skip_special_tokens=True) for word in self.stop_words
-            ):
-                return False  # Continue generation if any batch item lacks stop words
+            decoded = self.tokenizer.decode(latest_tokens, skip_special_tokens=False) #possible set skip_special_tokens=False if stop words might include special tokens
 
-        return True  # Stop generation if all conditions are met
+            for word in self.stop_words:
+                if word in decoded:
+                    print(f"Stopping generation at sequence length {seq_len} due to stop word: {word}")
+                    return True
+
+        return False # Stop generation if all conditions are met
+
+        # for i in range(batch_size):
+        #     # Calculate starting index for new tokens
+        #     prompt_size = self.input_sizes[i]
+        #     max_new_tokens = (2 * self.max_stop_word_size) + self.check_every
+        #     latest_tokens = input_ids[i, prompt_size:][-max_new_tokens:]
+
+        #     # Check for stop words in the decoded text
+        #     if not any(
+        #         word in self.tokenizer.decode(latest_tokens, skip_special_tokens=True) for word in self.stop_words
+        #     ):
+        #         return False  # Continue generation if any batch item lacks stop words
+
+        # return True  # Stop generation if all conditions are met
 
     def extract_answers(self, input_ids: torch.LongTensor, strip_stopword: bool = True) -> List[str]:
         """

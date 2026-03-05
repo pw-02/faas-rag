@@ -225,6 +225,8 @@ class HFCausalLMGenerator(BaseGenerator):
 
                 full_sequences = outputs.sequences  # [B, prompt(padded)+new]
 
+                # extracted_text = st
+
                 # scores (only if you want them; if you want minimal changes, keep as-is)
                 logits = torch.stack(outputs.scores, dim=1).softmax(-1)  # [B, steps, vocab]
                 # For scoring we need per-example generated ids aligned with steps; we can still use padded prompt len

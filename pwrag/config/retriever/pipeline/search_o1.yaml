@@ -1,0 +1,3 @@
+name: search_o1
+use_cache: false
+use_reranker: false

@@ -490,678 +490,52 @@ class DenseRetriever(BaseTextRetriever):
         else:
             return results
 
-
-# class MultiModalRetriever(BaseRetriever):
-#     r"""Multi-modal retriever based on pre-built faiss index."""
-
-#     def __init__(self, config: dict, corpus=None):
-#         super().__init__(config)
-#         self.mm_index_dict = config[
-#             "multimodal_index_path_dict"
-#         ]  # {"text": "path/to/text_index", "image": "path/to/image_index"}
-#         self.index_dict = {"text": None, "image": None}
-#         for modal in ["text", "image"]:
-#             idx_path = self.mm_index_dict[modal]
-#             if idx_path is not None:
-#                 self.index_dict[modal] = faiss.read_index(idx_path)
-#             if config["faiss_gpu"]:
-#                 co = faiss.GpuMultipleClonerOptions()
-#                 co.useFloat16 = True
-#                 co.shard = True
-#                 self.index_dict[modal] = faiss.index_cpu_to_all_gpus(self.index_dict[modal], co=co)
-#         if corpus is None:
-#             self.corpus = load_corpus(self.corpus_path)
-#         else:
-#             self.corpus = corpus
-#         self.topk = config["retrieval_topk"]
-#         self.batch_size = config["retrieval_batch_size"]
-
-#         self.encoder = ClipEncoder(
-#             model_name=self.retrieval_method, model_path=config["retrieval_model_path"], silent=self.silent
-#         )
-
-#     def _judge_input_modal(self, query):
-#         if not isinstance(query, str):
-#             return "image"
-#         else:
-#             if query.startswith("http") or query.endswith(".jpg") or query.endswith(".png"):
-#                 return "image"
-#             else:
-#                 return "text"
-
-#     def _search(self, query, target_modal: str = "text", num: int = None, return_score=True):
-#         if num is None:
-#             num = self.topk
-#         assert target_modal in ["image", "text"]
-
-#         query_modal = (
-#             self._judge_input_modal(query) if not isinstance(query, list) else self._judge_input_modal(query[0])
-#         )
-#         if query_modal == "image" and isinstance(query, str):
-#             from PIL import Image
-
-#             if os.path.exists(query):
-#                 query = Image.open(query)
-#             else:
-#                 import requests
-
-#                 query = Image.open(requests.get(query, stream=True).raw)
-
-#         query_emb = self.encoder.encode(query, modal=query_modal)
-
-#         scores, idxs = self.index_dict[target_modal].search(query_emb, k=num)
-#         scores = scores.tolist()
-#         idxs = idxs[0]
-#         scores = scores[0]
-
-#         results = load_docs(self.corpus, idxs)
-#         if return_score:
-#             return results, scores
-#         else:
-#             return results
-
-#     def _batch_search(self, query: List[str], target_modal: str = "text", num: int = None, return_score=False):
-#         if isinstance(query, str):
-#             query = [query]
-#         if num is None:
-#             num = self.topk
-#         batch_size = self.batch_size
-#         assert target_modal in ["image", "text"]
-
-#         query_modal = self._judge_input_modal(query[0])
-#         if query_modal == "image" and isinstance(query[0], str):
-#             from PIL import Image
-#             import requests
-
-#             if os.path.exists(query[0]):
-#                 query = [Image.open(q) for q in query]
-#             else:
-#                 query = [Image.open(requests.get(q, stream=True).raw) for q in query]
-
-#         results = []
-#         scores = []
-
-#         for start_idx in tqdm(range(0, len(query), batch_size), desc="Retrieval process: ", disable=self.silent):
-#             query_batch = query[start_idx : start_idx + batch_size]
-#             batch_emb = self.encoder.encode(query_batch, modal=query_modal)
-#             batch_scores, batch_idxs = self.index_dict[target_modal].search(batch_emb, k=num)
-
-#             batch_scores = batch_scores.tolist()
-#             batch_idxs = batch_idxs.tolist()
-
-#             flat_idxs = flat_idxs = [idx for sublist in batch_idxs for idx in sublist]
-#             batch_results = load_docs(self.corpus, flat_idxs)
-#             batch_results = [batch_results[i * num : (i + 1) * num] for i in range(len(batch_idxs))]
-
-#             scores.extend(batch_scores)
-#             results.extend(batch_results)
-
-#         if return_score:
-#             return results, scores
-#         else:
-#             return results
-
-
-# class MultiRetrieverRouter:
-#     def __init__(self, config):
-#         self.merge_method = config["multi_retriever_setting"].get("merge_method", "concat")  # concat/rrf/rerank
-#         self.final_topk = config["multi_retriever_setting"].get("topk", 5)
-#         self.retriever_list = self.load_all_retriever(config)
-#         self.config = config
-
-#         if self.merge_method == "rerank":
-#             config["multi_retriever_setting"]["rerank_topk"] = self.final_topk
-#             config["multi_retriever_setting"]["device"] = config["device"]
-#             self.reranker = get_reranker(config["multi_retriever_setting"])
-
-#     def load_all_retriever(self, config):
-#         retriever_config_list = config["multi_retriever_setting"]["retriever_list"]
-#         # use the same corpus for efficient memory usage
-#         all_corpus_dict = {}
-#         retriever_list = []
-#         for retriever_config in retriever_config_list:
-#             retrieval_method = retriever_config["retrieval_method"]
-#             print(f"Loading {retrieval_method} retriever...")
-#             retrieval_model_path = retriever_config["retrieval_model_path"]
-#             corpus_path = retriever_config["corpus_path"]
-
-#             if retrieval_method == "bm25":
-#                 if corpus_path is None:
-#                     corpus = None
-#                 else:
-#                     if corpus_path in all_corpus_dict:
-#                         corpus = all_corpus_dict[corpus_path]
-#                     else:
-#                         corpus = load_corpus(corpus_path)
-#                         all_corpus_dict[corpus_path] = corpus
-#                 retriever = BM25Retriever(retriever_config, corpus)
-#             else:
-#                 if corpus_path in all_corpus_dict:
-#                     corpus = all_corpus_dict[corpus_path]
-#                 else:
-#                     corpus = load_corpus(corpus_path)
-#                     all_corpus_dict[corpus_path] = corpus
-
-#                 # judge modality
-#                 from transformers import AutoConfig
-
-#                 try:
-#                     model_config = AutoConfig.from_pretrained(retrieval_model_path)
-#                     arch = model_config.architectures[0]
-#                     print("arch: ", arch)
-#                     if "clip" in arch.lower():
-#                         retriever = MultiModalRetriever(retriever_config, corpus)
-#                     else:
-#                         retriever = DenseRetriever(retriever_config, corpus)
-#                 except:
-#                     retriever = DenseRetriever(retriever_config, corpus)
-
-#             retriever_list.append(retriever)
-
-#         return retriever_list
-
-#     def add_source(self, result: Union[list, tuple], retriever):
-#         retrieval_method = retriever.retrieval_method
-#         corpus_path = retriever.corpus_path
-#         is_multimodal = isinstance(retriever, MultiModalRetriever)
-#         # for naive search, result is a list of dict, each repr a doc
-#         # for batch search, result is a list of list, each repr a doc list(per query)
-#         for item in result:
-#             if isinstance(item, list):
-#                 for _item in item:
-#                     _item["source"] = retrieval_method
-#                     _item["corpus_path"] = corpus_path
-#                     _item["is_multimodal"] = is_multimodal
-#             else:
-#                 item["source"] = retrieval_method
-#                 item["corpus_path"] = corpus_path
-#                 item["is_multimodal"] = is_multimodal
-#         return result
-
-#     def _search_or_batch_search(self, query: Union[str, list], target_modal, num, return_score, method, retriever_list):
-#         if num is None:
-#             num = self.final_topk
-
-#         result_list = []
-#         score_list = []
-
-#         def process_retriever(retriever):
-#             is_multimodal = isinstance(retriever, MultiModalRetriever)
-#             params = {"query": query, "return_score": return_score}
-
-#             if is_multimodal:
-#                 params["target_modal"] = target_modal
-
-#             if method == "search":
-#                 output = retriever.search(**params)
-#             else:
-#                 output = retriever.batch_search(**params)
-
-#             if return_score:
-#                 result, score = output
-#             else:
-#                 result = output
-#                 score = None
-
-#             result = self.add_source(result, retriever)
-#             return result, score
-
-#         with ThreadPoolExecutor(max_workers=4) as executor:
-#             future_to_retriever = {
-#                 executor.submit(process_retriever, retriever): retriever for retriever in retriever_list
-#             }
-#             for future in as_completed(future_to_retriever):
-#                 try:
-#                     result, score = future.result()
-#                     result_list.extend(result)
-#                     if score is not None:
-#                         score_list.extend(score)
-#                 except Exception as e:
-#                     print(f"Error processing retriever {future_to_retriever[future]}: {e}")
-#         result_list, score_list = self.reorder(result_list, score_list, retriever_list)
-#         result_list, score_list = self.post_process_result(query, result_list, score_list, num)
-#         if return_score:
-#             return result_list, score_list
-#         else:
-#             return result_list
-
-#     def reorder(self, result_list, score_list, retriever_list):
-#         """
-#         batch_search:
-#         original result like: [[bm25-q1-d1, bm25-q1-d2],[bm25-q2-d1, bm25-q2-d2], [e5-q1-d1, e5-q1-d2], [e5-q2-d1, e5-q2-d2]]
-#         reorder to: [[bm25-q1-d1, bm25-q1-d2, e5-q1-d1, e5-q1-d2], [bm25-q2-d1,bm25-q2-d2, e5-q2-d1, e5-q2-d2]]
-
-#         navie search:
-#         original result like: [bm25-d1, bm25-d2, e5-d1, e5-d2]
-
-#         """
-
-#         retriever_num = len(retriever_list)
-#         query_num = len(result_list) // retriever_num
-#         assert query_num * retriever_num == len(result_list)
-
-#         if isinstance(result_list[0], dict):
-#             return result_list, score_list
-
-#         final_result = []
-#         final_score = []
-#         for q_idx in range(query_num):
-#             final_result.append(sum([result_list[q_idx + r_idx * query_num] for r_idx in range(retriever_num)], []))
-#             if score_list != []:
-#                 final_score.append(sum([score_list[q_idx + r_idx * query_num] for r_idx in range(retriever_num)], []))
-#         return final_result, final_score
-
-#     def post_process_result(self, query: Union[str, list], result_list, score_list, num):
-#         # based on self.merge_method
-#         if self.merge_method == "concat":
-#             # remove duplicate doc
-#             if isinstance(result_list[0], dict):
-#                 exist_id = set()
-#                 for idx, doc in enumerate(result_list):
-#                     if doc["id"] not in exist_id:
-#                         exist_id.add(doc["id"])
-#                     else:
-#                         result_list.remove(doc)
-#                         if score_list != []:
-#                             score_list.remove(idx)
-#             else:
-#                 for query_idx, query_doc_list in enumerate(result_list):
-#                     exist_id = set()
-#                     for doc_idx, doc in enumerate(query_doc_list):
-#                         if doc["id"] not in exist_id:
-#                             exist_id.add(doc["id"])
-#                         else:
-#                             query_doc_list.remove(doc)
-#                             if score_list != []:
-#                                 score_list[query_idx].remove(doc_idx)
-#             return result_list, score_list
-#         elif self.merge_method == "rrf":
-#             if (isinstance(result_list[0], dict) and len(set([doc["corpus_path"] for doc in result_list])) > 1) or (
-#                 isinstance(result_list[0], list) and len(set([doc["corpus_path"] for doc in result_list[0]])) > 1
-#             ):
-#                 warnings.warn(
-#                     "Using multiple corpus may lead to conflicts in DOC IDs, which may result in incorrect rrf results!"
-#                 )
-#             if isinstance(result_list[0], dict):
-#                 result_list, score_list = self.rrf_merge([result_list], num, k=60)
-#                 result_list = result_list[0]
-#                 score_list = score_list[0]
-#             else:
-#                 result_list, score_list = self.rrf_merge(result_list, num, k=60)
-#             return result_list, score_list
-#         elif self.merge_method == "rerank":
-#             if isinstance(result_list[0], dict):
-#                 query, result_list, score_list = [query], [result_list], [score_list]
-#             # parse the result of multimodal corpus
-#             for item_result in result_list:
-#                 for item in item_result:
-#                     if item["is_multimodal"]:
-#                         item["contents"] = item["text"]
-#             # rerank all docs
-#             print(result_list)
-#             result_list, score_list = self.reranker.rerank(query, result_list, topk=num)
-#             if isinstance(query, str):
-#                 result_list, score_list = result_list[0], score_list[0]
-#             return result_list, score_list
-#         else:
-#             raise NotImplementedError
-
-#     def rrf_merge(self, results, topk=10, k=60):
-#         """
-#         Perform Reciprocal Rank Fusion (RRF) on retrieval results.
-
-#         Args:
-#             results (list of list of dict): Retrieval results for multiple queries.
-#             topk (int): Number of top results to return per query.
-#             k (int): RRF hyperparameter to adjust rank contribution.
-
-#         Returns:
-#             list of list of dict: Fused results with topk highest scores per query.
-#         """
-#         fused_results = []
-#         fused_scores = []
-#         for query_results in results:
-#             # Initialize a score dictionary to accumulate RRF scores
-#             score_dict = {}
-#             retriever_result_dict = {}
-#             id2item = {}
-#             for item in query_results:
-#                 source = item["source"]
-#                 if source not in retriever_result_dict:
-#                     retriever_result_dict[source] = []
-#                 retriever_result_dict[source].append(item["id"])
-#                 id2item[item["id"]] = item
-
-#             # Calculate RRF scores for each document
-#             for retriever, retriever_result in retriever_result_dict.items():
-#                 for rank, doc_id in enumerate(retriever_result, start=1):
-#                     if doc_id not in score_dict:
-#                         score_dict[doc_id] = 0
-#                     # Add RRF score for the document
-#                     score_dict[doc_id] += 1 / (k + rank)
-
-#             # Sort by accumulated RRF score
-#             sorted_results = sorted(score_dict.items(), key=lambda x: x[1], reverse=True)
-
-#             # Keep only the topk results
-#             top_ids = [i[0] for i in sorted_results[:topk]]
-#             top_scores = [i[1] for i in sorted_results[:topk]]
-
-#             fused_results.append([id2item[id] for id in top_ids])
-#             fused_scores.append(top_scores)
-
-#         return fused_results, fused_scores
-
-#     def search(self, query, target_modal="text", num: Union[list, int, None] = None, return_score=False):
-#         # query: str or PIL.Image
-#         # judge query type: text or image
-#         if judge_image(query):
-#             retriever_list = [
-#                 retriever for retriever in self.retriever_list if isinstance(retriever, MultiModalRetriever)
-#             ]
-#         else:
-#             retriever_list = self.retriever_list
-#         if target_modal == "image":
-#             # remove text retriever
-#             retriever_list = [retriever for retriever in retriever_list if isinstance(retriever, MultiModalRetriever)]
-
-#         return self._search_or_batch_search(
-#             query, target_modal, num, return_score, method="search", retriever_list=retriever_list
-#         )
-
-#     def batch_search(self, query, target_modal="text", num: Union[list, int, None] = None, return_score=False):
-#         # judge query type: text or image
-#         if not isinstance(query, list):
-#             query = [query]
-#         if target_modal == "image":
-#             self._retriever_list = [
-#                 retriever for retriever in self.retriever_list if isinstance(retriever, MultiModalRetriever)
-#             ]
-#         else:
-#             self._retriever_list = self.retriever_list
-#         query_type_list = [judge_image(q) for q in query]
-#         if all(query_type_list):
-#             # all query is image
-#             if self.merge_method == "rerank":
-#                 warnings.warn("merge_method is rerank, but all query is image, use default method `concat` instead")
-#                 self.merge_method = "concat"
-#             retriever_list = [
-#                 retriever for retriever in self._retriever_list if isinstance(retriever, MultiModalRetriever)
-#             ]
-
-#             return self._search_or_batch_search(
-#                 query, target_modal, num, return_score, method="batch_search", retriever_list=retriever_list
-#             )
-#         elif all([not t for t in query_type_list]):
-#             # all query is text
-#             # if exist text retriever, don't use mm retriever for text-text search
-#             if any([isinstance(retriever, BaseTextRetriever) for retriever in self._retriever_list]):
-#                 self._retriever_list = [
-#                     retriever for retriever in self._retriever_list if not isinstance(retriever, MultiModalRetriever)
-#                 ]
-#             return self._search_or_batch_search(
-#                 query, target_modal, num, return_score, method="batch_search", retriever_list=self._retriever_list
-#             )
-#         else:
-#             # query list is the mix of image and text
-#             if self.merge_method == "rerank":
-#                 warnings.warn("merge_method is rerank, but some query is image, use default method `concat` instead")
-#                 self.merge_method = "concat"
-#             image_query_idx = [i for i, t in enumerate(query_type_list) if t]
-#             image_query_list = [query[i] for i in image_query_idx]
-#             text_query_list = [q for q in query if q not in image_query_list]
-
-#             text_output = self._search_or_batch_search(
-#                 text_query_list,
-#                 target_modal,
-#                 num,
-#                 return_score,
-#                 method="batch_search",
-#                 retriever_list=self._retriever_list,
-#             )
-#             retriever_list = [
-#                 retriever for retriever in self._retriever_list if isinstance(retriever, MultiModalRetriever)
-#             ]
-#             image_output = self._search_or_batch_search(
-#                 text_query_list, target_modal, num, return_score, method="batch_search", retriever_list=retriever_list
-#             )
-
-#             # merge text output and image output
-#             if return_score:
-#                 text_result, text_score = text_output
-#                 image_result, image_score = image_output
-#                 final_result = []
-#                 final_score = []
-#                 text_idx = 0
-#                 image_idx = 0
-#                 for idx in range(len(query)):
-#                     if idx not in image_query_idx:
-#                         final_result.append(text_result[text_idx])
-#                         final_score.append(text_score[text_idx])
-#                         text_idx += 1
-#                     else:
-#                         final_result.append(image_result[image_idx])
-#                         final_score.append(image_score[image_idx])
-#                         image_idx += 1
-#                 return final_result, final_score
-#             else:
-#                 final_result = []
-#                 text_idx = 0
-#                 image_idx = 0
-#                 for idx in range(len(query)):
-#                     if idx not in image_query_idx:
-#                         final_result.append(text_result[text_idx])
-#                         text_idx += 1
-#                     else:
-#                         final_result.append(image_result[image_idx])
-#                         image_idx += 1
-#                 return final_result
-
-
-# class SparseRetriever(BaseTextRetriever):
-#     """Sparse embedding retriever supporting only SPLADE with Seismic backend for now."""
-
-#     def __init__(self, config):
-#         super().__init__(config)
-
-#         import multiprocessing
-#         self.cores = str(multiprocessing.cpu_count())
-#         os.environ["RAYON_NUM_THREADS"] = self.cores
-
-#         self.progress_bar = None
-
-#         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-#         self.corpus = load_corpus(config["corpus_path"])
-#         self.tokenizer, self.model = self._load_sparse_model()
-
-#         self.id = 0
-
-#         self.update_additional_setting()
-
-#         self.seismic_query_cut = self.config["seismic_query_cut"]
-#         self.seismic_heap_factor = self.config["seismic_heap_factor"]
-#         self.index_max_tokens = self.config["seismic_max_tokens_length"]
-#         self._init_seismic_index()
-
-#     def update_additional_setting(self):
-#         """Load config shared for all the models supported"""
-#         self.query_max_length = self._config["retrieval_query_max_length"]
-#         self.use_fp16 = self._config["retrieval_use_fp16"]
-#         self.batch_size = self._config["retrieval_batch_size"]
-#         self.retrieval_model_path = self._config["retrieval_model_path"]
-#         self.pooling_method = self._config["retrieval_pooling_method"]
-
-#     def _init_seismic_index(self):
-#         """Initialize Seismic index."""
-#         from seismic import SeismicIndex  # Assuming this is available
-#         self.seismic_index = SeismicIndex.load(self.index_path)
-#         self.string_type = f'U{self.index_max_tokens}'  # For Seismic string dtype
-
-#     def _load_sparse_model(self):
-#         """Load tokenizer and model based on sparse type."""
-#         from transformers import AutoModelForMaskedLM, AutoTokenizer
-#         # Load model
-#         tokenizer = AutoTokenizer.from_pretrained(self.retrieval_model_path)
-#         model = AutoModelForMaskedLM.from_pretrained(self.retrieval_model_path)
-
-#         if self.use_fp16:
-#             model = model.half()
-
-#         # Use more gpus if available
-#         if torch.cuda.device_count() > 1:
-#             model = torch.nn.DataParallel(model, device_ids=self.config['gpu_id'].split(','))
-
-#         model = model.to(self.device)
-#         model.eval()
-#         return tokenizer, model
-
-#     def _encode(self, query):
-#         inputs = self.tokenizer(
-#             query,
-#             return_tensors="pt",
-#             truncation=True,
-#             padding=True,
-#             max_length=self.query_max_length,
-#             add_special_tokens=True
-#         ).to(self.model.device)
-
-#         with torch.no_grad():
-#             logits = self.model(**inputs).logits  # [batch_size, seq_len, vocab_size]
-#             attention_mask = inputs["attention_mask"].unsqueeze(-1)  # [batch, seq_len, 1]
-
-#             scores = torch.log1p(torch.relu(logits)) * attention_mask
-#             v_repr = torch.max(scores, dim=1)[0]  # [batch_size, vocab_size]
-
-#             # Move to CPU (it seems much faster)
-#             v_repr = v_repr.cpu()
-#             nonzero_mask = v_repr > 1e-4
-
-#             # Get sparse values and indices in batch
-#             batch_indices, token_indices = torch.nonzero(nonzero_mask, as_tuple=True)
-#             token_scores = v_repr[batch_indices, token_indices]
-
-#             # Convert once all token IDs to strings (batched)
-#             unique_token_ids = torch.unique(token_indices)
-#             token_id_to_token = {
-#                 idx.item(): tok for idx, tok in zip(
-#                     unique_token_ids, self.tokenizer.convert_ids_to_tokens(unique_token_ids.tolist())
-#                 )
-#             }
-
-#             # Build final embeddings
-#             from collections import defaultdict
-#             embeddings = defaultdict(dict)
-#             for b_idx, t_idx, score in zip(batch_indices, token_indices, token_scores):
-#                 embeddings[b_idx.item()][token_id_to_token[t_idx.item()]] = round(score.item(), 4)
-
-#             # Convert to list for each document
-#             return [embeddings[i] for i in range(len(query))]
-
-#     def search(self, query: list, num: int = None, return_score=False) -> (List[Dict], List[float]):
-#         """Search using sparse vector."""
-#         num = num or self.topk
-
-#         query_vec = self._encode(query)
-#         results, scores = self._seismic_search(query_vec, num)
-
-#         if return_score:
-#             return results, scores
-#         else:
-#             return results
-
-#     def batch_search(self, query, num=None, return_score=False):
-#         """Search using sparse vector."""
-#         if isinstance(query, str):
-#             query = [query]
-
-#         if self.pooling_method != 'max':
-#             print(
-#                 f'Pooling method: {self.pooling_method.upper()} not supported on sparse neural retrieval models. fallback to: MAX.')
-
-#         num = num or self.topk
-
-#         embeddings = []
-#         batch = []
+class BingSearchRetriever(BaseRetriever):
+    """Retriever based on Bing Search API for web search."""
+
+    def __init__(self, config):
+        super().__init__(config)
         
-#         # Encode
-#         for i in range(len(query)):
-#             # Process batch
-#             batch.append(query[i])
-#             if len(batch) >= self.batch_size:
-#                 query_vec = self._encode(batch)
-#                 embeddings.extend(query_vec)
-#                 batch = []
+        # Bing Search API specific configuration
+        self.bing_endpoint = "https://api.bing.microsoft.com/v7.0/search"
+        self.subscription_key = config["bing_subscription_key"]
+        self.market= "en-US"  # default market
+        self.language = "en"  # default language
+        self.timeout = 30  # default timeout for API calls
+        self.session = requests.Session()  # Use a session for connection pooling
+        self.session.headers.update({"Ocp-Apim-Subscription-Key": self.subscription_key})
+    
+    def _search(self, query: str, num: int) -> List[Dict[str, str]]:
+        "perform a search using the Bing Web Search API with a set timeout"
 
-#         if batch:
-#             query_vec = self._encode(batch)
-#             embeddings.extend(query_vec)
+        headers = {"Ocp-Apim-Subscription-Key": self.subscription_key}
+        params = {
+            "q": query,
+            "mkt": self.market,
+            "setLang": self.language,
+            "textDecorations": True,
+            "textFormat": "HTML"}
+        try:
+            response = requests.get(self.bing_endpoint, headers=headers, params=params, timeout=self.timeout)
+            response.raise_for_status()  # Raise exception if the request failed
+            search_results = response.json()
+            return search_results
+        except requests.Timeout:
+            print(f"Bing Web Search request timed out ({self.timeout} seconds) for query: {query}")
+            return {}  # Or you can choose to raise an exception
+        except requests.exceptions.RequestException as e:
+            print(f"Error occurred during Bing Web Search request: {e}")
+            return {}
 
-#         # Search
-#         search_results = self._seismic_batch_search(embeddings, num)
 
-#         results = []
-#         scores = []
-#         for result in sorted(search_results, key=lambda e: int(e[0][0])):
-#             tmp_results = []
-#             tmp_scores = []
 
-#             for query_id, score, doc_id in result:
-#                 tmp_results.append(self.corpus[int(doc_id)])
-#                 tmp_scores.append(score)
 
-#             results.append(tmp_results)
-#             scores.append(tmp_scores)
-        
-#         if return_score:
-#             return results, scores
-#         else:
-#             return results
 
-#     def _seismic_search(self, query_vec: List[Dict[str, float]], k: int) -> (List[Dict], List[float]):
-#         """Search using Seismic backend."""
-#         # Convert query to Seismic format
-#         results, scores = self.index_search(k, query_vec)
-#         return results[0], scores[0]
 
-#     def _seismic_batch_search(self, query_vecs: List[Dict[str, float]], k: int) -> (
-#             List[List[Dict]], List[List[float]]):
-#         """Batch search using Seismic backend (one query at a time)."""
-#         return self.index_search(k, query_vecs)
 
-#     def index_search(self, k, query_vec):
-#         max_len = max(len(query) for query in query_vec)
-#         pad_token = ""  # or whatever default is appropriate
 
-#         query_components = []
-#         query_values = []
-#         ids = []
 
-#         for query in query_vec:
-#             keys = list(query.keys())
-#             values = list(query.values())
 
-#             # Pad to max_len
-#             padded_keys = keys + [pad_token] * (max_len - len(keys))
-#             padded_values = values + [0.0] * (max_len - len(values))
-
-#             query_components.append(np.array(padded_keys, dtype='U30'))
-#             query_values.append(np.array(padded_values, dtype=np.float32))
-#             ids.append(self.id)
-#             self.id += 1
-
-#         ids = np.array(ids, dtype='U30')
-#         # Execute search
-#         search_results = self.seismic_index.batch_search(
-#             queries_ids=ids,  # Placeholder ID
-#             query_components=query_components,
-#             query_values=query_values,
-#             query_cut=self.seismic_query_cut,
-#             heap_factor=self.seismic_heap_factor,
-#             k=k,
-#             sorted=True,  # specified even if default value
-#             num_threads=int(self.cores)
-#         )
-#         return search_results
 
 # class SerperRetriever(BaseRetriever):
 #     """Retriever based on Google Serper API for web search."""
@@ -1280,31 +654,23 @@ class DenseRetriever(BaseTextRetriever):
 #     def batch_search(self, query_list: List[str], num: int = None):
 #         return self._batch_search(query_list, num)
 
-# def main():
-# # Example configuration
-#     config = {
-#         # Base retriever config
-#         "retrieval_method": "serper",
-#         "retrieval_topk": 10,
-#         "index_path": None,  # Not used for Serper
-#         "corpus_path": None,  # Not used for Serper
-#         "save_dir": "./output",
-        
-#         # Serper specific config
-#         "serper_api_key": "your-api-key",
-#         "serper_search_type": "search",
-#         "serper_location": "United States",
-#         "serper_gl": "us",
-#         "serper_hl": "en"
-#     }
-#     from flashrag.config import Config
-#     config = Config("basic_config.yaml",config)
-#     retriever = SerperRetriever(config)
 
-#     # Batch search
-#     queries = ["Python programming", "Machine learning"]
-#     batch_results = retriever.batch_search(queries)
-#     print(batch_results)
 
-# if __name__ == "__main__":
-#     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
