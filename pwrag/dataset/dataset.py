@@ -128,6 +128,7 @@ class Dataset:
                         continue
                     item_dict = json.loads(line)
                     data.append(Item(item_dict))
+        
         elif dataset_path.endswith(".json"):
             with open(dataset_path, "r", encoding="utf-8") as f:
                 obj = json.load(f)
