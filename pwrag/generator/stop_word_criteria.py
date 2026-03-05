@@ -63,7 +63,7 @@ class StopWordCriteria(StoppingCriteria):
 
             for word in self.stop_words:
                 if word in decoded:
-                    print(f"Stopping generation at sequence length {seq_len} due to stop word: {word}")
+                    # print(f"Stopping generation at sequence length {seq_len} due to stop word: {word}")
                     return True
 
         return False # Stop generation if all conditions are met
