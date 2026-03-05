@@ -405,8 +405,8 @@ class VLLMGenerator(BaseGenerator):
         else:
             self.model = LLM(
                 self.model_path,
-                tensor_parallel_size = torch.cuda.device_count(), #self.tensor_parallel_size,
-                gpu_memory_utilization = 0.98, #self.gpu_memory_utilization,
+                tensor_parallel_size = self.tensor_parallel_size,
+                gpu_memory_utilization = self.gpu_memory_utilization,
                 max_logprobs = 32016,
                 max_model_len = self.max_model_len,
             )

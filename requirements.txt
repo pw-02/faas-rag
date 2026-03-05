@@ -16,7 +16,7 @@ omegaconf
 maturin
 # hf auth login
 openai
-vllm
+vllm==0.6.4
 Stemmer
 bm25s
 PyStemmer
