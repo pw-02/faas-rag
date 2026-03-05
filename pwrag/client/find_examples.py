@@ -20,7 +20,7 @@ def find_examples(
             print("Id:", item.id)
             print("Question:", item.question)
             print("-" * 50)
-            data.append(item.data)
+            data.append(f"{item.id}\t{item.question}")
     print(f"Total multi-retrieval examples found: {len(data)}")
     #save data to jsonl file
   
