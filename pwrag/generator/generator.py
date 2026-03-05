@@ -155,6 +155,7 @@ class HFCausalLMGenerator(BaseGenerator):
             batch_size = self.batch_size
 
         generation_params = deepcopy(self.generation_params)
+        
         generation_params.update(params)
 
         # deal stop params
