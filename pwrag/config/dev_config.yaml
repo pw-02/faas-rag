@@ -1,5 +1,5 @@
 defaults:
-  - generator:  meta_llama_3_8B_Instruct #qwen2_0_5b_instruct, meta_llama_3_8B_Instruct, rq_rag_llama2_7B
+  - generator:  meta_llama_31_8B_instruct #qwen2_0_5b_instruct, meta_llama_3_8B_Instruct, rq_rag_llama2_7B
     #nq, repeated_question, mmlu_econometrics, 2wiki, search_o1_test, hotpotqa
   - dataset: hotpotqa
     # options: sequential_rag,  llm_only, retrieval_only, flare, rqrag, all, search_o1

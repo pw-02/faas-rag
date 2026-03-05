@@ -2,10 +2,12 @@ name: meta_llama_31_8B_instruct
 framework: vllm #hf
 model_name: meta-llama/Meta-Llama-3.1-8B-Instruct #Meta-Llama-3-8B-Instruct
 model_path: meta-llama/Meta-Llama-3.1-8B-Instruct
-max_input_length: 512
+max_input_length: 32768
 batch_size: 32
+
 generation_params:
-  do_sample: false
-  temperature: 0.2
-  top_p: 0.9
-  max_tokens: 32
+  do_sample: true
+  temperature: 0.7
+  top_k: 20
+  top_p: 0.8
+  max_tokens: 32768

@@ -1,0 +1,13 @@
+name: qwen2_0_5b_instruct
+framework: vllm #vllm, hf
+model_name: Qwen/Qwen2.5-3B-Instruct
+model_path: Qwen/Qwen2.5-3B-Instruct
+max_input_length: 32768
+batch_size: 32
+
+generation_params:
+  do_sample: true
+  temperature: 0.7
+  top_k: 20
+  top_p: 0.8
+  max_tokens: 32768
