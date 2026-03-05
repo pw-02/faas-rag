@@ -154,9 +154,15 @@ class HFCausalLMGenerator(BaseGenerator):
         if batch_size is None:
             batch_size = self.batch_size
 
+
         generation_params = deepcopy(self.generation_params)
-        
         generation_params.update(params)
+
+        # generation_params["seed"] = self._config["seed"]
+        generation_params["seed"] = None
+
+        # # handle param conflict
+        # generation_params = resolve_max_tokens(params, generation_params, prioritize_new_tokens=True)
 
         # deal stop params
         stop_sym = None
@@ -305,7 +311,7 @@ class HFCausalLMGenerator(BaseGenerator):
                 input_ids = inputs["input_ids"][i]
                 text = self.tokenizer.decode(
                     generated_sequence,
-                    skip_special_tokens=True,
+                    skip_special_tokens=False,
                     clean_up_tokenization_spaces=False,
                 )
 
@@ -315,7 +321,7 @@ class HFCausalLMGenerator(BaseGenerator):
                     prompt_length = len(
                         self.tokenizer.decode(
                             input_ids,
-                            skip_special_tokens=True,
+                            skip_special_tokens=False,
                             clean_up_tokenization_spaces=False,
                         )
                     )

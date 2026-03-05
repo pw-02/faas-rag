@@ -1,8 +1,8 @@
 import json
 
 # ---- CONFIG ----
-input_jsonl = "data/datasets/qa/nq/nq_train.jsonl"
-output_jsonl = "data/datasets/nq_train_filtered.jsonl"
+input_jsonl = "data/datasets/multi_hop/hotpotqa/hotpotqa_dev.jsonl"
+output_jsonl = "data/datasets/hotpotqa_dev_filtered.jsonl"
 ids_file = "data/datasets/target_ids.txt"  # optional: load ids from a file (one id per line)
 # your selected ids (one per line or copy/paste)
 

@@ -5,7 +5,7 @@ from pwrag.dataset.dataset import Item
 from pwrag.pipeline.pipeline import BasicPipeline
 from pwrag.prompt.base_prompt import PromptTemplate
 from pwrag.prompt.prompts import get_multiqa_search_o1_instruction, get_singleqa_search_o1_instruction, get_task_instruction_openqa, get_webpage_to_reasonchain_instruction
-from pwrag.retriever.bing_search import bing_web_search, extract_relevant_info, fetch_page_content, extract_snippet_with_context
+from pwrag.retriever.brave_search import brave_web_search, extract_relevant_info, fetch_page_content, extract_snippet_with_context
 from pwrag.utils.utils import get_retriever, get_generator, perf_timer, per_item, default
 
 def default(value, factory):
@@ -146,7 +146,7 @@ class SearchO1Pipeline(BasicPipeline):
             results = self.search_cache[query]
         else:
             try:
-                results = bing_web_search(
+                results = brave_web_search(
                     query,
                     self.bing_subscription_key,
                     self.bing_endpoint,

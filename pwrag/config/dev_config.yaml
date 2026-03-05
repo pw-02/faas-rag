@@ -1,7 +1,7 @@
 defaults:
   - generator:  qwen2_0_5b_instruct #qwen2_0_5b_instruct, meta_llama_3_8B_Instruct, rq_rag_llama2_7B
     #nq, repeated_question, mmlu_econometrics, 2wiki, search_o1_test, hotpotqa
-  - dataset: hotpotqa
+  - dataset: search_o1_test
     # options: sequential_rag,  llm_only, retrieval_only, flare, rqrag, all, search_o1
   - retriever/pipeline: search_o1 
   - retriever/corpus: wiki_100k #wiki_100k
@@ -19,12 +19,12 @@ retriever_encoder_device: cuda:0
 metrics: ["em", "f1", "acc", "precision", "recall"]
 save_dir: results
 
-max_sample_num: 1000  # number of samples to test (only work in dev/test split), if None, test all samples
+max_sample_num: null   # number of samples to test (only work in dev/test split), if None, test all samples
 random_sample: False # whether to randomly sample the test samples
 is_reasoning: false
 
 seed: 2024
-batch_size: 20 #batch size for which items are sent through the pipeline
+batch_size: 1 #batch size for which items are sent through the pipeline
 
 hydra:
   run:
