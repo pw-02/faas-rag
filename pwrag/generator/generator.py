@@ -10,14 +10,12 @@ import numpy as np
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
-    T5ForConditionalGeneration,
-    BartForConditionalGeneration,
-    AutoConfig,
 )
 from pwrag.args.args import AppConfig
 from pwrag.generator.utils import resolve_max_tokens
 from pwrag.utils.utils import timed
 from pwrag.generator.stop_word_criteria import StopWordCriteria
+from vllm import LLM, SamplingParams
 
 def get_device() -> str:
     return "cuda" if torch.cuda.is_available() else "cpu"
@@ -407,8 +405,8 @@ class VLLMGenerator(BaseGenerator):
         else:
             self.model = LLM(
                 self.model_path,
-                tensor_parallel_size = self.tensor_parallel_size,
-                gpu_memory_utilization = self.gpu_memory_utilization,
+                tensor_parallel_size = torch.cuda.device_count(), #self.tensor_parallel_size,
+                gpu_memory_utilization = 0.98, #self.gpu_memory_utilization,
                 max_logprobs = 32016,
                 max_model_len = self.max_model_len,
             )
@@ -425,7 +423,7 @@ class VLLMGenerator(BaseGenerator):
         
     def update_additional_setting(self):
         if "gpu_memory_utilization" not in self._config:
-            self.gpu_memory_utilization = 0.85
+            self.gpu_memory_utilization = 0.98
         else:
             self.gpu_memory_utilization = self._config["gpu_memory_utilization"]
         if self.gpu_num != 1 and self.gpu_num % 2 != 0:
@@ -461,7 +459,8 @@ class VLLMGenerator(BaseGenerator):
             if not do_sample_flag:
                 generation_params["temperature"] = 0
 
-        generation_params["seed"] = self._config["seed"]
+        # generation_params["seed"] = self._config["seed"]
+        generation_params["seed"] = None
 
         # handle param conflict
         generation_params = resolve_max_tokens(params, generation_params, prioritize_new_tokens=False)

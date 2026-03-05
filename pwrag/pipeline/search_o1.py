@@ -36,7 +36,7 @@ class SearchO1Pipeline(BasicPipeline):
     def __init__(self, config, prompt_template=None, retriever=None, generator=None, cache=None):
         super().__init__(config, prompt_template)
 
-        self.retriever = default(retriever, lambda: get_retriever(config))  # unused (kept)
+        # self.retriever = default(retriever, lambda: get_retriever(config))  # unused (kept)
         self.generator = default(generator, lambda: get_generator(config))
         self.cache = cache  # optional external cache (unused here)
         self.prompt_template = default(prompt_template, lambda: PromptTemplate(config))
@@ -66,7 +66,7 @@ class SearchO1Pipeline(BasicPipeline):
         self.max_new_tokens = getattr(config, "max_new_tokens", None)
         if self.max_new_tokens is None:
             # fall back to prior config naming
-            self.max_new_tokens = getattr(config, "max_tokens", 2048)
+            self.max_new_tokens = getattr(config, "max_tokens", 8192)
 
         # in-memory caches
         self.search_cache: Dict[str, Any] = {}
@@ -111,6 +111,10 @@ class SearchO1Pipeline(BasicPipeline):
         Extract last occurrence of start_tag...end_tag.
         If end_tag is missing (e.g. stripped by stop handling), return to end-of-string.
         """
+        if isinstance(text, list):
+            if len(text) == 1:
+                text = text[0] # handle case where generator returns list[str] with one element
+          
         start = text.rfind(start_tag)
         if start == -1:
             return None
@@ -460,3 +464,17 @@ class SearchO1Pipeline(BasicPipeline):
         #     item.update_output("batch_output_records", batch_output_records)
 
         return batch
+
+    def is_multi_retrival_example(self, item: Item) -> bool: 
+        # Init per-item state (like active_sequences)
+        item.update_metadata("agent_prompt", self._build_initial_prompt(item))
+        prompts = [item.metadata["agent_prompt"]]
+        text = self._step_generate(prompts, stop=[self.end_search_query, self.generator.tokenizer.eos_token])
+        search_query = self.extract_between_or_to_end(text, self.begin_search_query, self.end_search_query)
+        if search_query:
+           return True
+        else:
+            return False
+            
+        
+      
