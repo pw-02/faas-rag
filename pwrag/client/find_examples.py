@@ -17,7 +17,7 @@ def find_examples(
     for item in tqdm(dataset, desc=desc, unit="item"):
         if pipeline.is_multi_retrival_example(item):
             print("Found multi-retrieval example:")
-            print("Idx:", item.idx)
+            print("Id:", item.id)
             print("Question:", item.question)
             print("-" * 50)
             data.append(item.data)
