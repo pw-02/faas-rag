@@ -4,7 +4,7 @@ import hydra
 from tqdm import tqdm
 from pwrag.args.args import AppConfig
 from pwrag.dataset.dataset import Dataset
-from pwrag.pipeline.search_o1 import SearchO1Pipeline
+from pwrag.pipeline.search_o1_web import SearchO1Pipeline
 import json
 
 def find_examples(

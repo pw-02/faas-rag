@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Sequence
 import re
 import json
 from pwrag.dataset.dataset import Item
@@ -11,13 +11,13 @@ from pwrag.prompt.prompts import (
     get_webpage_to_reasonchain_instruction
 )
 from pwrag.retriever.brave_search import brave_web_search, extract_relevant_info, fetch_page_content, extract_snippet_with_context
-from pwrag.utils.utils import get_retriever, get_generator, default
+from pwrag.utils.utils import get_retriever, get_generator, default, per_item, perf_timer
 
 def default(value, factory):
     return value if value is not None else factory()
 
 
-class SearchO1Pipeline(BasicPipeline):
+class Searcho1WebPipeline(BasicPipeline):
     """
     Search-01 style web RAG (faithful to the original script's control flow):
 
@@ -106,18 +106,12 @@ class SearchO1Pipeline(BasicPipeline):
 
     # ---------------- prompt helpers ----------------
 
-    def _build_initial_prompt(self, item: Item) -> str:
-        if any(s in self.config.dataset.dataset_name.lower() for s in ['nq', 'naturalquestions']):
-            instruction = get_singleqa_search_o1_instruction(self.max_search_limit)
-            user_prompt = get_task_instruction_openqa(item.question)
-        
-        elif any(s in self.config.dataset.dataset_name.lower() for s in ['trivia', 'triviaqa', '2wiki', 'hotpotqa']):
-            instruction = get_multiqa_search_o1_instruction(self.max_search_limit)
-            user_prompt = get_task_instruction_openqa(item.question)
-        
+    def _build_initial_prompt(self, item: Item) -> str:     
         #prompt = [{"role": "user", "content": instruction + user_prompt}]
         #prompt1 = self.generator.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
-        prompt = self.prompt_template.get_string(question=item.question)
+        with perf_timer() as elapsed:
+            prompt = self.prompt_template.get_string(question=item.question)
+            item.update_metadata("format_prompt_time(s)", elapsed())
         return prompt
 
         # return self.prompt_template.get_string(question=item.question, retrieval_result=None)
@@ -159,7 +153,7 @@ class SearchO1Pipeline(BasicPipeline):
         # generator.generate returns list[str] for both HF and vLLM wrappers
         outputs = self.generator.generate(
             input_list=prompts,
-            return_token_counts=False,
+            return_token_counts=True,
             **params,
         )
         return outputs
@@ -337,6 +331,7 @@ class SearchO1Pipeline(BasicPipeline):
 
     def _stage_b_batch_generate(
         self,
+        batch_items: List[Item],
         original_questions: List[str],
         prev_reasonings: List[str],
         search_queries: List[str],
@@ -352,24 +347,33 @@ class SearchO1Pipeline(BasicPipeline):
 
         Returns list[str] aligned with inputs.
         """
-        user_prompts = [
-            get_webpage_to_reasonchain_instruction(r, sq, doc)
-            for r, sq, doc in zip(prev_reasonings, search_queries, documents)
-        ]
+        with perf_timer() as elapsed:
+            user_prompts = [
+                get_webpage_to_reasonchain_instruction(r, sq, doc)
+                for r, sq, doc in zip(prev_reasonings, search_queries, documents)
+            ]
 
-        prompts = [{"role": "user", "content": up} for up in user_prompts]
+            prompts = [[{"role": "user", "content": up} for up in user_prompts]]
+            # prompts = [self.prompt_template.get_string(messages=prompt) for prompt in prompts]
+            # prompts = [self.prompt_template.get_string(messages=prompt) for prompt in prompts]
+            # prompts = self.prompt_template.get_string(messages=prompts)
+        avg_time = per_item(elapsed(), len(prompts))
+        self._spread_batch_metrics(batch_items, {"prompt_time(s)": avg_time})
         
-        # prompts = [self.prompt_template.get_string(messages=prompt) for prompt in prompts]
-        prompts = self.prompt_template.get_string(messages=prompts)
+        
+        with perf_timer() as elapsed:
+            preds, token_info = self._step_generate(prompts, stop=None)
+        avg_time = per_item(elapsed(), len(prompts))
+        self._attach_generation_metrics(batch_items, preds, token_info, avg_time, pred_key="stage_b_pred")
 
-        preds = self._step_generate(user_prompts)
+
         extracted_infos = [self.extract_answer(raw, mode='infogen') for raw in preds]
 
         for p, raw, e in zip(user_prompts, preds, extracted_infos):
             batch_output_records.append({"prompt": p, "raw_output": raw, "extracted_info": e})
 
         return extracted_infos
-
+    
     # ---------------- main loop ----------------
 
     def run_batch(self, batch: List[Item]) -> List[Item]:
@@ -403,7 +407,10 @@ class SearchO1Pipeline(BasicPipeline):
             # ---------- Stage A: reason -> (maybe) emits search query ----------
             prompts = [it.metadata["agent_prompt"] for it in items_needing_generation]
             # texts = self._step_generate(prompts, stop=[self.end_search_query, self.generator.tokenizer.eos_token])
-            texts = self._step_generate(prompts, stop=[self.end_search_query, self.generator.tokenizer.eos_token])
+            with perf_timer() as elapsed:
+                texts, token_info = self._step_generate(prompts, stop=[self.end_search_query, self.generator.tokenizer.eos_token])
+            avg_time = per_item(elapsed(), len(batch))
+            self._attach_generation_metrics(items_needing_generation, texts, token_info, avg_time)
 
             # Per-turn batch collections (reset each turn!)
             batch_relevant_info: List[List[Dict[str, Any]]] = []
@@ -428,7 +435,7 @@ class SearchO1Pipeline(BasicPipeline):
                     # no tool call => finished this item (like original else branch)
                     item.metadata["agent_finished"] = True
                     continue
-
+                
                 executed = set(item.metadata["agent_executed_search_queries"])
                 search_count = int(item.metadata["agent_search_count"])
 
@@ -454,45 +461,54 @@ class SearchO1Pipeline(BasicPipeline):
                     continue
 
                 # search + cache
-                relevant_info = self._do_search(search_query)
-                item.metadata["agent_relevant_info"] = relevant_info
+                with perf_timer() as elapsed:
+                    relevant_info = self._do_search(search_query)
+                    item.metadata["agent_relevant_info"] = relevant_info
 
-                # collect urls (uncached) for batch fetch
-                for info in relevant_info:
-                    url = info.get("url")
-                    if url and url not in self.url_cache:
-                        all_urls_to_fetch.append(url)
+                    # collect urls (uncached) for batch fetch
+                    for info in relevant_info:
+                        url = info.get("url")
+                        if url and url not in self.url_cache:
+                            all_urls_to_fetch.append(url)
 
-                # build truncated reasoning (like original)
-                truncated_prev_reasoning = self._truncate_prev_reasoning_like_search01(
-                    item.metadata["agent_raw_output"]
-                )
+                    # build truncated reasoning (like original)
+                    truncated_prev_reasoning = self._truncate_prev_reasoning_like_search01(
+                        item.metadata["agent_raw_output"]
+                    )
 
-                # collect stage-B params
-                batch_relevant_info.append(relevant_info)
-                batch_original_questions.append(item.question)
-                batch_prev_reasonings.append(truncated_prev_reasoning)
-                batch_search_queries.append(search_query)
-                batch_items.append(item)
+                    # collect stage-B params
+                    batch_relevant_info.append(relevant_info)
+                    batch_original_questions.append(item.question)
+                    batch_prev_reasonings.append(truncated_prev_reasoning)
+                    batch_search_queries.append(search_query)
+                    batch_items.append(item)
 
-                # update counters
-                item.metadata["agent_search_count"] = search_count + 1
-                executed.add(search_query)
-                item.metadata["agent_executed_search_queries"] = sorted(executed)
+                    # update counters
+                    item.metadata["agent_search_count"] = search_count + 1
+                    executed.add(search_query)
+                    item.metadata["agent_executed_search_queries"] = sorted(executed)
+                
+                item.update_perf_metrics("total_retrieval_time(s)", elapsed())
+
 
             # ---------- Batch fetch URLs ----------
-            if all_urls_to_fetch:
-                # de-dup while preserving order-ish
-                deduped = list(dict.fromkeys(all_urls_to_fetch))
-                self._batch_fetch_urls(deduped)
-
+            with perf_timer() as elapsed:
+                if all_urls_to_fetch:
+                    # de-dup while preserving order-ish
+                    deduped = list(dict.fromkeys(all_urls_to_fetch))
+                    self._batch_fetch_urls(deduped)
             # ---------- Build formatted docs for stage B ----------
-            for relevant_info in batch_relevant_info:
-                batch_documents.append(self._build_documents_for_item(relevant_info))
+            
+                for relevant_info in batch_relevant_info:
+                    batch_documents.append(self._build_documents_for_item(relevant_info))
+            
+            avg_time = per_item(elapsed(), len(batch_items))
+            self._spread_batch_metrics(batch_items, {"total_retrieval_time(s)": avg_time})
 
             # ---------- Stage B: webpage -> reasonchain ----------
             if batch_items:
                 analyses = self._stage_b_batch_generate(
+                    batch_items=batch_items,
                     original_questions=batch_original_questions,
                     prev_reasonings=batch_prev_reasonings,
                     search_queries=batch_search_queries,
@@ -517,6 +533,7 @@ class SearchO1Pipeline(BasicPipeline):
         # Final output: match FlashRAG expected output field
         for item in batch:
             item.update_output("pred", item.metadata.get("agent_raw_output", ""))
+            item.update_perf_metrics("search_count", item.metadata.get("agent_search_count", 0))
 
         # Optional: store batch_output_records for debugging (can be huge)
         # for item in batch:

@@ -34,12 +34,19 @@ class Item:
         self.output[key] = value
     
     def update_metadata(self, key: str, value: Any) -> None:
-        self.metadata[key] = value
+        # if (key in self.metadata and isinstance(self.metadata[key], (int, float)) and isinstance(value, (int, float))):
+        #     self.metadata[key] += value  # for accumulating metrics like time
+        # else:
+            self.metadata[key] = value
 
     def update_perf_metrics(self, key: str, value: Any) -> None:
         if "metric_perf" not in self.output:
             self.output["metric_perf"] = {}
-        self.output["metric_perf"][key] = value
+
+        if (key in self.output["metric_perf"] and isinstance(self.output["metric_perf"][key], (int, float)) and isinstance(value, (int, float))):
+            self.output["metric_perf"][key] += value  # for accumulating metrics like time
+        else:
+            self.output["metric_perf"][key] = value
 
     def update_evaluation_score(self, metric_name: str, metric_score: float) -> None:
         if "metric_score" not in self.output:

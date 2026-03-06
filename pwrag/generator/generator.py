@@ -330,31 +330,6 @@ class OpenAIAPIGenerator(BaseGenerator):
 
         return out
 
-    # def _map_params(self, generation_params: Dict[str, Any]) -> Dict[str, Any]:
-    #     """
-    #     Map your internal params to OpenAI-compatible request params.
-    #     resolve_max_tokens() in your codebase may produce max_new_tokens; OpenAI uses max_tokens.
-    #     """
-    #     p = dict(generation_params)
-
-    #     # Your code uses do_sample sometimes; OpenAI-style doesn't.
-    #     # If do_sample is False => temperature=0
-    #     if "do_sample" in p:
-    #         do_sample = p.pop("do_sample")
-    #         if not do_sample:
-    #             p["temperature"] = 0
-
-    #     # Convert max_new_tokens -> max_tokens (OpenAI API name)
-    #     if "max_new_tokens" in p and "max_tokens" not in p:
-    #         p["max_tokens"] = p.pop("max_new_tokens")
-
-    #     # vLLM supports stop as string or list, same as OpenAI.
-    #     # Keep "stop" if present.
-
-    #     # seed: vLLM OpenAI server supports seed in many versions; if not, it will ignore.
-    #     # keep p["seed"] if you want; your current generators set it None.
-    #     return p
-
     def _count_prompt_tokens_fallback(self, prompts: List[str]) -> List[int]:
         if self.tokenizer is None:
             return [0] * len(prompts)
@@ -505,7 +480,25 @@ class OpenAIAPIGenerator(BaseGenerator):
 
     #     return outputs_text
 
-
+    def _count_prompt_tokens_for_item(self, prompt, use_chat: bool) -> int:
+        if self.tokenizer is None:
+            return 0
+        try:
+            if use_chat:
+                messages = prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}]
+                if hasattr(self.tokenizer, "apply_chat_template"):
+                    rendered = self.tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True,
+                    )
+                    return len(self.tokenizer.encode(rendered, add_special_tokens=False))
+                
+                text = "\n".join(m.get("content", "") for m in messages)
+                return len(self.tokenizer.encode(text, add_special_tokens=False))
+            return len(self.tokenizer.encode(prompt, add_special_tokens=False))
+        except Exception:
+            return 0
     def generate(
         self,
         input_list: List[str],
@@ -516,11 +509,17 @@ class OpenAIAPIGenerator(BaseGenerator):
     ):
         if isinstance(input_list, str):
             input_list = [input_list]
+        if isinstance(input_list, dict):
+            input_list = [input_list]
 
         generation_params = deepcopy(self.generation_params)
         generation_params.update(params)
 
-        generation_params = resolve_max_tokens(params, generation_params, prioritize_new_tokens=False)
+        generation_params = resolve_max_tokens(
+            params,
+            generation_params,
+            prioritize_new_tokens=False,
+        )
         generation_params = self._map_params(generation_params)
 
         stop = generation_params.get("stop")
@@ -537,16 +536,10 @@ class OpenAIAPIGenerator(BaseGenerator):
         if return_scores and "logprobs" not in generation_params:
             generation_params["logprobs"] = 5
 
-        prompt_token_counts = None
-        if return_token_counts:
-            prompt_token_counts = self._count_prompt_tokens_fallback(input_list)
-
         outputs_text = []
         raw_outputs = []
         scores = []
-        completion_token_counts = []
-
-        use_chat = (self.api_mode.lower() == "chat")
+        use_chat = self.api_mode.lower() == "chat"
 
         for prompt in input_list:
             if use_chat:
@@ -564,7 +557,16 @@ class OpenAIAPIGenerator(BaseGenerator):
                     **generation_params,
                 }
 
-            r = self.session.post(url, headers=self._headers(), json=payload, timeout=self.timeout)
+            r = self.session.post(
+                url,
+                headers=self._headers(),
+                json=payload,
+                timeout=self.timeout,
+            )
+            if not r.ok:
+                print("STATUS:", r.status_code)
+                # print("PAYLOAD:", payload)
+                print("RESPONSE:", r.text)
             r.raise_for_status()
             data = r.json()
             raw_outputs.append(data)
@@ -586,28 +588,36 @@ class OpenAIAPIGenerator(BaseGenerator):
                 else:
                     scores.append([])
 
-            if return_token_counts:
+        if return_token_counts:
+            prompt_token_counts = []
+            completion_token_counts = []
+            total_token_counts = []
+
+            for i, data in enumerate(raw_outputs):
                 usage = data.get("usage", {})
+
+                p = usage.get("prompt_tokens")
                 c = usage.get("completion_tokens")
+                t = usage.get("total_tokens")
+
+                if p is None:
+                    p = self._count_prompt_tokens_for_item(input_list[i], use_chat=use_chat)
+
                 if c is None:
                     if self.tokenizer is not None and not return_raw_output:
-                        c = len(self.tokenizer.encode(outputs_text[-1], add_special_tokens=False))
+                        c = len(self.tokenizer.encode(outputs_text[i], add_special_tokens=False))
                     else:
                         c = 0
+
+                if t is None:
+                    t = int(p) + int(c)
+
+                prompt_token_counts.append(int(p))
                 completion_token_counts.append(int(c))
+                total_token_counts.append(int(t))
 
-        if return_token_counts:
-            final_prompt_counts = []
-            for i, data in enumerate(raw_outputs):
-                p = data.get("usage", {}).get("prompt_tokens")
-                if p is not None:
-                    final_prompt_counts.append(int(p))
-                else:
-                    final_prompt_counts.append(int(prompt_token_counts[i]) if prompt_token_counts else 0)
-
-            total_token_counts = [p + c for p, c in zip(final_prompt_counts, completion_token_counts)]
             token_info = {
-                "prompt_token_counts": final_prompt_counts,
+                "prompt_token_counts": prompt_token_counts,
                 "completion_token_counts": completion_token_counts,
                 "total_token_counts": total_token_counts,
             }
@@ -621,7 +631,6 @@ class OpenAIAPIGenerator(BaseGenerator):
             return outputs_text, token_info
 
         return outputs_text
-
 
 
 
