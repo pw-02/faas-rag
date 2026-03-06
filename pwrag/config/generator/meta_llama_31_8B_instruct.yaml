@@ -2,7 +2,7 @@ name: meta_llama_31_8B_instruct
 framework: openai #vllm #hf
 model_name: meta-llama/Meta-Llama-3.1-8B-Instruct #Meta-Llama-3-8B-Instruct
 model_path: meta-llama/Meta-Llama-3.1-8B-Instruct
-max_input_length: 32768
+max_input_length: 12500
 batch_size: 32
 openai_endpoint: http://134.197.95.82:8000
 
