@@ -4,9 +4,9 @@ defaults:
   - dataset: hotpotqa
     # options: sequential_rag,  llm_only, retrieval_only, flare, rqrag, all, search_o1, search_o1_vector
   - retriever/pipeline: search_o1 # search_o1_vector
-  - retriever/corpus: wiki_100k #wiki_100k
+  - retriever/corpus: wiki_21 #wiki_100k, wiki_21
   - retriever/encoder: dpr
-  - retriever/index: wiki_dpr_hnsw_100k #wiki_dpr_hnsw_100k
+  - retriever/index: wiki_dpr_ivf_21m #wiki_dpr_hnsw_100k
   - retriever/cache: none # options: null, proximity, none
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled
