@@ -12,7 +12,7 @@ defaults:
   - override hydra/hydra_logging: disabled
   - _self_
 
-retrieval_topk: 2
+retrieval_topk: 3
 # ------------
 generator_device: cuda:0
 retriever_encoder_device: cuda:0
