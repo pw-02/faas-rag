@@ -3,7 +3,7 @@ defaults:
     #nq, repeated_question, mmlu_econometrics, 2wiki, search_o1_test, hotpotqa
   - dataset: hotpotqa
     # options: sequential_rag,  llm_only, retrieval_only, flare, rqrag, all, search_o1, search_o1_vector
-  - retriever/pipeline: search_o1 # search_o1_vector
+  - retriever/pipeline: sequential_rag # search_o1_vector, 
   - retriever/corpus: wiki_21 #wiki_100k, wiki_21
   - retriever/encoder: dpr
   - retriever/index: wiki_dpr_ivf_21m #wiki_dpr_hnsw_100k
