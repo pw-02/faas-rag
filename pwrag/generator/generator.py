@@ -130,6 +130,7 @@ class VLLMGenerator(BaseGenerator):
 
         generation_params = deepcopy(self.generation_params)
         generation_params.update(params)
+        generation_params["max_new_tokens"] = 28000  # set a default max_tokens to avoid vLLM error; will be resolved properly in resolve_max_tokens
 
         if "do_sample" in generation_params:
             do_sample_flag = generation_params.pop("do_sample")
@@ -162,7 +163,7 @@ class VLLMGenerator(BaseGenerator):
                 return_tensors="pt",
                 padding=True,
                 truncation=True,
-                max_length=getattr(self, "max_input_len", None),
+                max_length=self.max_input_len,
             )
 
             if "attention_mask" in tok:
