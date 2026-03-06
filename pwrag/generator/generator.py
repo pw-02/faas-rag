@@ -15,7 +15,6 @@ from pwrag.args.args import AppConfig
 from pwrag.generator.utils import resolve_max_tokens
 from pwrag.utils.utils import timed
 from pwrag.generator.stop_word_criteria import StopWordCriteria
-from vllm import LLM, SamplingParams
 
 def get_device() -> str:
     return "cuda" if torch.cuda.is_available() else "cpu"
