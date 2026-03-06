@@ -186,7 +186,7 @@ def fetch_page_content(urls, max_workers: int = 32, use_jina: bool = False,
                 results[url] = data
             except Exception as exc:
                 results[url] = f"Error fetching {url}: {exc}"
-            time.sleep(0.2)  # Simple rate limiting
+            # time.sleep(0.2)  # Simple rate limiting
 
     return results
 
