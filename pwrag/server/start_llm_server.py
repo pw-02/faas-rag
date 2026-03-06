@@ -18,7 +18,7 @@ def start_server(cfg: AppConfig) -> None:
         "--host", "0.0.0.0",
         "--port", port,
         "--gpu-memory-utilization", "0.95",
-        "--max-model-len", "100000",
+        "--max-model-len", "10000",
     ]
 
     print("Starting vLLM server...")
