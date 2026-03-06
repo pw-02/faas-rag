@@ -362,10 +362,16 @@ def get_task_instruction_openqa(question, model_name=None):
             f'Question:\n{question}\n\n'
         )
     else:
+        # user_prompt = (
+        #     'Please answer the following question. You should think step by step to solve it.\n\n'
+        #     'Provide your final answer in the format \\boxed{YOUR_ANSWER}.\n\n'
+        #     f'Question:\n{question}\n\n'
+        # )
+        
         user_prompt = (
             'Please answer the following question. You should think step by step to solve it.\n\n'
-            'Provide your final answer in the format \\boxed{YOUR_ANSWER}.\n\n'
-            f'Question:\n{question}\n\n'
+            'Provide your final answer in the format \\boxed{{YOUR_ANSWER}}.\n\n'
+            'Question:\n{question}\n\n'
         )
     return user_prompt
 

@@ -297,31 +297,63 @@ class OpenAIAPIGenerator(BaseGenerator):
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
-
+    
     def _map_params(self, generation_params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Map your internal params to OpenAI-compatible request params.
-        resolve_max_tokens() in your codebase may produce max_new_tokens; OpenAI uses max_tokens.
-        """
         p = dict(generation_params)
 
-        # Your code uses do_sample sometimes; OpenAI-style doesn't.
-        # If do_sample is False => temperature=0
         if "do_sample" in p:
             do_sample = p.pop("do_sample")
             if not do_sample:
                 p["temperature"] = 0
 
-        # Convert max_new_tokens -> max_tokens (OpenAI API name)
         if "max_new_tokens" in p and "max_tokens" not in p:
             p["max_tokens"] = p.pop("max_new_tokens")
 
-        # vLLM supports stop as string or list, same as OpenAI.
-        # Keep "stop" if present.
+        allowed = {
+            "temperature",
+            "top_p",
+            "max_tokens",
+            "stop",
+            "seed",
+            "logprobs",
+            "n",
+            "presence_penalty",
+            "frequency_penalty",
+        }
 
-        # seed: vLLM OpenAI server supports seed in many versions; if not, it will ignore.
-        # keep p["seed"] if you want; your current generators set it None.
-        return p
+        out = {k: v for k, v in p.items() if k in allowed}
+
+        if "top_k" in p:
+            out["top_k"] = p["top_k"]
+        if "repetition_penalty" in p:
+            out["repetition_penalty"] = p["repetition_penalty"]
+
+        return out
+
+    # def _map_params(self, generation_params: Dict[str, Any]) -> Dict[str, Any]:
+    #     """
+    #     Map your internal params to OpenAI-compatible request params.
+    #     resolve_max_tokens() in your codebase may produce max_new_tokens; OpenAI uses max_tokens.
+    #     """
+    #     p = dict(generation_params)
+
+    #     # Your code uses do_sample sometimes; OpenAI-style doesn't.
+    #     # If do_sample is False => temperature=0
+    #     if "do_sample" in p:
+    #         do_sample = p.pop("do_sample")
+    #         if not do_sample:
+    #             p["temperature"] = 0
+
+    #     # Convert max_new_tokens -> max_tokens (OpenAI API name)
+    #     if "max_new_tokens" in p and "max_tokens" not in p:
+    #         p["max_tokens"] = p.pop("max_new_tokens")
+
+    #     # vLLM supports stop as string or list, same as OpenAI.
+    #     # Keep "stop" if present.
+
+    #     # seed: vLLM OpenAI server supports seed in many versions; if not, it will ignore.
+    #     # keep p["seed"] if you want; your current generators set it None.
+    #     return p
 
     def _count_prompt_tokens_fallback(self, prompts: List[str]) -> List[int]:
         if self.tokenizer is None:
@@ -333,6 +365,146 @@ class OpenAIAPIGenerator(BaseGenerator):
             return [int(x) for x in tok["attention_mask"].sum(dim=1).tolist()]
         pad_id = self.tokenizer.pad_token_id
         return [int(x) for x in (tok["input_ids"] != pad_id).sum(dim=1).tolist()]
+
+    # def generate(
+    #     self,
+    #     input_list: List[str],
+    #     return_raw_output: bool = False,
+    #     return_scores: bool = False,
+    #     return_token_counts: bool = False,
+    #     **params,
+    # ):
+    #     if isinstance(input_list, str):
+    #         input_list = [input_list]
+
+    #     generation_params = deepcopy(self.generation_params)
+    #     generation_params.update(params)
+
+    #     # keep your existing token-limit conflict handling consistent
+    #     generation_params = resolve_max_tokens(params, generation_params, prioritize_new_tokens=False)
+    #     generation_params = self._map_params(generation_params)
+
+    #     # stop = generation_params.get("stop")
+    #     # if stop is None:
+    #     #     generation_params["stop"] = ["<|eot_id|>"]
+    #     # elif isinstance(stop, str):
+    #     #     generation_params["stop"] = [stop, "<|eot_id|>"]
+    #     # else:
+    #     #     generation_params["stop"] = list(stop) + ["<|eot_id|>"]
+
+    #     if "stop" in generation_params:
+    #         generation_params["stop"].append("<|eot_id|>")
+    #         generation_params["include_stop_str_in_output"] = True
+    #     else:
+    #         generation_params["stop"] = ["<|eot_id|>"]
+
+    #     # If user asked for scores, request logprobs if supported
+    #     # (OpenAI-style: "logprobs": True / int depending on endpoint; vLLM often accepts int)
+    #     if return_scores and "logprobs" not in generation_params:
+    #         generation_params["logprobs"] = 5  # small default; increase if you need
+        
+    #     generation_params["skip_special_tokens"] = False
+
+    #     # Token counting fallba        prompt_token_counts = None
+    #     if return_token_counts:
+    #         prompt_token_counts = self._count_prompt_tokens_fallback(input_list)
+
+    #     outputs_text = []
+    #     scores = []
+    #     completion_token_counts = []
+
+    #     # Choose endpoint
+    #     use_chat = (self.api_mode.lower() == "chat")
+
+    #     for prompt in input_list:
+    #         if use_chat:
+    #             url = f"{self.api_base}/v1/chat/completions"
+    #             payload = {
+    #                 "model": self.api_model,
+    #                 "messages": prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}],
+    #                 **generation_params,
+    #             }
+    #         else:
+    #             url = f"{self.api_base}/v1/completions"
+    #             payload = {
+    #                 "model": self.api_model,
+    #                 "prompt": prompt,
+    #                 **generation_params,
+    #             }
+
+    #         r = self.session.post(url, headers=self._headers(), json=payload, timeout=self.timeout)
+    #         r.raise_for_status()
+    #         data = r.json()
+
+    #         if return_raw_output:
+    #             outputs_text.append(data)
+    #             # still try to attach token counts if requested
+    #         else:
+    #             if use_chat:
+    #                 text = data["choices"][0]["message"]["content"]
+    #             else:
+    #                 text = data["choices"][0]["text"]
+    #             outputs_text.append(text)
+
+    #         # scores (best-effort)
+    #         if return_scores:
+    #             # vLLM may return token logprobs under choices[0]["logprobs"]
+    #             lp = data["choices"][0].get("logprobs")
+    #             if lp and "token_logprobs" in lp and lp["token_logprobs"] is not None:
+    #                 # convert logprobs -> probs
+    #                 token_probs = [float(np.exp(x)) if x is not None else None for x in lp["token_logprobs"]]
+    #                 scores.append(token_probs)
+    #             else:
+    #                 scores.append([])
+
+    #         # token usage if available
+    #         if return_token_counts:
+    #             usage = data.get("usage", {})
+    #             c = usage.get("completion_tokens")
+    #             if c is None:
+    #                 # fallback: tokenize output text
+    #                 if self.tokenizer is not None and not return_raw_output:
+    #                     c = len(self.tokenizer.encode(outputs_text[-1], add_special_tokens=False))
+    #                 else:
+    #                     c = 0
+    #             completion_token_counts.append(int(c))
+
+    #     if return_token_counts:
+    #         # If server provided prompt_tokens, prefer them, else fallback counts
+    #         # (vLLM typically returns usage.prompt_tokens, but not always)
+    #         server_prompt_counts = []
+    #         for i, out in enumerate(outputs_text):
+    #             # if return_raw_output, out is dict; else no access -> use fallback
+    #             if return_raw_output and isinstance(out, dict):
+    #                 p = out.get("usage", {}).get("prompt_tokens")
+    #                 server_prompt_counts.append(p)
+    #             else:
+    #                 server_prompt_counts.append(None)
+
+    #         final_prompt_counts = []
+    #         for i in range(len(input_list)):
+    #             if server_prompt_counts[i] is not None:
+    #                 final_prompt_counts.append(int(server_prompt_counts[i]))
+    #             else:
+    #                 final_prompt_counts.append(int(prompt_token_counts[i]) if prompt_token_counts else 0)
+
+    #         total_token_counts = [p + c for p, c in zip(final_prompt_counts, completion_token_counts)]
+    #         token_info = {
+    #             "prompt_token_counts": final_prompt_counts,
+    #             "completion_token_counts": completion_token_counts,
+    #             "total_token_counts": total_token_counts,
+    #         }
+
+    #     if return_scores:
+    #         if return_token_counts:
+    #             return outputs_text, scores, token_info
+    #         return outputs_text, scores
+
+    #     if return_token_counts:
+    #         return outputs_text, token_info
+
+    #     return outputs_text
+
 
     def generate(
         self,
@@ -348,38 +520,32 @@ class OpenAIAPIGenerator(BaseGenerator):
         generation_params = deepcopy(self.generation_params)
         generation_params.update(params)
 
-        # keep your existing token-limit conflict handling consistent
         generation_params = resolve_max_tokens(params, generation_params, prioritize_new_tokens=False)
         generation_params = self._map_params(generation_params)
 
-        # stop = generation_params.get("stop")
-        # if stop is None:
-        #     generation_params["stop"] = ["<|eot_id|>"]
-        # elif isinstance(stop, str):
-        #     generation_params["stop"] = [stop, "<|eot_id|>"]
-        # else:
-        #     generation_params["stop"] = list(stop) + ["<|eot_id|>"]
-
-        if "stop" in generation_params:
-            generation_params["stop"].append("<|eot_id|>")
-            generation_params["include_stop_str_in_output"] = True
-        else:
+        stop = generation_params.get("stop")
+        if stop is None:
             generation_params["stop"] = ["<|eot_id|>"]
+        elif isinstance(stop, str):
+            generation_params["stop"] = [stop, "<|eot_id|>"]
+        else:
+            generation_params["stop"] = list(stop) + ["<|eot_id|>"]
 
-        # If user asked for scores, request logprobs if supported
-        # (OpenAI-style: "logprobs": True / int depending on endpoint; vLLM often accepts int)
+        generation_params["include_stop_str_in_output"] = True
+        generation_params["skip_special_tokens"] = False
+
         if return_scores and "logprobs" not in generation_params:
-            generation_params["logprobs"] = 5  # small default; increase if you need
+            generation_params["logprobs"] = 5
 
-        # Token counting fallba        prompt_token_counts = None
+        prompt_token_counts = None
         if return_token_counts:
             prompt_token_counts = self._count_prompt_tokens_fallback(input_list)
 
         outputs_text = []
+        raw_outputs = []
         scores = []
         completion_token_counts = []
 
-        # Choose endpoint
         use_chat = (self.api_mode.lower() == "chat")
 
         for prompt in input_list:
@@ -401,10 +567,10 @@ class OpenAIAPIGenerator(BaseGenerator):
             r = self.session.post(url, headers=self._headers(), json=payload, timeout=self.timeout)
             r.raise_for_status()
             data = r.json()
+            raw_outputs.append(data)
 
             if return_raw_output:
                 outputs_text.append(data)
-                # still try to attach token counts if requested
             else:
                 if use_chat:
                     text = data["choices"][0]["message"]["content"]
@@ -412,23 +578,18 @@ class OpenAIAPIGenerator(BaseGenerator):
                     text = data["choices"][0]["text"]
                 outputs_text.append(text)
 
-            # scores (best-effort)
             if return_scores:
-                # vLLM may return token logprobs under choices[0]["logprobs"]
                 lp = data["choices"][0].get("logprobs")
                 if lp and "token_logprobs" in lp and lp["token_logprobs"] is not None:
-                    # convert logprobs -> probs
                     token_probs = [float(np.exp(x)) if x is not None else None for x in lp["token_logprobs"]]
                     scores.append(token_probs)
                 else:
                     scores.append([])
 
-            # token usage if available
             if return_token_counts:
                 usage = data.get("usage", {})
                 c = usage.get("completion_tokens")
                 if c is None:
-                    # fallback: tokenize output text
                     if self.tokenizer is not None and not return_raw_output:
                         c = len(self.tokenizer.encode(outputs_text[-1], add_special_tokens=False))
                     else:
@@ -436,21 +597,11 @@ class OpenAIAPIGenerator(BaseGenerator):
                 completion_token_counts.append(int(c))
 
         if return_token_counts:
-            # If server provided prompt_tokens, prefer them, else fallback counts
-            # (vLLM typically returns usage.prompt_tokens, but not always)
-            server_prompt_counts = []
-            for i, out in enumerate(outputs_text):
-                # if return_raw_output, out is dict; else no access -> use fallback
-                if return_raw_output and isinstance(out, dict):
-                    p = out.get("usage", {}).get("prompt_tokens")
-                    server_prompt_counts.append(p)
-                else:
-                    server_prompt_counts.append(None)
-
             final_prompt_counts = []
-            for i in range(len(input_list)):
-                if server_prompt_counts[i] is not None:
-                    final_prompt_counts.append(int(server_prompt_counts[i]))
+            for i, data in enumerate(raw_outputs):
+                p = data.get("usage", {}).get("prompt_tokens")
+                if p is not None:
+                    final_prompt_counts.append(int(p))
                 else:
                     final_prompt_counts.append(int(prompt_token_counts[i]) if prompt_token_counts else 0)
 
@@ -470,9 +621,6 @@ class OpenAIAPIGenerator(BaseGenerator):
             return outputs_text, token_info
 
         return outputs_text
-
-
-
 
 
 

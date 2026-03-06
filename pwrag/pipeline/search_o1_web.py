@@ -4,9 +4,14 @@ import json
 from pwrag.dataset.dataset import Item
 from pwrag.pipeline.pipeline import BasicPipeline
 from pwrag.prompt.base_prompt import PromptTemplate
-from pwrag.prompt.prompts import get_multiqa_search_o1_instruction, get_singleqa_search_o1_instruction, get_task_instruction_openqa, get_webpage_to_reasonchain_instruction
+from pwrag.prompt.prompts import (
+    get_multiqa_search_o1_instruction, 
+    get_singleqa_search_o1_instruction, 
+    get_task_instruction_openqa, 
+    get_webpage_to_reasonchain_instruction
+)
 from pwrag.retriever.brave_search import brave_web_search, extract_relevant_info, fetch_page_content, extract_snippet_with_context
-from pwrag.utils.utils import get_retriever, get_generator, perf_timer, per_item, default
+from pwrag.utils.utils import get_retriever, get_generator, default
 
 def default(value, factory):
     return value if value is not None else factory()
@@ -35,11 +40,30 @@ class SearchO1Pipeline(BasicPipeline):
 
     def __init__(self, config, prompt_template=None, retriever=None, generator=None, cache=None):
         super().__init__(config, prompt_template)
+        self.max_search_limit = getattr(config, "max_search_limit", 5)
 
         # self.retriever = default(retriever, lambda: get_retriever(config))  # unused (kept)
         self.generator = default(generator, lambda: get_generator(config))
         self.cache = cache  # optional external cache (unused here)
-        self.prompt_template = default(prompt_template, lambda: PromptTemplate(config))
+        
+        if any(s in self.config.dataset.dataset_name.lower() for s in ['nq', 'naturalquestions']):
+            system_prompt = get_singleqa_search_o1_instruction(self.max_search_limit)
+            user_prompt = get_task_instruction_openqa("{question}")
+        
+        elif any(s in self.config.dataset.dataset_name.lower() for s in ['trivia', 'triviaqa', '2wiki', 'hotpotqa']):
+            # system_prompt = get_multiqa_search_o1_instruction(self.max_search_limit)
+            # user_prompt = get_task_instruction_openqa("{question}")
+            system_prompt = "\nYou are a helpful assistant"
+            user_prompt = get_multiqa_search_o1_instruction(self.max_search_limit) + get_task_instruction_openqa("{question}")
+        
+        self.prompt_template = PromptTemplate(
+            config=config,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt
+        )
+
+
+        # self.prompt_template = default(prompt_template, lambda: PromptTemplate(config))
 
         # tags (match search-01)
         self.begin_search_query = "<|begin_search_query|>"
@@ -91,15 +115,17 @@ class SearchO1Pipeline(BasicPipeline):
             instruction = get_multiqa_search_o1_instruction(self.max_search_limit)
             user_prompt = get_task_instruction_openqa(item.question)
         
-        prompt = [{"role": "user", "content": instruction + user_prompt}]
-        prompt = self.prompt_template.get_string(messages=prompt)
+        #prompt = [{"role": "user", "content": instruction + user_prompt}]
+        #prompt1 = self.generator.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
+        prompt = self.prompt_template.get_string(question=item.question)
         return prompt
 
         # return self.prompt_template.get_string(question=item.question, retrieval_result=None)
     
 
     def _append(self, item: Item, chunk: str) -> None:
-        item.metadata["agent_prompt"] += chunk
+        # item.metadata["agent_prompt"] += chunk
+        item.metadata["agent_prompt"][1]['content'] += chunk
         item.metadata["agent_raw_output"] += chunk
         item.metadata["agent_history"].append(chunk)
 
@@ -275,6 +301,39 @@ class SearchO1Pipeline(BasicPipeline):
             formatted_documents += json.dumps(doc_info, ensure_ascii=False, indent=2) + "\n"
 
         return formatted_documents
+    
+    def extract_answer(self, output: str, mode: str = 'infogen') -> str:    
+        extracted_text = ''
+        if mode == 'codegen':
+            # Extract the code between ```python and ```
+            pattern = r'```python\s*(.*?)\s*```'
+            matches = re.findall(pattern, output, re.DOTALL | re.IGNORECASE)
+            if matches:
+                extracted_text = matches[-1].strip()  # Take the last match
+        elif mode == 'infogen':
+            # Extract content after **Final Information** or **Modified Reasoning Steps**
+            pattern_info = "**Final Information**"
+            pattern_step = "**Modified Reasoning Steps**"
+            if pattern_info in output:
+                extracted_text = output.split(pattern_info)[-1].replace("\n","").strip("```").strip()
+            elif pattern_step in output:
+                extracted_text = output.split(pattern_step)[-1].strip("```").strip()
+            else:
+                extracted_text = "No helpful information found."
+        else:
+            # Existing extraction logic for 'gen' and 'choose' modes
+            pattern = r'\\boxed\{(.*)\}'
+            matches = re.findall(pattern, output)
+            if matches:
+                extracted_text = matches[-1]  # Take the last match
+                if mode in ['choose', 'qa']:
+                    # Handle 'choose' mode
+                    inner_pattern = r'\\text\{(.*)\}'
+                    inner_matches = re.findall(inner_pattern, extracted_text)
+                    if inner_matches:
+                        extracted_text = inner_matches[-1]  # Take the last match
+                    extracted_text = extracted_text.strip("()")
+        return extracted_text
 
     def _stage_b_batch_generate(
         self,
@@ -293,25 +352,23 @@ class SearchO1Pipeline(BasicPipeline):
 
         Returns list[str] aligned with inputs.
         """
-        if self.webpage_to_reasonchain_instruction_fn is None:
-            # Fallback prompt (works, but you should plug your real instruction builder)
-            user_prompts = [
-                f"Question: {q}\n\nPrevious reasoning:\n{r}\n\nSearch query:\n{sq}\n\nDocuments:\n{doc}\n\n"
-                "Update the reasoning and extract the needed information."
-                for q, r, sq, doc in zip(original_questions, prev_reasonings, search_queries, documents)
-            ]
-        else:
-            user_prompts = [
-                self.webpage_to_reasonchain_instruction_fn(r, sq, doc)
-                for r, sq, doc in zip(prev_reasonings, search_queries, documents)
-            ]
+        user_prompts = [
+            get_webpage_to_reasonchain_instruction(r, sq, doc)
+            for r, sq, doc in zip(prev_reasonings, search_queries, documents)
+        ]
 
-        preds = self._step_generate(user_prompts, stop=None)
+        prompts = [{"role": "user", "content": up} for up in user_prompts]
+        
+        # prompts = [self.prompt_template.get_string(messages=prompt) for prompt in prompts]
+        prompts = self.prompt_template.get_string(messages=prompts)
 
-        for p, raw in zip(user_prompts, preds):
-            batch_output_records.append({"prompt": p, "raw_output": raw})
+        preds = self._step_generate(user_prompts)
+        extracted_infos = [self.extract_answer(raw, mode='infogen') for raw in preds]
 
-        return preds
+        for p, raw, e in zip(user_prompts, preds, extracted_infos):
+            batch_output_records.append({"prompt": p, "raw_output": raw, "extracted_info": e})
+
+        return extracted_infos
 
     # ---------------- main loop ----------------
 
@@ -345,6 +402,7 @@ class SearchO1Pipeline(BasicPipeline):
 
             # ---------- Stage A: reason -> (maybe) emits search query ----------
             prompts = [it.metadata["agent_prompt"] for it in items_needing_generation]
+            # texts = self._step_generate(prompts, stop=[self.end_search_query, self.generator.tokenizer.eos_token])
             texts = self._step_generate(prompts, stop=[self.end_search_query, self.generator.tokenizer.eos_token])
 
             # Per-turn batch collections (reset each turn!)
@@ -439,7 +497,7 @@ class SearchO1Pipeline(BasicPipeline):
                     prev_reasonings=batch_prev_reasonings,
                     search_queries=batch_search_queries,
                     documents=batch_documents,
-                    dataset_name=getattr(self.config, "dataset_name", "unknown"),
+                    dataset_name=self.config.dataset.dataset_name,
                     batch_output_records=batch_output_records,
                 )
 

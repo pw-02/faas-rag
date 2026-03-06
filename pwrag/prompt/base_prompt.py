@@ -5,7 +5,12 @@ from transformers import AutoTokenizer, AutoConfig
 from pwrag.args.args import AppConfig
 import tiktoken
 import warnings
-
+from pwrag.prompt.prompts import (
+    get_multiqa_search_o1_instruction, 
+    get_singleqa_search_o1_instruction, 
+    get_task_instruction_openqa, 
+    get_webpage_to_reasonchain_instruction
+)
   # self.zero_shot_templete = PromptTemplate(
     #         config=config,
     #         system_prompt="Answer the question based on your own knowledge. \
@@ -23,14 +28,16 @@ class PromptTemplate:
         "\nThe following are given documents.\n\n{reference}"
     )
     base_user_prompt = "Question: {question}"
+    test = "test: {test}"
 
     def __init__(self, config: AppConfig, system_prompt="", user_prompt="", reference_template=None, enable_chat=True):
 
         self.config = config
         self.is_openai = config.generator.framework == "openai"
         self.max_input_len = config.generator.max_input_length
+        self.generator_path = config.generator.model_path if config.generator.model_path is not None else config.generator.model_name
+
         if not self.is_openai:
-            self.generator_path = config.generator.model_path if config.generator.model_path is not None else config.generator.model_name
             model_config = AutoConfig.from_pretrained(self.generator_path, trust_remote_code=True)
             model_name = model_config._name_or_path.lower()
             self.is_chat = False
@@ -49,18 +56,25 @@ class PromptTemplate:
         self.reference_template = reference_template
         self.tokenizer = None
 
-        # self._check_placeholder()
     def _get_tokenizer(self):
         if self.tokenizer is None:
-            if self.is_openai:
-                try:
-                    self.tokenizer = tiktoken.encoding_for_model(self.config.generator.model_name)
-                except Exception as e:
-                    print("Error: ", e)
-                    warnings.warn("This model is not supported by tiktoken. Use gpt-3.5-turbo instead.")
-                    self.tokenizer = tiktoken.encoding_for_model('gpt-3.5-turbo')
-            else:
-                self.tokenizer = AutoTokenizer.from_pretrained(self.generator_path, trust_remote_code=True)
+            model_name = self.config.generator.model_name
+
+            try:
+                if self.is_openai and model_name.startswith("gpt-"):
+                    self.tokenizer = tiktoken.encoding_for_model(model_name)
+                else:
+                    self.tokenizer = AutoTokenizer.from_pretrained(
+                        self.generator_path,
+                        trust_remote_code=True,
+                    )
+            except Exception as e:
+                print("Error:", e)
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.generator_path,
+                    trust_remote_code=True,
+                )
+
         return self.tokenizer
 
 

@@ -2,8 +2,8 @@ defaults:
   - generator:  qwen2_0_5b_instruct #qwen2_0_5b_instruct, meta_llama_3_8B_Instruct, rq_rag_llama2_7B
     #nq, repeated_question, mmlu_econometrics, 2wiki, search_o1_test, hotpotqa
   - dataset: search_o1_test
-    # options: sequential_rag,  llm_only, retrieval_only, flare, rqrag, all, search_o1
-  - retriever/pipeline: search_o1 
+    # options: sequential_rag,  llm_only, retrieval_only, flare, rqrag, all, search_o1, search_o1_vector
+  - retriever/pipeline: search_o1 # search_o1_vector
   - retriever/corpus: wiki_100k #wiki_100k
   - retriever/encoder: dpr
   - retriever/index: wiki_dpr_hnsw_100k #wiki_dpr_hnsw_100k

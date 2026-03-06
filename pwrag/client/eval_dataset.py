@@ -20,15 +20,16 @@ from pwrag.evaluator.evaluator import Evaluator
 from pwrag.pipeline.pipeline import (
     LLMOnlyPipeline, RetrievalOnlyPipeline, SequentialRAGPipeline
 )
-from pwrag.pipeline.active_pipeline import FLAREPipeline, RQRAGPipeline
-from pwrag.pipeline.search_o1 import SearchO1Pipeline
+from pwrag.pipeline.active_pipeline import FLAREPipeline
+from pwrag.pipeline.search_o1_web import SearchO1Pipeline
+from pwrag.pipeline.search_o1_vector import SearchO1VectorPipeline
 from pwrag.logging.run_logger import RunLogger
 
 
 def run_eval(
     cfg: AppConfig,
     dataset: Dataset,
-    pipeline: LLMOnlyPipeline | RetrievalOnlyPipeline | SequentialRAGPipeline | FLAREPipeline,
+    pipeline: LLMOnlyPipeline | RetrievalOnlyPipeline | SequentialRAGPipeline | FLAREPipeline | SearchO1VectorPipeline,
     evaluator: Evaluator,
     run_logger: RunLogger,
     desc: str = "Generating + Evaluating",
@@ -77,6 +78,9 @@ def main(cfg: AppConfig) -> None:
     elif cfg.retriever.pipeline.name == "search_o1":
         print("Running evaluation with SearchO1Pipeline...")
         pipelines = [SearchO1Pipeline(cfg)]
+    elif cfg.retriever.pipeline.name == "search_o1_vector":
+        print("Running evaluation with SearchO1VectorPipeline...")
+        pipelines = [SearchO1VectorPipeline(cfg)]
     elif cfg.retriever.pipeline.name == "all":
         print("Running evaluation with all pipelines...")
         pipelines = [LLMOnlyPipeline(cfg), RetrievalOnlyPipeline(cfg), SequentialRAGPipeline(cfg), FLAREPipeline(cfg)]
