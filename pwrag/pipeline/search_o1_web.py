@@ -82,8 +82,8 @@ class Searcho1WebPipeline(BasicPipeline):
         # web config
         self.brave_api_key = getattr(config, "brave_api_key", "BSAwFH9sF7CRI00LnmfXoFTXuY-ZXUg")
         self.brave_endpoint = getattr(config, "brave_endpoint", "https://api.search.brave.com/res/v1/web/search")
-        self.use_jina = getattr(config, "use_jina", False)
-        self.jina_api_key = getattr(config, "jina_api_key", None)
+        self.use_jina = getattr(config, "use_jina", True)
+        self.jina_api_key = getattr(config, "jina_api_key", "jina_1b9b35dc727848c19911118cc82e82bcgWRPzDJnas7FeJCceDBw5RKT0VuJ")
 
         # generation knobs
         # Prefer max_new_tokens (works consistently for HF generator; vLLM wrapper resolves too)
