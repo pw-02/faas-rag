@@ -19,7 +19,7 @@ def start_server(cfg: AppConfig) -> None:
         "--port", port,
         "--gpu-memory-utilization", "0.95",
         "--max-model-len", "20000",
-        "--generation-config", "vllm",
+        # "--generation-config", "vllm",
 
     ]
 
