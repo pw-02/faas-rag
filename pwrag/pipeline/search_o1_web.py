@@ -76,7 +76,7 @@ class Searcho1WebPipeline(BasicPipeline):
         # limits / knobs
         self.max_search_limit = getattr(config, "max_search_limit", 5)
         self.max_turn = getattr(config, "max_turn", 10)
-        self.top_k = getattr(config, "top_k", 5)
+        self.top_k = getattr(config, "top_k", 3)
         self.max_doc_len = getattr(config, "max_doc_len", 2000)
 
         # web config
