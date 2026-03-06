@@ -20,7 +20,7 @@ class GeneratorConfig:
     max_input_length: int = 2048
     batch_size: int = 2
     generation_params: Optional[Dict[str, Any]] = None
-
+    openai_endpoint: Optional[str] = None
 
 # ---- cache ----
 @dataclass

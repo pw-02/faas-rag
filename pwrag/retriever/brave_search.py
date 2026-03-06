@@ -13,8 +13,8 @@ from io import BytesIO
 import re
 import string
 from typing import Optional, Tuple
-from nltk.tokenize import sent_tokenize
-nltk.download("punkt")
+# from nltk.tokenize import sent_tokenize
+# nltk.download("punkt")
 
 # ----------------------- Custom Headers -----------------------
 headers = {

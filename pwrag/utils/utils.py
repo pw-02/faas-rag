@@ -29,14 +29,6 @@ def default(value, factory):
 
 
 
-
-
-
-
-
-
-
-
 class AverageMeter:
     """Computes and stores the average and current value"""
     def __init__(self, name: str, fmt: str = ":.4f"):
@@ -68,7 +60,8 @@ class AverageMeter:
 def get_generator(config: AppConfig):
     """Automatically select generator class based on config."""
     if config.generator.framework == 'openai':
-        raise NotImplementedError("OpenAI API is not supported yet.")
+        from pwrag.generator.generator import OpenAIAPIGenerator
+        return OpenAIAPIGenerator(config)
     if config.generator.framework == "vllm":
         from pwrag.generator.generator import VLLMGenerator
         return VLLMGenerator(config)

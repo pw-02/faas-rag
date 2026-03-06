@@ -1,10 +1,7 @@
-import time
 from typing import Any, Dict, List, Optional
 from copy import deepcopy
-import warnings
 from omegaconf import OmegaConf
 import torch
-from tqdm import tqdm
 from tqdm.auto import trange
 import numpy as np
 from transformers import (
@@ -13,8 +10,7 @@ from transformers import (
 )
 from pwrag.args.args import AppConfig
 from pwrag.generator.utils import resolve_max_tokens
-from pwrag.utils.utils import timed
-from pwrag.generator.stop_word_criteria import StopWordCriteria
+import requests
 
 def get_device() -> str:
     return "cuda" if torch.cuda.is_available() else "cpu"
@@ -65,6 +61,415 @@ class BaseGenerator:
             list: contains generator's response of each input sample.
         """
         pass
+
+class VLLMGenerator(BaseGenerator):
+    """Class for decoder-only generator, based on vllm."""
+
+    def __init__(self, config):
+        super().__init__(config)
+        
+        from vllm import LLM
+        if self.use_lora:
+            self.model = LLM(
+                self.model_path,
+                tensor_parallel_size = self.tensor_parallel_size,
+                gpu_memory_utilization = self.gpu_memory_utilization,
+                enable_lora = True,
+                max_lora_rank = 64,
+                max_logprobs = 32016,
+                max_model_len = self.max_model_len
+            )
+        else:
+            self.model = LLM(
+                self.model_path,
+                tensor_parallel_size = self.tensor_parallel_size,
+                gpu_memory_utilization = self.gpu_memory_utilization,
+                max_logprobs = 32016,
+                max_model_len = self.max_model_len,
+            )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
+        # if "llama" in self.model_path.lower():
+        #     self.tokenizer.pad_token = self.tokenizer.eos_token
+        # self.tokenizer.padding_side = "left"
+        # Safe for Llama + many decoder-only models
+
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+        self.tokenizer.padding_side = "left"
+        
+    def update_additional_setting(self):
+        if "gpu_memory_utilization" not in self._config:
+            self.gpu_memory_utilization = 0.98
+        else:
+            self.gpu_memory_utilization = self._config["gpu_memory_utilization"]
+        if self.gpu_num != 1 and self.gpu_num % 2 != 0:
+            self.tensor_parallel_size = self.gpu_num - 1
+        else:
+            self.tensor_parallel_size = self.gpu_num
+
+        self.lora_path = None if "generator_lora_path" not in self._config else self._config["generator_lora_path"]
+        self.use_lora = False
+        if self.lora_path is not None:
+            self.use_lora = True
+        self.max_model_len = self.config.generator.max_input_length
+
+    def generate(
+        self,
+        input_list: List[str],
+        return_raw_output=False,
+        return_scores=False,
+        return_token_counts=False,
+        **params,
+    ):
+        from vllm import SamplingParams
+        import numpy as np
+
+        if isinstance(input_list, str):
+            input_list = [input_list]
+
+        generation_params = deepcopy(self.generation_params)
+        generation_params.update(params)
+
+        if "do_sample" in generation_params:
+            do_sample_flag = generation_params.pop("do_sample")
+            if not do_sample_flag:
+                generation_params["temperature"] = 0
+
+        # generation_params["seed"] = self._config["seed"]
+        generation_params["seed"] = None
+
+        # handle param conflict
+        generation_params = resolve_max_tokens(params, generation_params, prioritize_new_tokens=False)
+
+        # fix for llama3
+        if "stop" in generation_params:
+            generation_params["stop"].append("<|eot_id|>")
+            generation_params["include_stop_str_in_output"] = True
+        else:
+            generation_params["stop"] = ["<|eot_id|>"]
+
+        if return_scores:
+            if "logprobs" not in generation_params:
+                generation_params["logprobs"] = 100
+
+        sampling_params = SamplingParams(**generation_params)
+
+        # ---- prompt token counting ----
+        if return_token_counts:
+            tok = self.tokenizer(
+                input_list,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=getattr(self, "max_input_len", None),
+            )
+
+            if "attention_mask" in tok:
+                prompt_token_counts = tok["attention_mask"].sum(dim=1).tolist()
+            else:
+                pad_id = self.tokenizer.pad_token_id
+                prompt_token_counts = (tok["input_ids"] != pad_id).sum(dim=1).tolist()
+
+        # ---- generation ----
+        if self.use_lora:
+            from vllm.lora.request import LoRARequest
+
+            outputs = self.model.generate(
+                input_list,
+                sampling_params,
+                lora_request=LoRARequest("lora_module", 1, self.lora_path),
+            )
+        else:
+            outputs = self.model.generate(input_list, sampling_params, use_tqdm=False)
+
+        # ---- completion token counting ----
+        if return_token_counts:
+            completion_token_counts = []
+            for output in outputs:
+                if not output.outputs:
+                    completion_token_counts.append(0)
+                    continue
+
+                first = output.outputs[0]
+                token_ids = getattr(first, "token_ids", None)
+
+                if token_ids is not None:
+                    completion_token_counts.append(len(token_ids))
+                else:
+                    # fallback
+                    completion_token_counts.append(
+                        len(self.tokenizer.encode(first.text, add_special_tokens=False))
+                    )
+
+            total_token_counts = [
+                p + c for p, c in zip(prompt_token_counts, completion_token_counts)
+            ]
+
+            token_info = {
+                "prompt_token_counts": [int(x) for x in prompt_token_counts],
+                "completion_token_counts": [int(x) for x in completion_token_counts],
+                "total_token_counts": [int(x) for x in total_token_counts],
+            }
+
+        # ---- format outputs ----
+        if return_raw_output:
+            base_output = outputs
+        else:
+            generated_texts = [
+                [c.text for c in output.outputs] if len(output.outputs) > 1 else output.outputs[0].text
+                for output in outputs
+            ]
+            base_output = generated_texts
+
+        # ---- scores ----
+        if return_scores:
+            scores = []
+            for output in outputs:
+                output_scores = []
+                for single_output in output.outputs:
+                    if single_output.logprobs:
+                        token_probs = [
+                            np.exp(list(score_dict.values())[0].logprob)
+                            for score_dict in single_output.logprobs
+                        ]
+                        output_scores.append(token_probs)
+                    else:
+                        output_scores.append([])
+
+                scores.append(output_scores[0] if len(output_scores) == 1 else output_scores)
+
+            if return_token_counts:
+                return base_output, scores, token_info
+            return base_output, scores
+
+        if return_token_counts:
+            return base_output, token_info
+
+        return base_output
+    
+
+
+class OpenAIAPIGenerator(BaseGenerator):
+    """
+    Generator that calls an OpenAI-compatible API (e.g., vLLM openai.api_server)
+    instead of running inference locally.
+
+    Expected endpoints:
+      - /v1/completions
+      - /v1/chat/completions
+    """
+
+    def __init__(self, config: AppConfig):
+        super().__init__(config)
+
+        # Tokenizer is optional but useful for fallback token counting.
+        # If you don't want to download tokenizer on client machines, you can skip this.
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+                self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+            self.tokenizer.padding_side = "left"
+        except Exception:
+            self.tokenizer = None
+
+        self.session = requests.Session()
+
+    def update_additional_setting(self):
+        # Example config keys (optional):
+        #   generator_api_base: "http://134.197.95.82:8000"
+        #   generator_api_key: ""   (usually empty for self-hosted vLLM)
+        #   generator_api_mode: "completion" | "chat"
+        #   generator_api_timeout: 120
+
+        self.api_base = self._config.generator.openai_endpoint
+        self.api_key = ""
+        self.api_mode = "chat" # "completion" or "chat"
+        self.timeout = 120
+
+        # vLLM OpenAI server expects a "model" field in requests.
+        # Often it can be anything, but best is to use model_path or model_name.
+        self.api_model = self._config.generator.model_name
+
+    def _headers(self) -> Dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    def _map_params(self, generation_params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Map your internal params to OpenAI-compatible request params.
+        resolve_max_tokens() in your codebase may produce max_new_tokens; OpenAI uses max_tokens.
+        """
+        p = dict(generation_params)
+
+        # Your code uses do_sample sometimes; OpenAI-style doesn't.
+        # If do_sample is False => temperature=0
+        if "do_sample" in p:
+            do_sample = p.pop("do_sample")
+            if not do_sample:
+                p["temperature"] = 0
+
+        # Convert max_new_tokens -> max_tokens (OpenAI API name)
+        if "max_new_tokens" in p and "max_tokens" not in p:
+            p["max_tokens"] = p.pop("max_new_tokens")
+
+        # vLLM supports stop as string or list, same as OpenAI.
+        # Keep "stop" if present.
+
+        # seed: vLLM OpenAI server supports seed in many versions; if not, it will ignore.
+        # keep p["seed"] if you want; your current generators set it None.
+        return p
+
+    def _count_prompt_tokens_fallback(self, prompts: List[str]) -> List[int]:
+        if self.tokenizer is None:
+            return [0] * len(prompts)
+        tok = self.tokenizer(
+            prompts, return_tensors="pt", padding=True, truncation=True, max_length=self.max_input_len
+        )
+        if "attention_mask" in tok:
+            return [int(x) for x in tok["attention_mask"].sum(dim=1).tolist()]
+        pad_id = self.tokenizer.pad_token_id
+        return [int(x) for x in (tok["input_ids"] != pad_id).sum(dim=1).tolist()]
+
+    def generate(
+        self,
+        input_list: List[str],
+        return_raw_output: bool = False,
+        return_scores: bool = False,
+        return_token_counts: bool = False,
+        **params,
+    ):
+        if isinstance(input_list, str):
+            input_list = [input_list]
+
+        generation_params = deepcopy(self.generation_params)
+        generation_params.update(params)
+
+        # keep your existing token-limit conflict handling consistent
+        generation_params = resolve_max_tokens(params, generation_params, prioritize_new_tokens=False)
+        generation_params = self._map_params(generation_params)
+
+        # If user asked for scores, request logprobs if supported
+        # (OpenAI-style: "logprobs": True / int depending on endpoint; vLLM often accepts int)
+        if return_scores and "logprobs" not in generation_params:
+            generation_params["logprobs"] = 5  # small default; increase if you need
+
+        # Token counting fallback
+        prompt_token_counts = None
+        if return_token_counts:
+            prompt_token_counts = self._count_prompt_tokens_fallback(input_list)
+
+        outputs_text = []
+        scores = []
+        completion_token_counts = []
+
+        # Choose endpoint
+        use_chat = (self.api_mode.lower() == "chat")
+
+        for prompt in input_list:
+            if use_chat:
+                url = f"{self.api_base}/v1/chat/completions"
+                payload = {
+                    "model": self.api_model,
+                    "messages": prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}],
+                    **generation_params,
+                }
+            else:
+                url = f"{self.api_base}/v1/completions"
+                payload = {
+                    "model": self.api_model,
+                    "prompt": prompt,
+                    **generation_params,
+                }
+
+            r = self.session.post(url, headers=self._headers(), json=payload, timeout=self.timeout)
+            r.raise_for_status()
+            data = r.json()
+
+            if return_raw_output:
+                outputs_text.append(data)
+                # still try to attach token counts if requested
+            else:
+                if use_chat:
+                    text = data["choices"][0]["message"]["content"]
+                else:
+                    text = data["choices"][0]["text"]
+                outputs_text.append(text)
+
+            # scores (best-effort)
+            if return_scores:
+                # vLLM may return token logprobs under choices[0]["logprobs"]
+                lp = data["choices"][0].get("logprobs")
+                if lp and "token_logprobs" in lp and lp["token_logprobs"] is not None:
+                    # convert logprobs -> probs
+                    token_probs = [float(np.exp(x)) if x is not None else None for x in lp["token_logprobs"]]
+                    scores.append(token_probs)
+                else:
+                    scores.append([])
+
+            # token usage if available
+            if return_token_counts:
+                usage = data.get("usage", {})
+                c = usage.get("completion_tokens")
+                if c is None:
+                    # fallback: tokenize output text
+                    if self.tokenizer is not None and not return_raw_output:
+                        c = len(self.tokenizer.encode(outputs_text[-1], add_special_tokens=False))
+                    else:
+                        c = 0
+                completion_token_counts.append(int(c))
+
+        if return_token_counts:
+            # If server provided prompt_tokens, prefer them, else fallback counts
+            # (vLLM typically returns usage.prompt_tokens, but not always)
+            server_prompt_counts = []
+            for i, out in enumerate(outputs_text):
+                # if return_raw_output, out is dict; else no access -> use fallback
+                if return_raw_output and isinstance(out, dict):
+                    p = out.get("usage", {}).get("prompt_tokens")
+                    server_prompt_counts.append(p)
+                else:
+                    server_prompt_counts.append(None)
+
+            final_prompt_counts = []
+            for i in range(len(input_list)):
+                if server_prompt_counts[i] is not None:
+                    final_prompt_counts.append(int(server_prompt_counts[i]))
+                else:
+                    final_prompt_counts.append(int(prompt_token_counts[i]) if prompt_token_counts else 0)
+
+            total_token_counts = [p + c for p, c in zip(final_prompt_counts, completion_token_counts)]
+            token_info = {
+                "prompt_token_counts": final_prompt_counts,
+                "completion_token_counts": completion_token_counts,
+                "total_token_counts": total_token_counts,
+            }
+
+        if return_scores:
+            if return_token_counts:
+                return outputs_text, scores, token_info
+            return outputs_text, scores
+
+        if return_token_counts:
+            return outputs_text, token_info
+
+        return outputs_text
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 class HFCausalLMGenerator(BaseGenerator):
@@ -390,189 +795,3 @@ class HFCausalLMGenerator(BaseGenerator):
 
         return logits, target_probs
 
-
-class VLLMGenerator(BaseGenerator):
-    """Class for decoder-only generator, based on vllm."""
-
-    def __init__(self, config):
-        super().__init__(config)
-        
-        from vllm import LLM
-        if self.use_lora:
-            self.model = LLM(
-                self.model_path,
-                tensor_parallel_size = self.tensor_parallel_size,
-                gpu_memory_utilization = self.gpu_memory_utilization,
-                enable_lora = True,
-                max_lora_rank = 64,
-                max_logprobs = 32016,
-                max_model_len = self.max_model_len
-            )
-        else:
-            self.model = LLM(
-                self.model_path,
-                tensor_parallel_size = self.tensor_parallel_size,
-                gpu_memory_utilization = self.gpu_memory_utilization,
-                max_logprobs = 32016,
-                max_model_len = self.max_model_len,
-            )
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
-        # if "llama" in self.model_path.lower():
-        #     self.tokenizer.pad_token = self.tokenizer.eos_token
-        # self.tokenizer.padding_side = "left"
-        # Safe for Llama + many decoder-only models
-
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
-        self.tokenizer.padding_side = "left"
-        
-    def update_additional_setting(self):
-        if "gpu_memory_utilization" not in self._config:
-            self.gpu_memory_utilization = 0.98
-        else:
-            self.gpu_memory_utilization = self._config["gpu_memory_utilization"]
-        if self.gpu_num != 1 and self.gpu_num % 2 != 0:
-            self.tensor_parallel_size = self.gpu_num - 1
-        else:
-            self.tensor_parallel_size = self.gpu_num
-
-        self.lora_path = None if "generator_lora_path" not in self._config else self._config["generator_lora_path"]
-        self.use_lora = False
-        if self.lora_path is not None:
-            self.use_lora = True
-        self.max_model_len = self.config.generator.max_input_length
-
-    def generate(
-        self,
-        input_list: List[str],
-        return_raw_output=False,
-        return_scores=False,
-        return_token_counts=False,
-        **params,
-    ):
-        from vllm import SamplingParams
-        import numpy as np
-
-        if isinstance(input_list, str):
-            input_list = [input_list]
-
-        generation_params = deepcopy(self.generation_params)
-        generation_params.update(params)
-
-        if "do_sample" in generation_params:
-            do_sample_flag = generation_params.pop("do_sample")
-            if not do_sample_flag:
-                generation_params["temperature"] = 0
-
-        # generation_params["seed"] = self._config["seed"]
-        generation_params["seed"] = None
-
-        # handle param conflict
-        generation_params = resolve_max_tokens(params, generation_params, prioritize_new_tokens=False)
-
-        # fix for llama3
-        if "stop" in generation_params:
-            generation_params["stop"].append("<|eot_id|>")
-            generation_params["include_stop_str_in_output"] = True
-        else:
-            generation_params["stop"] = ["<|eot_id|>"]
-
-        if return_scores:
-            if "logprobs" not in generation_params:
-                generation_params["logprobs"] = 100
-
-        sampling_params = SamplingParams(**generation_params)
-
-        # ---- prompt token counting ----
-        if return_token_counts:
-            tok = self.tokenizer(
-                input_list,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=getattr(self, "max_input_len", None),
-            )
-
-            if "attention_mask" in tok:
-                prompt_token_counts = tok["attention_mask"].sum(dim=1).tolist()
-            else:
-                pad_id = self.tokenizer.pad_token_id
-                prompt_token_counts = (tok["input_ids"] != pad_id).sum(dim=1).tolist()
-
-        # ---- generation ----
-        if self.use_lora:
-            from vllm.lora.request import LoRARequest
-
-            outputs = self.model.generate(
-                input_list,
-                sampling_params,
-                lora_request=LoRARequest("lora_module", 1, self.lora_path),
-            )
-        else:
-            outputs = self.model.generate(input_list, sampling_params, use_tqdm=False)
-
-        # ---- completion token counting ----
-        if return_token_counts:
-            completion_token_counts = []
-            for output in outputs:
-                if not output.outputs:
-                    completion_token_counts.append(0)
-                    continue
-
-                first = output.outputs[0]
-                token_ids = getattr(first, "token_ids", None)
-
-                if token_ids is not None:
-                    completion_token_counts.append(len(token_ids))
-                else:
-                    # fallback
-                    completion_token_counts.append(
-                        len(self.tokenizer.encode(first.text, add_special_tokens=False))
-                    )
-
-            total_token_counts = [
-                p + c for p, c in zip(prompt_token_counts, completion_token_counts)
-            ]
-
-            token_info = {
-                "prompt_token_counts": [int(x) for x in prompt_token_counts],
-                "completion_token_counts": [int(x) for x in completion_token_counts],
-                "total_token_counts": [int(x) for x in total_token_counts],
-            }
-
-        # ---- format outputs ----
-        if return_raw_output:
-            base_output = outputs
-        else:
-            generated_texts = [
-                [c.text for c in output.outputs] if len(output.outputs) > 1 else output.outputs[0].text
-                for output in outputs
-            ]
-            base_output = generated_texts
-
-        # ---- scores ----
-        if return_scores:
-            scores = []
-            for output in outputs:
-                output_scores = []
-                for single_output in output.outputs:
-                    if single_output.logprobs:
-                        token_probs = [
-                            np.exp(list(score_dict.values())[0].logprob)
-                            for score_dict in single_output.logprobs
-                        ]
-                        output_scores.append(token_probs)
-                    else:
-                        output_scores.append([])
-
-                scores.append(output_scores[0] if len(output_scores) == 1 else output_scores)
-
-            if return_token_counts:
-                return base_output, scores, token_info
-            return base_output, scores
-
-        if return_token_counts:
-            return base_output, token_info
-
-        return base_output
