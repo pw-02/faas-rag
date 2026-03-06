@@ -56,9 +56,9 @@ class SearchO1Pipeline(BasicPipeline):
         self.max_doc_len = getattr(config, "max_doc_len", 2000)
 
         # web config
-        self.bing_subscription_key = getattr(config, "bing_subscription_key", None)
-        self.bing_endpoint = getattr(config, "bing_endpoint", "https://api.bing.microsoft.com/v7.0/search")
-        self.use_jina = getattr(config, "use_jina", True)
+        self.brave_api_key = getattr(config, "brave_api_key", "BSAwFH9sF7CRI00LnmfXoFTXuY-ZXUg")
+        self.brave_endpoint = getattr(config, "brave_endpoint", "https://api.search.brave.com/res/v1/web/search")
+        self.use_jina = getattr(config, "use_jina", False)
         self.jina_api_key = getattr(config, "jina_api_key", None)
 
         # generation knobs
@@ -147,13 +147,14 @@ class SearchO1Pipeline(BasicPipeline):
         else:
             try:
                 results = brave_web_search(
-                    query,
-                    self.bing_subscription_key,
-                    self.bing_endpoint,
-                    market="en-US",
-                    language="en",
+                    query=query,
+                    api_key=self.brave_api_key,
+                    endpoint=self.brave_endpoint,
+                    # count=self.top_k,
                 )
-            except Exception:
+            except Exception as e:
+                print(f"Error during search query '{query}': {e}")
+
                 results = {}
             self.search_cache[query] = results
 

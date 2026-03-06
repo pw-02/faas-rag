@@ -352,13 +352,26 @@ class OpenAIAPIGenerator(BaseGenerator):
         generation_params = resolve_max_tokens(params, generation_params, prioritize_new_tokens=False)
         generation_params = self._map_params(generation_params)
 
+        # stop = generation_params.get("stop")
+        # if stop is None:
+        #     generation_params["stop"] = ["<|eot_id|>"]
+        # elif isinstance(stop, str):
+        #     generation_params["stop"] = [stop, "<|eot_id|>"]
+        # else:
+        #     generation_params["stop"] = list(stop) + ["<|eot_id|>"]
+
+        if "stop" in generation_params:
+            generation_params["stop"].append("<|eot_id|>")
+            generation_params["include_stop_str_in_output"] = True
+        else:
+            generation_params["stop"] = ["<|eot_id|>"]
+
         # If user asked for scores, request logprobs if supported
         # (OpenAI-style: "logprobs": True / int depending on endpoint; vLLM often accepts int)
         if return_scores and "logprobs" not in generation_params:
             generation_params["logprobs"] = 5  # small default; increase if you need
 
-        # Token counting fallback
-        prompt_token_counts = None
+        # Token counting fallba        prompt_token_counts = None
         if return_token_counts:
             prompt_token_counts = self._count_prompt_tokens_fallback(input_list)
 
