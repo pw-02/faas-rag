@@ -515,7 +515,7 @@ class OpenAIAPIGenerator(BaseGenerator):
 
         generation_params = deepcopy(self.generation_params)
         generation_params.update(params)
-        generation_params["max_new_tokens"] = 28000  # set a default max_tokens to avoid vLLM error; will be resolved properly in resolve_max_tokens
+        generation_params["max_new_tokens"] = 20000  # set a default max_tokens to avoid vLLM error; will be resolved properly in resolve_max_tokens
 
         generation_params = resolve_max_tokens(
             params,
